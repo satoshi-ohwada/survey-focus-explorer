@@ -151,6 +151,40 @@
                 </button>
             </div>
 
+            <!-- 解析フィルター設定（品詞・複合語・ストップワード設定） -->
+            <div class="analysis-filter-bar">
+                <div class="filter-group-item">
+                    <span class="filter-group-title">対象品詞:</span>
+                    <label class="filter-check-label" title="名詞を分析対象に含めます">
+                        <input type="checkbox" id="checkPosNoun" checked> 名詞
+                    </label>
+                    <label class="filter-check-label" title="自立動詞を分析対象に含めます">
+                        <input type="checkbox" id="checkPosVerb" checked> 動詞
+                    </label>
+                    <label class="filter-check-label" title="自立形容詞を分析対象に含めます">
+                        <input type="checkbox" id="checkPosAdj" checked> 形容詞
+                    </label>
+                    <label class="filter-check-label" title="副詞を分析対象に含めます">
+                        <input type="checkbox" id="checkPosAdv"> 副詞
+                    </label>
+                </div>
+                <div class="filter-group-divider"></div>
+                <div class="filter-group-item">
+                    <label class="filter-check-label" title="「中東情勢」など連続する名詞を自動的に1つの単語として結合します">
+                        <input type="checkbox" id="checkMergeNouns" checked> 連続する名詞を結合
+                    </label>
+                </div>
+                <div class="filter-group-divider"></div>
+                <div class="filter-group-item">
+                    <label class="filter-check-label" title="定型的な助動詞・一般的表現（こと、思う等）を除外します">
+                        <input type="checkbox" id="checkUseStopwords" checked> 標準除外語
+                    </label>
+                    <button type="button" id="btnOpenDictFilter" class="btn btn-sm" style="padding: 2px 8px; font-size: 11.5px; margin-left: 6px;">
+                        ⚙️ 辞書・除外語編集
+                    </button>
+                </div>
+            </div>
+
             <!-- 関連語チップス -->
             <div class="related-words-box">
                 <div class="related-words-header">
@@ -168,14 +202,111 @@
                 </div>
             </div>
 
-            <!-- 抽出サマリー -->
-            <div id="matchSummaryBar" class="match-summary-bar" style="display: none;">
-                <div class="match-summary-left">
-                    <span class="match-count-badge" id="matchedCountDisplay">0 件</span>
-                    <div class="match-count-desc" id="matchedRateDisplay">全 0 件中 0 件の意見を抽出 (0.0%)</div>
+            <!-- 全体規模 vs 分析対象（カバレッジ統計）パネル -->
+            <div id="coveragePanel" class="coverage-panel" style="display: none;">
+                <div class="coverage-header">
+                    <div class="coverage-title">
+                        <span>📊 全体規模 vs 分析対象（カバレッジ統計）</span>
+                        <small style="color: var(--text-muted); font-size: 12px;">アンケート全体のうち、今の分析（キーワード＋関連語）がどれくらいの量をカバーしているかを確認できます</small>
+                    </div>
+                    <button type="button" id="btnTogglePosDetail" class="btn btn-sm" style="font-size: 11.5px;">
+                        品詞別内訳を表示 ▼
+                    </button>
                 </div>
-                <div class="match-progress-wrapper" title="全回答に占める関連意見の割合">
-                    <div id="matchedProgressBar" class="match-progress-bar" style="width: 0%;"></div>
+
+                <!-- 4つの主要メトリクスカード（全体 vs 対象） -->
+                <div class="coverage-grid">
+                    <!-- 1. 意見文数（回答件数） -->
+                    <div class="coverage-card">
+                        <div class="cov-card-header">
+                            <span class="cov-card-label">💬 対象意見（回答文）</span>
+                            <span class="cov-badge" id="covDocRateBadge">0.0%</span>
+                        </div>
+                        <div class="cov-main-val">
+                            <span id="covDocMatched">0</span>
+                            <small>/ 全 <span id="covDocTotal">0</span> 件</small>
+                        </div>
+                        <div class="cov-prog-wrap">
+                            <div class="cov-prog-bar" id="covDocProg" style="width: 0%;"></div>
+                        </div>
+                        <div class="cov-sub-info">
+                            <span>非対象: <span id="covDocUnmatched">0</span> 件</span>
+                        </div>
+                    </div>
+
+                    <!-- 2. 総単語数（延べ出現数） -->
+                    <div class="coverage-card">
+                        <div class="cov-card-header">
+                            <span class="cov-card-label">📝 総単語数（延べ出現数）</span>
+                            <span class="cov-badge" id="covTokenRateBadge">0.0%</span>
+                        </div>
+                        <div class="cov-main-val">
+                            <span id="covTokenMatched">0</span>
+                            <small>/ 全 <span id="covTokenTotal">0</span> 語</small>
+                        </div>
+                        <div class="cov-prog-wrap">
+                            <div class="cov-prog-bar" id="covTokenProg" style="width: 0%; background: #0284c7;"></div>
+                        </div>
+                        <div class="cov-sub-info">
+                            <span>対象内出現シェア: <strong id="covTokenShareText">0.0%</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- 3. 語彙数（ユニーク単語数） -->
+                    <div class="coverage-card">
+                        <div class="cov-card-header">
+                            <span class="cov-card-label">📚 ユニーク語彙（単語種類）</span>
+                            <span class="cov-badge" id="covVocabRateBadge">0.0%</span>
+                        </div>
+                        <div class="cov-main-val">
+                            <span id="covVocabMatched">0</span>
+                            <small>/ 全 <span id="covVocabTotal">0</span> 語</small>
+                        </div>
+                        <div class="cov-prog-wrap">
+                            <div class="cov-prog-bar" id="covVocabProg" style="width: 0%; background: #8b5cf6;"></div>
+                        </div>
+                        <div class="cov-sub-info">
+                            <span>全語彙の言及カバー率: <strong id="covVocabShareText">0.0%</strong></span>
+                        </div>
+                    </div>
+
+                    <!-- 4. 文字数規模 -->
+                    <div class="coverage-card">
+                        <div class="cov-card-header">
+                            <span class="cov-card-label">🔤 文字数規模（記述量）</span>
+                            <span class="cov-badge" id="covCharRateBadge">0.0%</span>
+                        </div>
+                        <div class="cov-main-val">
+                            <span id="covCharMatched">0</span>
+                            <small>/ 全 <span id="covCharTotal">0</span> 文字</small>
+                        </div>
+                        <div class="cov-prog-wrap">
+                            <div class="cov-prog-bar" id="covCharProg" style="width: 0%; background: #10b981;"></div>
+                        </div>
+                        <div class="cov-sub-info">
+                            <span>平均: 対象 <span id="covCharAvgMatched">0</span> 字 / 全体 <span id="covCharAvgTotal">0</span> 字</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 品詞別内訳（アコーディオン） -->
+                <div id="coveragePosDetail" class="coverage-pos-detail" style="display: none; margin-top: 14px;">
+                    <div class="pos-detail-table-wrap">
+                        <table class="pos-detail-table">
+                            <thead>
+                                <tr>
+                                    <th>品詞</th>
+                                    <th>全体出現数</th>
+                                    <th>対象内出現数</th>
+                                    <th>対象比率</th>
+                                    <th>構成バー</th>
+                                </tr>
+                            </thead>
+                            <tbody id="posDetailTableBody">
+                                <!-- 動的生成 -->
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
         </section>

@@ -363,6 +363,59 @@ const AssociationEngine = {
             coocCounts: coocCounts,
             uniqueWordsPerDoc: uniqueWordsPerDoc
         };
+    },
+
+    /**
+     * 全体コーパスと抽出意見サブコーパスの比較統計（カバレッジ統計）を算出
+     * @param {object} totalStats - TextPreprocessor.computeCorpusStats の結果
+     * @param {Array<object>} matchedDocs - 抽出意見配列
+     * @param {object} subcorpusStats - computeSubcorpusStats の結果
+     * @returns {object} カバレッジ比較データ
+     */
+    computeCoverageStats(totalStats, matchedDocs, subcorpusStats) {
+        if (!totalStats) return null;
+        const matchedDocCount = matchedDocs.length;
+        let matchedChars = 0;
+        let matchedTotalTokens = 0;
+        const matchedVocabSet = new Set();
+        const matchedPosBreakdown = { 名詞: 0, 動詞: 0, 形容詞: 0, 副詞: 0, その他: 0 };
+
+        for (const doc of matchedDocs) {
+            matchedChars += String(doc.text || '').length;
+            const tokens = doc.tokens || [];
+            matchedTotalTokens += tokens.length;
+            for (const t of tokens) {
+                matchedVocabSet.add(t);
+                const pos = (typeof TextPreprocessor !== 'undefined' && TextPreprocessor.wordPosMap)
+                    ? (TextPreprocessor.wordPosMap.get(t) || '名詞')
+                    : '名詞';
+                if (matchedPosBreakdown[pos] !== undefined) matchedPosBreakdown[pos]++;
+                else matchedPosBreakdown.その他++;
+            }
+        }
+
+        const docRate = totalStats.docCount > 0 ? (matchedDocCount / totalStats.docCount) * 100 : 0;
+        const charRate = totalStats.totalChars > 0 ? (matchedChars / totalStats.totalChars) * 100 : 0;
+        const tokenRate = totalStats.totalTokens > 0 ? (matchedTotalTokens / totalStats.totalTokens) * 100 : 0;
+        const vocabRate = totalStats.uniqueVocabCount > 0 ? (matchedVocabSet.size / totalStats.uniqueVocabCount) * 100 : 0;
+
+        return {
+            total: totalStats,
+            matched: {
+                docCount: matchedDocCount,
+                totalChars: matchedChars,
+                avgCharsPerDoc: matchedDocCount > 0 ? Math.round((matchedChars / matchedDocCount) * 10) / 10 : 0,
+                totalTokens: matchedTotalTokens,
+                uniqueVocabCount: matchedVocabSet.size,
+                posBreakdown: matchedPosBreakdown
+            },
+            coverage: {
+                docRate: Math.round(docRate * 10) / 10,
+                charRate: Math.round(charRate * 10) / 10,
+                tokenRate: Math.round(tokenRate * 10) / 10,
+                vocabRate: Math.round(vocabRate * 10) / 10
+            }
+        };
     }
 };
 

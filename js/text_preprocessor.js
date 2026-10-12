@@ -29,6 +29,18 @@ const TextPreprocessor = {
     customCompoundWords: new Set(),
     customSynonymRules: new Map(),
 
+    // 解析・抽出オプション（text-analysis-test準拠）
+    options: {
+        posNoun: true,
+        posVerb: true,
+        posAdj: true,
+        posAdv: false,
+        mergeCompoundNouns: true,
+        useDefaultStopwords: true
+    },
+    // 単語ごとの品詞マッピング
+    wordPosMap: new Map(),
+
     // 無意味な回答（行全体がこれに該当する場合はスキップ）
     JUNK_RESPONSES: new Set([
         // 日本語定型無効・無回答・空欄相当表記
@@ -229,17 +241,20 @@ const TextPreprocessor = {
      */
     isStopWord(word) {
         if (!word) return true;
-        return this.DEFAULT_STOPWORDS.has(word) || this.customStopWords.has(word);
+        if (this.customStopWords.has(word)) return true;
+        if (this.options && this.options.useDefaultStopwords && this.DEFAULT_STOPWORDS.has(word)) return true;
+        return false;
     },
 
     /**
      * 複数ドキュメントを一括形態素解析する
      * @param {string[]} texts
+     * @param {object} opt
      * @returns {string[][]}
      */
-    tokenizeDocuments(texts) {
+    tokenizeDocuments(texts, opt = {}) {
         if (!texts || !Array.isArray(texts)) return [];
-        return texts.map(t => this.tokenize(t));
+        return texts.map(t => this.tokenize(t, opt));
     },
 
     /**
@@ -261,21 +276,25 @@ const TextPreprocessor = {
         for (const m of matches) {
             if (!this.isStopWord(m)) {
                 words.push(m);
+                if (!this.wordPosMap.has(m)) {
+                    this.wordPosMap.set(m, '名詞');
+                }
             }
         }
         return words;
     },
 
     /**
-     * 単一のテキスト文を形態素解析し、単語リスト（名詞・動詞・形容詞・複合語）を返す
-     * 1. ユーザー定義複合語・同義語置換の適用
-     * 2. 連続する名詞の自動結合
-     * 3. ストップワード（標準＋カスタム除外語）のフィルタリング
+     * 単一のテキスト文を形態素解析し、単語リストを返す
+     * 対象品詞（名詞・動詞・形容詞・副詞）および複合名詞結合、除外語を適用
      * @param {string} text 
+     * @param {object} opt 
      * @returns {string[]}
      */
-    tokenize(text) {
+    tokenize(text, opt = {}) {
         if (!text) return [];
+        const options = { ...this.options, ...opt };
+
         if (!this.tokenizer) {
             return this.fallbackTokenize(text);
         }
@@ -288,14 +307,23 @@ const TextPreprocessor = {
         const resultWords = [];
         let compoundNoun = '';
 
-        const flushCompoundNoun = () => {
-            if (compoundNoun.length >= 2 && !this.isStopWord(compoundNoun)) {
+        const pushWord = (w, p) => {
+            if (w.length >= 2 && !this.isStopWord(w)) {
                 // 数字のみ、または記号のみの単語は除外
-                if (!/^[0-9０-９]+$/.test(compoundNoun) && !/^[^\p{L}\p{N}]+$/u.test(compoundNoun)) {
-                    resultWords.push(compoundNoun);
+                if (!/^[0-9０-９]+$/.test(w) && !/^[^\p{L}\p{N}]+$/u.test(w)) {
+                    resultWords.push(w);
+                    if (!this.wordPosMap.has(w)) {
+                        this.wordPosMap.set(w, p || '名詞');
+                    }
                 }
             }
-            compoundNoun = '';
+        };
+
+        const flushCompoundNoun = () => {
+            if (compoundNoun) {
+                pushWord(compoundNoun, '名詞');
+                compoundNoun = '';
+            }
         };
 
         for (let i = 0; i < tokens.length; i++) {
@@ -307,31 +335,48 @@ const TextPreprocessor = {
             // ユーザー登録の複合語または同義語置換されたトークンの場合（独立した1単語として確定）
             if (posDetail === '複合語' || posDetail === '同義語') {
                 flushCompoundNoun();
-                const word = basicForm;
-                if (word.length >= 2 && !this.isStopWord(word)) {
-                    resultWords.push(word);
+                if (options.posNoun) {
+                    pushWord(basicForm, '名詞');
                 }
                 continue;
             }
 
-            // 名詞の場合（非自立・代名詞・数・接尾を除く）
+            // 名詞の場合
             if (pos === '名詞') {
+                if (!options.posNoun) {
+                    flushCompoundNoun();
+                    continue;
+                }
                 if (posDetail === '非自立' || posDetail === '代名詞' || posDetail === '数' || posDetail === '接尾') {
                     flushCompoundNoun();
                     continue;
                 }
-                // 連続名詞として蓄積
-                compoundNoun += t.surface_form;
+                if (options.mergeCompoundNouns) {
+                    // 連続名詞として蓄積
+                    compoundNoun += t.surface_form;
+                } else {
+                    // 結合しない場合は単独名詞として即時確定
+                    flushCompoundNoun();
+                    pushWord(t.surface_form, '名詞');
+                }
             } else {
                 // 名詞以外が来たら複合名詞を確定
                 flushCompoundNoun();
 
-                // 動詞または形容詞の場合（自立語のみ）
-                if (pos === '動詞' || pos === '形容詞') {
+                // 動詞の場合（自立語のみ）
+                if (pos === '動詞' && options.posVerb) {
                     if (posDetail === '自立' || posDetail === '*') {
-                        if (basicForm.length >= 2 && !this.isStopWord(basicForm)) {
-                            resultWords.push(basicForm);
-                        }
+                        pushWord(basicForm, '動詞');
+                    }
+                } else if (pos === '形容詞' && options.posAdj) {
+                    // 形容詞の場合（自立語のみ）
+                    if (posDetail === '自立' || posDetail === '*') {
+                        pushWord(basicForm, '形容詞');
+                    }
+                } else if (pos === '副詞' && options.posAdv) {
+                    // 副詞の場合
+                    if (posDetail === '一般' || posDetail === '自立' || posDetail === '*') {
+                        pushWord(basicForm, '副詞');
                     }
                 }
             }
@@ -339,6 +384,43 @@ const TextPreprocessor = {
         flushCompoundNoun();
 
         return resultWords;
+    },
+
+    /**
+     * コーパス全体の統計（総文数、総文字数、総単語数、ユニーク語彙数、品詞別内訳）を算出
+     * @param {Array<object>} rawRows 
+     * @param {string} textCol 
+     * @param {Array<Array<string>>} tokensPerDoc 
+     * @returns {object}
+     */
+    computeCorpusStats(rawRows, textCol, tokensPerDoc) {
+        const docCount = rawRows.length;
+        let totalChars = 0;
+        let totalTokens = 0;
+        const vocabSet = new Set();
+        const posBreakdown = { 名詞: 0, 動詞: 0, 形容詞: 0, 副詞: 0, その他: 0 };
+
+        for (let i = 0; i < docCount; i++) {
+            const text = String(rawRows[i][textCol] || '');
+            totalChars += text.length;
+            const tokens = tokensPerDoc[i] || [];
+            totalTokens += tokens.length;
+            for (const t of tokens) {
+                vocabSet.add(t);
+                const pos = this.wordPosMap.get(t) || '名詞';
+                if (posBreakdown[pos] !== undefined) posBreakdown[pos]++;
+                else posBreakdown.その他++;
+            }
+        }
+
+        return {
+            docCount,
+            totalChars,
+            avgCharsPerDoc: docCount > 0 ? Math.round((totalChars / docCount) * 10) / 10 : 0,
+            totalTokens,
+            uniqueVocabCount: vocabSet.size,
+            posBreakdown
+        };
     },
 
     /**

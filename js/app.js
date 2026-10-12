@@ -22,6 +22,18 @@ const AppState = {
     filterResult: null, // { totalDocs, matchedCount, matchRate, matchedDocs }
     subcorpusStats: null, // { wordList, wordCounts, docFreq, coocCounts }
     
+    // 解析フィルター設定（text-analysis-test準拠）
+    filterOptions: {
+        posNoun: true,
+        posVerb: true,
+        posAdj: true,
+        posAdv: false,
+        mergeCompoundNouns: true,
+        useDefaultStopwords: true
+    },
+    totalCorpusStats: null, // 全体規模統計（文数・文字数・総単語数・語彙数・品詞別）
+    coverageStats: null,    // 全体 vs 対象のカバレッジ比較統計
+    
     // UI状態
     activeTab: 'cloud',
     cloudRanking: 'count',
@@ -257,6 +269,54 @@ function setupUIEvents() {
         updateUmap();
     });
 
+    // 解析フィルター設定（品詞・複合語・除外語）の変更イベント
+    const updateFiltersAndReanalyze = () => {
+        const cNoun = document.getElementById('checkPosNoun');
+        const cVerb = document.getElementById('checkPosVerb');
+        const cAdj  = document.getElementById('checkPosAdj');
+        const cAdv  = document.getElementById('checkPosAdv');
+        const cMerge = document.getElementById('checkMergeNouns');
+        const cStop  = document.getElementById('checkUseStopwords');
+
+        if (cNoun) AppState.filterOptions.posNoun = cNoun.checked;
+        if (cVerb) AppState.filterOptions.posVerb = cVerb.checked;
+        if (cAdj)  AppState.filterOptions.posAdj = cAdj.checked;
+        if (cAdv)  AppState.filterOptions.posAdv = cAdv.checked;
+        if (cMerge) AppState.filterOptions.mergeCompoundNouns = cMerge.checked;
+        if (cStop)  AppState.filterOptions.useDefaultStopwords = cStop.checked;
+
+        TextPreprocessor.options = { ...AppState.filterOptions };
+        AppState.isTokenized = false; // 再トークナイズ必要
+
+        if (AppState.rawRows.length > 0 && AppState.textCol) {
+            runFocusAnalysis();
+        }
+    };
+
+    ['checkPosNoun', 'checkPosVerb', 'checkPosAdj', 'checkPosAdv', 'checkMergeNouns', 'checkUseStopwords'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', updateFiltersAndReanalyze);
+    });
+
+    // フィルターバー内の辞書編集ボタン
+    const btnOpenFilter = document.getElementById('btnOpenDictFilter');
+    if (btnOpenFilter) {
+        btnOpenFilter.addEventListener('click', () => {
+            document.getElementById('btnOpenDict').click();
+        });
+    }
+
+    // カバレッジ統計の品詞別詳細アコーディオントグル
+    const btnTogglePos = document.getElementById('btnTogglePosDetail');
+    const posDetailBox = document.getElementById('coveragePosDetail');
+    if (btnTogglePos && posDetailBox) {
+        btnTogglePos.addEventListener('click', () => {
+            const isHidden = posDetailBox.style.display === 'none';
+            posDetailBox.style.display = isHidden ? 'block' : 'none';
+            btnTogglePos.textContent = isHidden ? '品詞別内訳を閉じる ▲' : '品詞別内訳を表示 ▼';
+        });
+    }
+
     // 意見内検索フィルタ
     document.getElementById('inputFilterOpinionText').addEventListener('input', (e) => {
         renderOpinionsList(e.target.value);
@@ -446,8 +506,10 @@ async function runFocusAnalysis() {
 
         // 2. 必要に応じて全行の形態素解析を実施
         if (!AppState.isTokenized) {
+            TextPreprocessor.options = { ...AppState.filterOptions };
             const texts = AppState.rawRows.map(r => String(r[AppState.textCol] || ''));
-            AppState.tokensPerDoc = TextPreprocessor.tokenizeDocuments(texts);
+            AppState.tokensPerDoc = TextPreprocessor.tokenizeDocuments(texts, AppState.filterOptions);
+            AppState.totalCorpusStats = TextPreprocessor.computeCorpusStats(AppState.rawRows, AppState.textCol, AppState.tokensPerDoc);
             AppState.isTokenized = true;
         }
 
@@ -551,17 +613,8 @@ function executeFilteringAndRender() {
         { resolvedTargetWord: AppState.resolvedTargetWord }
     );
 
-    // 2. 抽出サマリーバーの更新
+    // 2. 抽出サマリーの更新
     const res = AppState.filterResult;
-    document.getElementById('matchSummaryBar').style.display = 'flex';
-    document.getElementById('matchedCountDisplay').textContent = `${res.matchedCount} 件`;
-    const targetDisplayStr = (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword)
-        ? `「${AppState.targetKeyword}（対象語: ${AppState.resolvedTargetWord}）」`
-        : `「${AppState.targetKeyword}」`;
-    document.getElementById('matchedRateDisplay').textContent = 
-        `全 ${res.totalDocs} 件中 ${res.matchedCount} 件の意見を抽出 (${res.matchRate.toFixed(1)}%) - ${targetDisplayStr}`;
-    document.getElementById('matchedProgressBar').style.width = `${Math.min(100, res.matchRate)}%`;
-
     document.getElementById('tabOpinionCount').textContent = res.matchedCount;
 
     // 3. 抽出意見群の統計集計
@@ -575,10 +628,20 @@ function executeFilteringAndRender() {
         }
     );
 
+    // 4. 全体規模 vs 分析対象（カバレッジ統計）の算出 ＆ レンダリング
+    if (AppState.totalCorpusStats) {
+        AppState.coverageStats = AssociationEngine.computeCoverageStats(
+            AppState.totalCorpusStats,
+            res.matchedDocs,
+            AppState.subcorpusStats
+        );
+        renderCoveragePanel(AppState.coverageStats);
+    }
+
     // ダッシュボードを表示
     document.getElementById('dashboardSection').style.display = 'block';
 
-    // 4. 現在のタブの可視化を更新
+    // 5. 現在のタブの可視化を更新
     updateVisualizations();
 }
 
@@ -798,6 +861,71 @@ function renderOpinionsList(filterKeyword = '') {
 
         container.appendChild(card);
     });
+}
+
+/**
+ * 全体規模 vs 分析対象（カバレッジ統計）のレンダリング
+ */
+function renderCoveragePanel(cov) {
+    if (!cov) return;
+    const panel = document.getElementById('coveragePanel');
+    if (!panel) return;
+    panel.style.display = 'block';
+
+    // 1. 意見文（回答）
+    document.getElementById('covDocMatched').textContent = cov.matched.docCount.toLocaleString();
+    document.getElementById('covDocTotal').textContent = cov.total.docCount.toLocaleString();
+    document.getElementById('covDocUnmatched').textContent = (cov.total.docCount - cov.matched.docCount).toLocaleString();
+    document.getElementById('covDocRateBadge').textContent = `${cov.coverage.docRate.toFixed(1)}%`;
+    document.getElementById('covDocProg').style.width = `${Math.min(100, cov.coverage.docRate)}%`;
+
+    // 2. 総単語数
+    document.getElementById('covTokenMatched').textContent = cov.matched.totalTokens.toLocaleString();
+    document.getElementById('covTokenTotal').textContent = cov.total.totalTokens.toLocaleString();
+    document.getElementById('covTokenRateBadge').textContent = `${cov.coverage.tokenRate.toFixed(1)}%`;
+    document.getElementById('covTokenProg').style.width = `${Math.min(100, cov.coverage.tokenRate)}%`;
+    document.getElementById('covTokenShareText').textContent = `${cov.coverage.tokenRate.toFixed(1)}%`;
+
+    // 3. ユニーク語彙
+    document.getElementById('covVocabMatched').textContent = cov.matched.uniqueVocabCount.toLocaleString();
+    document.getElementById('covVocabTotal').textContent = cov.total.uniqueVocabCount.toLocaleString();
+    document.getElementById('covVocabRateBadge').textContent = `${cov.coverage.vocabRate.toFixed(1)}%`;
+    document.getElementById('covVocabProg').style.width = `${Math.min(100, cov.coverage.vocabRate)}%`;
+    document.getElementById('covVocabShareText').textContent = `${cov.coverage.vocabRate.toFixed(1)}%`;
+
+    // 4. 文字数
+    document.getElementById('covCharMatched').textContent = cov.matched.totalChars.toLocaleString();
+    document.getElementById('covCharTotal').textContent = cov.total.totalChars.toLocaleString();
+    document.getElementById('covCharRateBadge').textContent = `${cov.coverage.charRate.toFixed(1)}%`;
+    document.getElementById('covCharProg').style.width = `${Math.min(100, cov.coverage.charRate)}%`;
+    document.getElementById('covCharAvgMatched').textContent = cov.matched.avgCharsPerDoc;
+    document.getElementById('covCharAvgTotal').textContent = cov.total.avgCharsPerDoc;
+
+    // 5. 品詞別内訳テーブル
+    const tbody = document.getElementById('posDetailTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+        const posKeys = ['名詞', '動詞', '形容詞', '副詞'];
+        posKeys.forEach(pos => {
+            const tot = cov.total.posBreakdown[pos] || 0;
+            const mat = cov.matched.posBreakdown[pos] || 0;
+            const rate = tot > 0 ? (mat / tot) * 100 : 0;
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${pos}</strong></td>
+                <td>${tot.toLocaleString()} 語</td>
+                <td><strong style="color: var(--primary-color);">${mat.toLocaleString()} 語</strong></td>
+                <td>${rate.toFixed(1)}%</td>
+                <td>
+                    <div class="pos-prog-bar-cell">
+                        <div class="pos-prog-inner" style="width: ${Math.min(100, rate)}%;"></div>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
 }
 
 /**
