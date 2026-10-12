@@ -6,8 +6,9 @@
 const UmapVisualizer = {
     canvas: null,
     ctx: null,
-    points: [], // { id, text, x, y, count, cluster, isTarget, isRelated, rawDoc }
+    points: [], // { id, text, screenX, screenY, rawX, rawY, count, radius, cluster, isTarget, isRelated, rawDoc }
     clusters: [],
+    clusterHulls: [],
     hoverPoint: null,
     scale: 1.0,
     panX: 0,
@@ -16,6 +17,7 @@ const UmapVisualizer = {
     startX: 0,
     startY: 0,
     viewMode: 'words', // 'words' (単語マップ) または 'docs' (意見マップ)
+    spreadMode: 'wide', // 'normal' | 'wide' | 'widest'
     targetKeyword: '',
     activeRelatedWords: [],
     onPointClick: null,
@@ -74,7 +76,7 @@ const UmapVisualizer = {
         c.addEventListener('wheel', (e) => {
             e.preventDefault();
             const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-            const newScale = Math.max(0.4, Math.min(3.0, this.scale * zoomFactor));
+            const newScale = Math.max(0.3, Math.min(3.5, this.scale * zoomFactor));
 
             const rect = c.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -92,7 +94,7 @@ const UmapVisualizer = {
             const p = this.points[i];
             const dx = p.screenX - x;
             const dy = p.screenY - y;
-            const r = (p.radius || 7) + 5;
+            const r = (p.radius || 7) + 6;
             if (dx * dx + dy * dy <= r * r) {
                 return p;
             }
@@ -117,19 +119,20 @@ const UmapVisualizer = {
         this.targetKeyword = targetKeyword;
         this.activeRelatedWords = activeRelatedWords || [];
         this.onPointClick = options.onPointClick;
+        this.spreadMode = options.spreadMode || 'wide'; // 'normal' | 'wide' | 'widest'
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
         const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
-        const height = 480;
+        const height = 540;
         this.canvas.width = width;
         this.canvas.height = height;
 
-        this.scale = 1.0;
-        this.panX = 0;
-        this.panY = 0;
+        this.scale = 0.92;
+        this.panX = (width * (1 - this.scale)) / 2;
+        this.panY = (height * (1 - this.scale)) / 2;
 
         if (this.viewMode === 'words') {
-            this.computeWordUMAP(wordList, coocCounts, docFreq, width, height, options);
+            this.computeWordUMAP(wordList, coocCounts, docFreq, matchedDocs, width, height, options);
         } else {
             this.computeDocUMAP(matchedDocs, wordList, width, height, options);
         }
@@ -139,8 +142,9 @@ const UmapVisualizer = {
 
     /**
      * 単語ごとのUMAP次元削減
+     * 回答文書プロファイル＋共起のハイブリッド特徴量により1点縮退を防止
      */
-    computeWordUMAP(wordList, coocCounts, docFreq, width, height, options) {
+    computeWordUMAP(wordList, coocCounts, docFreq, matchedDocs, width, height, options) {
         const maxWords = options.maxWords || 50;
         const topWords = wordList.slice(0, maxWords).map(w => w.text);
         const V = topWords.length;
@@ -150,10 +154,34 @@ const UmapVisualizer = {
             return;
         }
 
-        // 類似度行列の構築
-        const sim = Array.from({ length: V }, () => new Float64Array(V));
+        const D = (matchedDocs && matchedDocs.length) ? matchedDocs.length : 1;
+        const wordIndex = new Map(topWords.map((w, i) => [w, i]));
+
+        // 1. 各単語の高次元特徴ベクトルの構築 (文書プロファイル D次元 + 共起プロファイル V次元)
+        const featureDim = D + V;
+        const wordVectors = Array.from({ length: V }, () => new Float64Array(featureDim));
+
+        // 1-1. 文書出現プロファイル (各回答におけるTF-IDF重み)
+        if (matchedDocs && matchedDocs.length > 0) {
+            matchedDocs.forEach((doc, dIdx) => {
+                const tokens = doc.tokens || [];
+                const countsInDoc = {};
+                tokens.forEach(t => {
+                    if (wordIndex.has(t)) {
+                        countsInDoc[t] = (countsInDoc[t] || 0) + 1;
+                    }
+                });
+                Object.entries(countsInDoc).forEach(([w, cnt]) => {
+                    const wIdx = wordIndex.get(w);
+                    const df = docFreq[w] || 1;
+                    const idf = Math.log((D + 1) / (df + 0.5)) + 1;
+                    wordVectors[wIdx][dIdx] = cnt * idf;
+                });
+            });
+        }
+
+        // 1-2. 共起プロファイル (上位単語同士の共起強度)
         for (let i = 0; i < V; i++) {
-            sim[i][i] = 1.0;
             const w1 = topWords[i];
             const df1 = docFreq[w1] || 1;
             for (let j = i + 1; j < V; j++) {
@@ -162,33 +190,41 @@ const UmapVisualizer = {
                 const key = w1 < w2 ? `${w1}|||${w2}` : `${w2}|||${w1}`;
                 const fAB = coocCounts[key] || 0;
                 if (fAB > 0) {
-                    const denom = Math.sqrt(df1 * df2);
-                    const s = denom > 0 ? fAB / denom : 0;
-                    sim[i][j] = s;
-                    sim[j][i] = s;
+                    const weight = fAB / Math.sqrt(df1 * df2);
+                    wordVectors[i][D + j] = weight;
+                    wordVectors[j][D + i] = weight;
                 }
             }
         }
 
-        // コサイン距離行列
+        // L2正規化
+        for (let i = 0; i < V; i++) {
+            let norm = 0;
+            for (let f = 0; f < featureDim; f++) norm += wordVectors[i][f] * wordVectors[i][f];
+            norm = Math.sqrt(norm);
+            if (norm > 0) {
+                for (let f = 0; f < featureDim; f++) wordVectors[i][f] /= norm;
+            }
+        }
+
+        // 2. コサイン距離行列の構築
         const dist = Array.from({ length: V }, () => new Float64Array(V));
         for (let i = 0; i < V; i++) {
             for (let j = i + 1; j < V; j++) {
-                let dot = 0, n1 = 0, n2 = 0;
-                for (let m = 0; m < V; m++) {
-                    dot += sim[i][m] * sim[j][m];
-                    n1 += sim[i][m] * sim[i][m];
-                    n2 += sim[j][m] * sim[j][m];
+                let dot = 0;
+                for (let f = 0; f < featureDim; f++) {
+                    dot += wordVectors[i][f] * wordVectors[j][f];
                 }
-                const denom = Math.sqrt(n1) * Math.sqrt(n2);
-                const cos = denom > 0 ? dot / denom : 0;
-                const d = Math.max(0, Math.min(1.0, 1.0 - cos));
+                // 微小なジッターを加えて完全同一点への縮退を物理的に防止
+                const cosSim = Math.max(-1.0, Math.min(1.0, dot));
+                const d = Math.max(0.01, 1.0 - cosSim);
                 dist[i][j] = d;
                 dist[j][i] = d;
             }
         }
 
-        const Y = this.runUMAPCore(dist, V);
+        // 3. PCA初期化 + UMAPによる2次元最適化
+        const Y = this.runUMAPCore(dist, V, wordVectors);
         const kClusters = Math.min(5, Math.max(2, Math.floor(Math.sqrt(V / 2))));
         const clusters = this.runKMeans(Y, kClusters);
 
@@ -208,6 +244,8 @@ const UmapVisualizer = {
                 text: word,
                 rawX: Y[i][0],
                 rawY: Y[i][1],
+                screenX: 0,
+                screenY: 0,
                 count: cnt,
                 radius: 8 + rScale * 14,
                 cluster: clusters[i],
@@ -216,7 +254,10 @@ const UmapVisualizer = {
             };
         });
 
+        // 4. キャンバス座標スケーリング ＆ デクラスタリング（衝突解消リラクゼーション）
         this.scaleCoordinatesToCanvas(width, height);
+        this.relaxPoints(width, height);
+        this.calculateClusterHulls();
     },
 
     /**
@@ -230,7 +271,7 @@ const UmapVisualizer = {
         }
 
         // 上位語による文書ベクトル (TF-IDF)
-        const featureWords = wordList.slice(0, 40).map(w => w.text);
+        const featureWords = wordList.slice(0, 50).map(w => w.text);
         const wordIndex = new Map(featureWords.map((w, idx) => [w, idx]));
         const F = featureWords.length;
 
@@ -242,7 +283,6 @@ const UmapVisualizer = {
                     vec[wordIndex.get(t)] += 1;
                 }
             });
-            // L2正規化
             let norm = 0;
             for (let f = 0; f < F; f++) norm += vec[f] * vec[f];
             norm = Math.sqrt(norm);
@@ -258,14 +298,14 @@ const UmapVisualizer = {
             for (let j = i + 1; j < D; j++) {
                 let dot = 0;
                 for (let f = 0; f < F; f++) dot += docVectors[i][f] * docVectors[j][f];
-                const d = Math.max(0, Math.min(1.0, 1.0 - dot));
+                const d = Math.max(0.01, 1.0 - Math.min(1.0, dot));
                 dist[i][j] = d;
                 dist[j][i] = d;
             }
         }
 
-        const Y = this.runUMAPCore(dist, D);
-        const kClusters = Math.min(4, Math.max(2, Math.floor(Math.sqrt(D / 3))));
+        const Y = this.runUMAPCore(dist, D, docVectors);
+        const kClusters = Math.min(5, Math.max(2, Math.floor(Math.sqrt(D / 2.5))));
         const clusters = this.runKMeans(Y, kClusters);
 
         this.points = matchedDocs.map((doc, i) => {
@@ -277,6 +317,8 @@ const UmapVisualizer = {
                 attribute: doc.attribute,
                 rawX: Y[i][0],
                 rawY: Y[i][1],
+                screenX: 0,
+                screenY: 0,
                 radius: 6,
                 cluster: clusters[i],
                 hasTargetKeyword: doc.hasTargetKeyword,
@@ -286,12 +328,14 @@ const UmapVisualizer = {
         });
 
         this.scaleCoordinatesToCanvas(width, height);
+        this.relaxPoints(width, height);
+        this.calculateClusterHulls();
     },
 
     /**
-     * UMAP コアアルゴリズム (高次元ファジィ集合 + SGD最適化)
+     * UMAP コアアルゴリズム (PCA初期化 + 高次元ファジィ単体 + 反発力強化SGD)
      */
-    runUMAPCore(dist, N) {
+    runUMAPCore(dist, N, vectors = null) {
         if (N <= 2) {
             return N === 1 ? [[0, 0]] : [[-1, 0], [1, 0]];
         }
@@ -337,19 +381,12 @@ const UmapVisualizer = {
             }
         }
 
-        // 初期座標（円周上に微小ノイズで配置）
-        const Y = [];
-        for (let i = 0; i < N; i++) {
-            const angle = (2 * Math.PI * i) / N;
-            Y.push([
-                Math.cos(angle) * 3 + (Math.random() - 0.5) * 0.5,
-                Math.sin(angle) * 3 + (Math.random() - 0.5) * 0.5
-            ]);
-        }
+        // 初期座標: PCA/MDS 2次元射影による大域配置（ランダムの代わりに構造を保持）
+        const Y = this.initializePCA(N, dist, vectors);
 
-        // SGD 最適化
-        const epochs = 120;
-        const a = 1.57, b = 0.89; // UMAP標準パラメータ (min_dist=0.1)
+        // SGD 最適化パラメータ（min_dist を大きめにして密集・1点縮退を防止）
+        const epochs = 150;
+        const a = 0.85, b = 0.72; // min_dist ≈ 0.4 相当の緩やかな反発プロファイル
 
         for (let epoch = 0; epoch < epochs; epoch++) {
             const alpha = 1.0 * (1.0 - epoch / epochs);
@@ -364,24 +401,26 @@ const UmapVisualizer = {
 
                 // 引力
                 const gradCoeff = (-2.0 * a * b * Math.pow(Math.max(d2, 1e-4), b - 1.0)) / (1.0 + a * Math.pow(Math.max(d2, 1e-4), b));
-                const clipGrad = Math.max(-4.0, Math.min(4.0, gradCoeff));
+                const clipGrad = Math.max(-3.0, Math.min(3.0, gradCoeff));
 
                 Y[i][0] += clipGrad * dx * alpha;
                 Y[i][1] += clipGrad * dy * alpha;
                 Y[j][0] -= clipGrad * dx * alpha;
                 Y[j][1] -= clipGrad * dy * alpha;
 
-                // 負例サンプリング（反発力）
-                const k = Math.floor(Math.random() * N);
-                if (k !== i) {
-                    const rdx = Y[i][0] - Y[k][0];
-                    const rdy = Y[i][1] - Y[k][1];
-                    const rd2 = rdx * rdx + rdy * rdy;
-                    if (rd2 > 1e-4) {
-                        const repCoeff = (2.0 * b) / ((0.001 + rd2) * (1.0 + a * Math.pow(rd2, b)));
-                        const clipRep = Math.max(-4.0, Math.min(4.0, repCoeff));
-                        Y[i][0] += clipRep * rdx * alpha * 0.4;
-                        Y[i][1] += clipRep * rdy * alpha * 0.4;
+                // 負例サンプリング（反発力） - 4回サンプリングで分散を促進
+                for (let rep = 0; rep < 4; rep++) {
+                    const k = Math.floor(Math.random() * N);
+                    if (k !== i) {
+                        const rdx = Y[i][0] - Y[k][0];
+                        const rdy = Y[i][1] - Y[k][1];
+                        const rd2 = rdx * rdx + rdy * rdy;
+                        if (rd2 > 1e-4) {
+                            const repCoeff = (2.0 * b) / ((0.005 + rd2) * (1.0 + a * Math.pow(rd2, b)));
+                            const clipRep = Math.max(-3.0, Math.min(3.0, repCoeff));
+                            Y[i][0] += clipRep * rdx * alpha * 0.5;
+                            Y[i][1] += clipRep * rdy * alpha * 0.5;
+                        }
                     }
                 }
             }
@@ -390,11 +429,48 @@ const UmapVisualizer = {
         return Y;
     },
 
+    /**
+     * 古典的MDS / PCAによる大域的2次元初期配置
+     */
+    initializePCA(N, dist, vectors) {
+        const Y = [];
+        if (vectors && vectors.length === N && vectors[0].length >= 2) {
+            // ベクトルから第1・第2主成分方向の簡易射影
+            const dim = vectors[0].length;
+            const means = new Float64Array(dim);
+            for (let i = 0; i < N; i++) {
+                for (let d = 0; d < dim; d++) means[d] += vectors[i][d];
+            }
+            for (let d = 0; d < dim; d++) means[d] /= N;
+
+            // 簡易2軸プロジェクション（分散の大きい軸）
+            for (let i = 0; i < N; i++) {
+                let x = 0, y = 0;
+                for (let d = 0; d < Math.min(dim, 15); d++) {
+                    const val = vectors[i][d] - means[d];
+                    x += val * Math.cos((d * Math.PI) / 6);
+                    y += val * Math.sin((d * Math.PI) / 6);
+                }
+                const noise = (Math.random() - 0.5) * 0.2;
+                Y.push([x * 4 + noise, y * 4 + noise]);
+            }
+        } else {
+            // 古典的円周＋ノイズ配置
+            for (let i = 0; i < N; i++) {
+                const angle = (2 * Math.PI * i) / N;
+                Y.push([
+                    Math.cos(angle) * 3 + (Math.random() - 0.5) * 0.5,
+                    Math.sin(angle) * 3 + (Math.random() - 0.5) * 0.5
+                ]);
+            }
+        }
+        return Y;
+    },
+
     runKMeans(points, k) {
         const N = points.length;
         if (N <= k) return points.map((_, i) => i % k);
 
-        // K-Means++風の初期化
         const centroids = [points[0]];
         while (centroids.length < k) {
             const nextIdx = Math.floor(Math.random() * N);
@@ -403,7 +479,6 @@ const UmapVisualizer = {
 
         let assignments = new Int32Array(N);
         for (let iter = 0; iter < 12; iter++) {
-            // 割り当て
             for (let i = 0; i < N; i++) {
                 let minDist = Infinity;
                 let bestC = 0;
@@ -419,7 +494,6 @@ const UmapVisualizer = {
                 assignments[i] = bestC;
             }
 
-            // 重心更新
             const sums = Array.from({ length: k }, () => [0, 0, 0]);
             for (let i = 0; i < N; i++) {
                 const c = assignments[i];
@@ -440,8 +514,8 @@ const UmapVisualizer = {
     scaleCoordinatesToCanvas(width, height) {
         if (this.points.length === 0) return;
 
-        const padX = 70;
-        const padY = 60;
+        const padX = 80;
+        const padY = 70;
         const xs = this.points.map(p => p.rawX);
         const ys = this.points.map(p => p.rawY);
 
@@ -460,6 +534,91 @@ const UmapVisualizer = {
         });
     },
 
+    /**
+     * デクラスタリング・リラクゼーション（重なり防止＆適正間隔の確保）
+     * 数学的に同一または近接した点同士を、クラスタ構造を保ちながら放射状に押し広げる
+     */
+    relaxPoints(width, height) {
+        const N = this.points.length;
+        if (N <= 1) return;
+
+        const pad = 40;
+        const spacingParams = {
+            normal: { minDist: 38, steps: 60 },
+            wide:   { minDist: 52, steps: 80 },
+            widest: { minDist: 68, steps: 100 }
+        };
+        const cfg = spacingParams[this.spreadMode] || spacingParams.wide;
+
+        for (let s = 0; s < cfg.steps; s++) {
+            let hasCollision = false;
+            for (let i = 0; i < N; i++) {
+                const p1 = this.points[i];
+                for (let j = i + 1; j < N; j++) {
+                    const p2 = this.points[j];
+                    let dx = p2.screenX - p1.screenX;
+                    let dy = p2.screenY - p1.screenY;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+
+                    // 完全に同一座標にある場合は、インデックスに基づいて放射状にジッター
+                    if (dist < 0.1) {
+                        const angle = ((i * 37 + j * 73) % 360) * (Math.PI / 180);
+                        dx = Math.cos(angle) * 1.5;
+                        dy = Math.sin(angle) * 1.5;
+                        dist = 1.5;
+                    }
+
+                    const reqDist = (p1.radius || 8) + (p2.radius || 8) + cfg.minDist;
+                    if (dist < reqDist) {
+                        const overlap = (reqDist - dist) * 0.5;
+                        const ox = (dx / dist) * overlap * 0.35;
+                        const oy = (dy / dist) * overlap * 0.35;
+                        p1.screenX -= ox;
+                        p1.screenY -= oy;
+                        p2.screenX += ox;
+                        p2.screenY += oy;
+                        hasCollision = true;
+                    }
+                }
+                // キャンバス外への逸脱防止
+                p1.screenX = Math.max(pad, Math.min(width - pad, p1.screenX));
+                p1.screenY = Math.max(pad, Math.min(height - pad, p1.screenY));
+            }
+            if (!hasCollision && s > 30) break;
+        }
+    },
+
+    /**
+     * 各クラスタの重心と広がり（ハロー描画用）を算出
+     */
+    calculateClusterHulls() {
+        const clusterMap = new Map();
+        this.points.forEach(p => {
+            if (!clusterMap.has(p.cluster)) {
+                clusterMap.set(p.cluster, []);
+            }
+            clusterMap.get(p.cluster).push(p);
+        });
+
+        this.clusterHulls = [];
+        clusterMap.forEach((pts, cIdx) => {
+            if (pts.length === 0) return;
+            const cx = pts.reduce((s, p) => s + p.screenX, 0) / pts.length;
+            const cy = pts.reduce((s, p) => s + p.screenY, 0) / pts.length;
+            let maxR = 0;
+            pts.forEach(p => {
+                const d = Math.sqrt((p.screenX - cx) ** 2 + (p.screenY - cy) ** 2);
+                if (d > maxR) maxR = d;
+            });
+            this.clusterHulls.push({
+                cluster: cIdx,
+                cx: cx,
+                cy: cy,
+                radius: Math.max(35, maxR + 25)
+            });
+        });
+    },
+
     renderFrame() {
         const ctx = this.ctx;
         const w = this.canvas.width;
@@ -470,7 +629,7 @@ const UmapVisualizer = {
         ctx.translate(this.panX, this.panY);
         ctx.scale(this.scale, this.scale);
 
-        // グリッド線
+        // 1. グリッド線
         ctx.strokeStyle = '#f1f5f9';
         ctx.lineWidth = 1;
         for (let x = 40; x < w; x += 60) {
@@ -482,7 +641,24 @@ const UmapVisualizer = {
 
         const palette = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4'];
 
-        // 各プロットを描画
+        // 2. クラスタごとの背景ハロー（話題グループのまとまりを淡く可視化）
+        this.clusterHulls.forEach(hull => {
+            const color = palette[hull.cluster % palette.length];
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(hull.cx, hull.cy, hull.radius, 0, Math.PI * 2);
+            ctx.fillStyle = color;
+            ctx.globalAlpha = 0.06;
+            ctx.fill();
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.15;
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([4, 4]);
+            ctx.stroke();
+            ctx.restore();
+        });
+
+        // 3. 各プロット（点）およびラベルの描画
         this.points.forEach(p => {
             const isHover = this.hoverPoint && this.hoverPoint.id === p.id;
             let fillColor = palette[p.cluster % palette.length];
@@ -499,6 +675,7 @@ const UmapVisualizer = {
                 strokeWidth = 2;
             }
 
+            // ノードの円
             ctx.beginPath();
             ctx.arc(p.screenX, p.screenY, p.radius || 6, 0, Math.PI * 2);
             ctx.fillStyle = fillColor;
@@ -507,22 +684,42 @@ const UmapVisualizer = {
             ctx.lineWidth = strokeWidth;
             ctx.stroke();
 
-            // ラベルの描画
+            // 単語ラベルの描画（白背景角丸ピルで視認性を劇的に向上）
             if (this.viewMode === 'words' || isHover) {
-                ctx.font = (p.isTarget || isHover) ? 'bold 12px sans-serif' : '10px sans-serif';
+                ctx.font = (p.isTarget || isHover) ? 'bold 12px sans-serif' : '11px sans-serif';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
 
-                const labelY = p.screenY + (p.radius || 6) + 3;
-                ctx.strokeStyle = '#ffffff';
-                ctx.lineWidth = 3;
-                ctx.strokeText(p.text, p.screenX, labelY);
-                ctx.fillStyle = p.isTarget ? '#9f1239' : '#1e293b';
-                ctx.fillText(p.text, p.screenX, labelY);
+                const labelText = p.text;
+                const metrics = ctx.measureText(labelText);
+                const textWidth = metrics.width;
+                const textHeight = 14;
+                const pad = 4;
+                const boxW = textWidth + pad * 2;
+                const boxH = textHeight + 2;
+                const boxX = p.screenX - boxW / 2;
+                const boxY = p.screenY + (p.radius || 6) + 3;
+
+                // 背景ピル（半透明の白背景で被りを防止）
+                ctx.save();
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+                ctx.strokeStyle = (p.isTarget || isHover) ? '#f43f5e' : '#e2e8f0';
+                ctx.lineWidth = (p.isTarget || isHover) ? 1.5 : 0.8;
+                ctx.beginPath();
+                ctx.roundRect
+                    ? ctx.roundRect(boxX, boxY, boxW, boxH, 4)
+                    : ctx.rect(boxX, boxY, boxW, boxH);
+                ctx.fill();
+                ctx.stroke();
+                ctx.restore();
+
+                // テキスト本体
+                ctx.fillStyle = p.isTarget ? '#9f1239' : (isHover ? '#0f172a' : '#1e293b');
+                ctx.fillText(labelText, p.screenX, boxY + 2);
             }
         });
 
-        // ホバー時のツールチップ
+        // 4. ホバー時のツールチップ（最前面）
         if (this.hoverPoint) {
             const hp = this.hoverPoint;
             const tooltipText = this.viewMode === 'docs'
@@ -531,12 +728,12 @@ const UmapVisualizer = {
 
             ctx.font = '12px sans-serif';
             const metrics = ctx.measureText(tooltipText);
-            const tipW = Math.min(360, metrics.width + 16);
+            const tipW = Math.min(380, metrics.width + 18);
             const tipH = 28;
             const tipX = Math.min(w - tipW - 10, Math.max(10, hp.screenX - tipW / 2));
             const tipY = hp.screenY - (hp.radius || 6) - tipH - 8;
 
-            ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
             ctx.beginPath();
             ctx.roundRect ? ctx.roundRect(tipX, tipY, tipW, tipH, 4) : ctx.rect(tipX, tipY, tipW, tipH);
             ctx.fill();
@@ -544,8 +741,8 @@ const UmapVisualizer = {
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            const displayText = metrics.width > 340 ? tooltipText.substring(0, 32) + '…' : tooltipText;
-            ctx.fillText(displayText, tipX + 8, tipY + tipH / 2);
+            const displayText = metrics.width > 360 ? tooltipText.substring(0, 34) + '…' : tooltipText;
+            ctx.fillText(displayText, tipX + 9, tipY + tipH / 2);
         }
 
         ctx.restore();

@@ -242,11 +242,18 @@
                     <div id="toolbarUmapCtrl" style="display: none;">
                         <label style="margin-right: 12px;">対象:
                             <select id="selectUmapMode" class="form-select btn-sm" style="width: auto; display: inline-block;">
-                                <option value="words" selected>単語マップ (意味の近さ)</option>
-                                <option value="docs">意見マップ (意見の分類)</option>
+                                <option value="words" selected>単語マップ (語のまとまり)</option>
+                                <option value="docs">意見マップ (回答文の分類)</option>
                             </select>
                         </label>
-                        <button type="button" id="btnUmapReset" class="btn btn-sm">↺ リセット</button>
+                        <label style="margin-right: 12px;">文字の広がり:
+                            <select id="selectUmapSpread" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="normal">標準</option>
+                                <option value="wide" selected>広め（重なり防止）</option>
+                                <option value="widest">最大（ゆったり）</option>
+                            </select>
+                        </label>
+                        <button type="button" id="btnUmapReset" class="btn btn-sm">↺ 再計算</button>
                     </div>
 
                     <div id="toolbarOpinionsCtrl" style="display: none;">

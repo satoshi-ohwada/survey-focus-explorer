@@ -27,7 +27,8 @@ const AppState = {
     cloudMaxWords: 60,
     networkMaxWords: 40,
     networkSpacing: 'wide',
-    umapMode: 'words'
+    umapMode: 'words',
+    umapSpread: 'wide'
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -239,6 +240,13 @@ function setupUIEvents() {
         AppState.umapMode = e.target.value;
         updateUmap();
     });
+    const selectSpread = document.getElementById('selectUmapSpread');
+    if (selectSpread) {
+        selectSpread.addEventListener('change', (e) => {
+            AppState.umapSpread = e.target.value;
+            updateUmap();
+        });
+    }
     document.getElementById('btnUmapReset').addEventListener('click', () => {
         updateUmap();
     });
@@ -654,6 +662,7 @@ function updateUmap() {
         activeRelated,
         {
             maxWords: 50,
+            spreadMode: AppState.umapSpread,
             onPointClick: (point) => {
                 if (point.rawDoc) {
                     // 意見プロットクリック時
