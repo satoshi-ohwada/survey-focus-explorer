@@ -26,6 +26,7 @@ const AppState = {
     cloudRanking: 'count',
     cloudMaxWords: 60,
     networkMaxWords: 40,
+    networkSpacing: 'wide',
     umapMode: 'words'
 };
 
@@ -222,6 +223,13 @@ function setupUIEvents() {
         AppState.networkMaxWords = parseInt(e.target.value, 10);
         updateNetwork();
     });
+    const selectSpacing = document.getElementById('selectNetworkSpacing');
+    if (selectSpacing) {
+        selectSpacing.addEventListener('change', (e) => {
+            AppState.networkSpacing = e.target.value;
+            updateNetwork();
+        });
+    }
     document.getElementById('btnNetworkReset').addEventListener('click', () => {
         updateNetwork();
     });
@@ -619,6 +627,7 @@ function updateNetwork() {
         activeRelated,
         {
             maxWords: AppState.networkMaxWords,
+            spacingMode: AppState.networkSpacing,
             onWordClick: (word) => {
                 document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
                 document.getElementById('inputFilterOpinionText').value = word;

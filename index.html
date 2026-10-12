@@ -229,7 +229,14 @@
                                 <option value="50">50語</option>
                             </select>
                         </label>
-                        <button type="button" id="btnNetworkReset" class="btn btn-sm">↺ 配置リセット</button>
+                        <label style="margin-left: 10px;">ノード間隔:
+                            <select id="selectNetworkSpacing" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="normal">標準</option>
+                                <option value="wide" selected>広め（重なり防止）</option>
+                                <option value="widest">最大（ゆったり）</option>
+                            </select>
+                        </label>
+                        <button type="button" id="btnNetworkReset" class="btn btn-sm" style="margin-left: 8px;">↺ 配置リセット</button>
                     </div>
 
                     <div id="toolbarUmapCtrl" style="display: none;">

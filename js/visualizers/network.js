@@ -135,16 +135,18 @@ const NetworkVisualizer = {
         this.targetKeyword = targetKeyword;
         this.activeRelatedWords = activeRelatedWords || [];
         this.onWordClick = options.onWordClick;
+        this.spacingMode = options.spacingMode || 'wide'; // 'normal' | 'wide' | 'widest'
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
         const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
-        const height = 480;
+        const height = 520;
         this.canvas.width = width;
         this.canvas.height = height;
 
-        this.scale = 1.0;
-        this.panX = 0;
-        this.panY = 0;
+        // 初期スケール（ノードが広がるため、ゆったり全体が見える倍率に調整）
+        this.scale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        this.panX = (width * (1 - this.scale)) / 2;
+        this.panY = (height * (1 - this.scale)) / 2;
 
         const maxWords = options.maxWords || 40;
         const topWords = wordList.slice(0, maxWords);
@@ -188,15 +190,15 @@ const NetworkVisualizer = {
         this.nodes = Array.from(connectedNodes).map(id => {
             const cnt = countsMap[id] || 1;
             const rScale = maxCount > minCount ? (cnt - minCount) / (maxCount - minCount) : 0.5;
-            const radius = 9 + rScale * 18;
+            const radius = 9 + rScale * 16;
             return {
                 id: id,
                 count: cnt,
                 radius: radius,
                 community: id,
                 communityIndex: 0,
-                x: width / 2 + (Math.random() - 0.5) * (width * 0.5),
-                y: height / 2 + (Math.random() - 0.5) * (height * 0.5),
+                x: width / 2 + (Math.random() - 0.5) * (width * 0.7),
+                y: height / 2 + (Math.random() - 0.5) * (height * 0.7),
                 vx: 0,
                 vy: 0,
                 fx: null,
@@ -217,7 +219,7 @@ const NetworkVisualizer = {
         this.detectCommunities();
 
         // 3. 物理シミュレーションの実行（高速に初期収束させる）
-        this.simulateLayout(120);
+        this.simulateLayout(160);
 
         // 4. 初回描画
         this.renderFrame();
@@ -261,18 +263,29 @@ const NetworkVisualizer = {
         const centerX = width / 2;
         const centerY = height / 2;
 
+        // 間隔設定に基づく物理定数
+        const spacingParams = {
+            normal: { baseLen: 120, kRepel: 8000, minPadding: 35, gravity: 0.005 },
+            wide:   { baseLen: 175, kRepel: 16000, minPadding: 50, gravity: 0.003 },
+            widest: { baseLen: 240, kRepel: 26000, minPadding: 70, gravity: 0.002 }
+        };
+        const p = spacingParams[this.spacingMode] || spacingParams.wide;
+
         for (let s = 0; s < steps; s++) {
-            // 反発力 (Repulsion)
-            const kRepel = 1800;
+            // 1. 反発力 (Repulsion) - 距離の2乗反比例
             for (let i = 0; i < this.nodes.length; i++) {
                 const n1 = this.nodes[i];
                 for (let j = i + 1; j < this.nodes.length; j++) {
                     const n2 = this.nodes[j];
-                    const dx = n2.x - n1.x;
-                    const dy = n2.y - n1.y;
-                    const distSq = dx * dx + dy * dy + 10;
+                    let dx = n2.x - n1.x;
+                    let dy = n2.y - n1.y;
+                    if (dx === 0 && dy === 0) {
+                        dx = (Math.random() - 0.5) * 5;
+                        dy = (Math.random() - 0.5) * 5;
+                    }
+                    const distSq = dx * dx + dy * dy + 15;
                     const dist = Math.sqrt(distSq);
-                    const force = kRepel / distSq;
+                    const force = p.kRepel / distSq;
                     const fx = (dx / dist) * force;
                     const fy = (dy / dist) * force;
                     n1.vx -= fx;
@@ -282,14 +295,17 @@ const NetworkVisualizer = {
                 }
             }
 
-            // 引力 (Spring Attraction)
-            const springK = 0.04;
-            const baseLen = 70;
+            // 2. 引力 (Spring Attraction) - エッジ接続
+            const springK = 0.035;
             this.edges.forEach(e => {
-                const dx = e.target.x - e.source.x;
-                const dy = e.target.y - e.source.y;
+                let dx = e.target.x - e.source.x;
+                let dy = e.target.y - e.source.y;
+                if (dx === 0 && dy === 0) {
+                    dx = (Math.random() - 0.5) * 5;
+                    dy = (Math.random() - 0.5) * 5;
+                }
                 const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-                const force = (dist - baseLen) * springK * Math.min(3, 1 + 0.2 * e.weight);
+                const force = (dist - p.baseLen) * springK * Math.min(2.5, 1 + 0.15 * e.weight);
                 const fx = (dx / dist) * force;
                 const fy = (dy / dist) * force;
                 e.source.vx += fx;
@@ -298,11 +314,10 @@ const NetworkVisualizer = {
                 e.target.vy -= fy;
             });
 
-            // 中心重力 (Center Gravity)
-            const gravity = 0.015;
+            // 3. 中心重力 (Center Gravity) & 速度更新
             this.nodes.forEach(n => {
-                n.vx += (centerX - n.x) * gravity;
-                n.vy += (centerY - n.y) * gravity;
+                n.vx += (centerX - n.x) * p.gravity;
+                n.vy += (centerY - n.y) * p.gravity;
 
                 // 速度減衰 (Damping)
                 n.vx *= 0.85;
@@ -312,9 +327,28 @@ const NetworkVisualizer = {
                 if (n.fy == null) n.y += n.vy;
 
                 // 画面外への飛び出し防止
-                n.x = Math.max(30, Math.min(width - 30, n.x));
-                n.y = Math.max(30, Math.min(height - 30, n.y));
+                n.x = Math.max(n.radius + 20, Math.min(width - n.radius - 20, n.x));
+                n.y = Math.max(n.radius + 20, Math.min(height - n.radius - 20, n.y));
             });
+
+            // 4. ハード衝突防止（Collision Resolution / 重なり完全解消）
+            for (let i = 0; i < this.nodes.length; i++) {
+                const n1 = this.nodes[i];
+                for (let j = i + 1; j < this.nodes.length; j++) {
+                    const n2 = this.nodes[j];
+                    let dx = n2.x - n1.x;
+                    let dy = n2.y - n1.y;
+                    let dist = Math.sqrt(dx * dx + dy * dy) || 0.1;
+                    const minDist = n1.radius + n2.radius + p.minPadding;
+                    if (dist < minDist) {
+                        const overlap = (minDist - dist) * 0.5;
+                        const ox = (dx / dist) * overlap;
+                        const oy = (dy / dist) * overlap;
+                        if (n1.fx == null) { n1.x -= ox; n1.y -= oy; }
+                        if (n2.fx == null) { n2.x += ox; n2.y += oy; }
+                    }
+                }
+            }
         }
     },
 
