@@ -36,19 +36,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     UmapVisualizer.init('umapCanvas');
     AttrChartVisualizer.init('attrChartContainer');
 
-    // 2. Kuromoji 形態素解析器の初期化
+    // 2. UIイベントリスナーの登録（即座にクリック可能にする）
+    setupUIEvents();
+
+    // 3. 初回デモデータの自動ロード
+    loadDemoData();
+
+    // 4. Kuromoji 形態素解析器の非同期初期化（完了後に自動再分析）
     try {
         await TextPreprocessor.init('lib/kuromoji/dict/');
         console.log('Kuromoji initialized successfully.');
+        // 初回形態素解析を完了させておく
+        if (AppState.rawRows.length > 0 && AppState.textCol) {
+            runFocusAnalysis();
+        }
     } catch (e) {
         console.warn('Kuromoji init fallback/warning:', e);
+        // フォールバックでも動作させる
+        if (AppState.rawRows.length > 0 && AppState.textCol) {
+            runFocusAnalysis();
+        }
     }
-
-    // 3. UIイベントリスナーの登録
-    setupUIEvents();
-
-    // 4. 初回デモデータの自動ロード（すぐに体験できるように）
-    loadDemoData();
 });
 
 /**
@@ -150,14 +158,23 @@ function setupUIEvents() {
     });
 
     // キーワード実行ボタン
-    document.getElementById('btnRunFocus').addEventListener('click', () => {
+    document.getElementById('btnRunFocus').addEventListener('click', async () => {
         const kw = document.getElementById('inputTargetKeyword').value.trim();
         if (!kw) {
             alert('注目したいキーワードを入力してください。');
             return;
         }
+
+        if (!AppState.rawRows.length || !AppState.textCol) {
+            const useDemo = confirm('アンケートデータが読み込まれていません。デモデータ（物価高・生活意識アンケート）を読み込んで分析しますか？');
+            if (useDemo) {
+                loadDemoData();
+            }
+            return;
+        }
+
         AppState.targetKeyword = kw;
-        runFocusAnalysis();
+        await runFocusAnalysis();
     });
 
     document.getElementById('inputTargetKeyword').addEventListener('keydown', (e) => {
@@ -388,33 +405,59 @@ function loadDemoData() {
 async function runFocusAnalysis() {
     if (!AppState.rawRows.length || !AppState.textCol) return;
 
-    // 1. 必要に応じて全行の形態素解析を実施
-    if (!AppState.isTokenized) {
-        const texts = AppState.rawRows.map(r => String(r[AppState.textCol] || ''));
-        AppState.tokensPerDoc = TextPreprocessor.tokenizeDocuments(texts);
-        AppState.isTokenized = true;
+    const btn = document.getElementById('btnRunFocus');
+    const originalText = btn ? btn.innerHTML : '';
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '⏳ 分析中...';
     }
 
-    // 2. キーワード関連語の算出
-    const res = AssociationEngine.findRelatedWords(
-        AppState.tokensPerDoc,
-        AppState.rawRows,
-        AppState.textCol,
-        AppState.targetKeyword,
-        { topN: 14, minCooc: 2 }
-    );
+    try {
+        // 1. Kuromoji が未完了の場合は待機を試みる
+        if (!TextPreprocessor.tokenizer) {
+            try {
+                await TextPreprocessor.init('lib/kuromoji/dict/');
+            } catch (e) {
+                console.warn('Tokenizer init fallback used:', e);
+            }
+        }
 
-    if (res.warning) {
-        alert(res.warning);
+        // 2. 必要に応じて全行の形態素解析を実施
+        if (!AppState.isTokenized) {
+            const texts = AppState.rawRows.map(r => String(r[AppState.textCol] || ''));
+            AppState.tokensPerDoc = TextPreprocessor.tokenizeDocuments(texts);
+            AppState.isTokenized = true;
+        }
+
+        // 3. キーワード関連語の算出
+        const res = AssociationEngine.findRelatedWords(
+            AppState.tokensPerDoc,
+            AppState.rawRows,
+            AppState.textCol,
+            AppState.targetKeyword,
+            { topN: 14, minCooc: 2 }
+        );
+
+        if (res.warning) {
+            alert(res.warning);
+        }
+
+        AppState.relatedWords = res.relatedWords || [];
+
+        // 4. 関連語チップの描画
+        renderRelatedChips();
+
+        // 5. 該当意見のフィルタリング ＆ 可視化描画
+        executeFilteringAndRender();
+    } catch (err) {
+        console.error('Focus analysis error:', err);
+        alert('分析処理中にエラーが発生しました: ' + err.message);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = originalText || '🚀 関連語を探索 ＆ 分析';
+        }
     }
-
-    AppState.relatedWords = res.relatedWords || [];
-
-    // 3. 関連語チップの描画
-    renderRelatedChips();
-
-    // 4. 該当意見のフィルタリング ＆ 可視化描画
-    executeFilteringAndRender();
 }
 
 /**

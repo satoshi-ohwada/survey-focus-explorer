@@ -136,7 +136,8 @@ const NetworkVisualizer = {
         this.activeRelatedWords = activeRelatedWords || [];
         this.onWordClick = options.onWordClick;
 
-        const width = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 800;
+        const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
+        const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
         const height = 480;
         this.canvas.width = width;
         this.canvas.height = height;

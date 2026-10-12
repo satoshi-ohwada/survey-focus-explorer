@@ -27,7 +27,8 @@ const WordCloudVisualizer = {
 
         const rankingMethod = options.rankingMethod || 'count'; // 'count' or 'tfidf'
         const maxWords = options.maxWords || 60;
-        const width = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 800;
+        const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
+        const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
         const height = 480;
 
         this.canvas.width = width;

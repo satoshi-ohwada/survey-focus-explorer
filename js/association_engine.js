@@ -133,6 +133,11 @@ const AssociationEngine = {
             });
         }
 
+        // もし候補が0件でminCooc > 1の場合は、minCooc=1に緩和して再試行
+        if (candidates.length === 0 && minCooc > 1) {
+            return this.findRelatedWords(tokensPerDoc, rawRows, textCol, targetKeyword, { ...options, minCooc: 1 });
+        }
+
         // スコア降順にソートして上位N語を取得
         candidates.sort((a, b) => b.score - a.score || b.coocCount - a.coocCount);
         const relatedWords = candidates.slice(0, topN);

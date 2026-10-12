@@ -233,6 +233,40 @@ const TextPreprocessor = {
     },
 
     /**
+     * 複数ドキュメントを一括形態素解析する
+     * @param {string[]} texts
+     * @returns {string[][]}
+     */
+    tokenizeDocuments(texts) {
+        if (!texts || !Array.isArray(texts)) return [];
+        return texts.map(t => this.tokenize(t));
+    },
+
+    /**
+     * 形態素解析器が利用できない場合の簡易分かち書きフォールバック
+     * @param {string} text
+     * @returns {string[]}
+     */
+    fallbackTokenize(text) {
+        if (!text) return [];
+        let processed = String(text);
+        // 同義語置換
+        this.customSynonymRules.forEach((rep, src) => {
+            processed = processed.split(src).join(rep);
+        });
+
+        // 漢字の連続（2文字以上）、カタカナの連続（2文字以上）、英単語を抽出
+        const matches = processed.match(/[\p{Script=Han}]{2,}|[\p{Script=Katakana}ー]{2,}|[a-zA-Z0-9]{2,}/gu) || [];
+        const words = [];
+        for (const m of matches) {
+            if (!this.isStopWord(m)) {
+                words.push(m);
+            }
+        }
+        return words;
+    },
+
+    /**
      * 単一のテキスト文を形態素解析し、単語リスト（名詞・動詞・形容詞・複合語）を返す
      * 1. ユーザー定義複合語・同義語置換の適用
      * 2. 連続する名詞の自動結合
@@ -241,7 +275,10 @@ const TextPreprocessor = {
      * @returns {string[]}
      */
     tokenize(text) {
-        if (!this.tokenizer || !text) return [];
+        if (!text) return [];
+        if (!this.tokenizer) {
+            return this.fallbackTokenize(text);
+        }
 
         let tokens = this.tokenizer.tokenize(text);
 
