@@ -14,8 +14,8 @@ const AppState = {
     isTokenized: false,
     
     // キーワード ＆ 関連語
-    targetKeyword: '物価高',
-    resolvedTargetWord: '物価高', // 複合語（例: 中東情勢）自動判定による中心代表語
+    targetKeyword: '',
+    resolvedTargetWord: '', // 複合語（例: 中東情勢）自動判定による中心代表語
     relatedWords: [], // [{ word, score, coocCount, docCount, checked }]
     
     // 抽出結果
@@ -454,8 +454,22 @@ function loadParsedData(parsed) {
     document.getElementById('configGrid').style.display = 'block';
     document.getElementById('focusSection').style.display = 'block';
 
-    // 初回分析を実行
-    runFocusAnalysis();
+    const currentKw = (document.getElementById('inputTargetKeyword').value || '').trim();
+    if (currentKw) {
+        AppState.targetKeyword = currentKw;
+        runFocusAnalysis();
+    } else {
+        // キーワードが空の場合は待機状態にする（ユーザーの入力を促す）
+        AppState.targetKeyword = '';
+        AppState.resolvedTargetWord = '';
+        AppState.relatedWords = [];
+        document.getElementById('dashboardSection').style.display = 'none';
+        document.getElementById('coveragePanel').style.display = 'none';
+        const chipsContainer = document.getElementById('relatedChipsContainer');
+        if (chipsContainer) {
+            chipsContainer.innerHTML = '<span style="color: var(--text-muted); font-size: 13px;">注目したいキーワードを入力して「🚀 関連語を探索 ＆ 分析」をクリックしてください</span>';
+        }
+    }
 }
 
 /**
@@ -497,13 +511,14 @@ function renderPreviewTable() {
 function loadDemoData() {
     if (typeof DEMO_SURVEY_DATA === 'undefined') return;
     const headers = ['id', '年代', '自由記述'];
+    // デモ実行時は例として「物価高」を設定して分析を即座に体験可能にする
+    document.getElementById('inputTargetKeyword').value = '物価高';
+    AppState.targetKeyword = '物価高';
     loadParsedData({
         headers: headers,
         rows: DEMO_SURVEY_DATA,
         fileName: '物価高・生活意識アンケート (デモデータ)'
     });
-    document.getElementById('inputTargetKeyword').value = '物価高';
-    AppState.targetKeyword = '物価高';
 }
 
 /**
@@ -511,6 +526,14 @@ function loadDemoData() {
  */
 async function runFocusAnalysis() {
     if (!AppState.rawRows.length || !AppState.textCol) return;
+
+    const kwInput = document.getElementById('inputTargetKeyword');
+    const kw = kwInput ? kwInput.value.trim() : '';
+    if (!kw) {
+        alert('注目したいキーワードを入力してください。');
+        return;
+    }
+    AppState.targetKeyword = kw;
 
     const btn = document.getElementById('btnRunFocus');
     const originalText = btn ? btn.innerHTML : '';
