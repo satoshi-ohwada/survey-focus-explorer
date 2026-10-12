@@ -38,26 +38,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     UmapVisualizer.init('umapCanvas');
     AttrChartVisualizer.init('attrChartContainer');
 
-    // 2. UIイベントリスナーの登録（即座にクリック可能にする）
+    // 2. UIイベントリスナーの登録（即座に操作可能にする）
     setupUIEvents();
 
-    // 3. 初回デモデータの自動ロード
-    loadDemoData();
-
-    // 4. Kuromoji 形態素解析器の非同期初期化（完了後に自動再分析）
+    // 3. Kuromoji 形態素解析器の非同期事前準備（バックグラウンドでロード）
     try {
         await TextPreprocessor.init('lib/kuromoji/dict/');
         console.log('Kuromoji initialized successfully.');
-        // 初回形態素解析を完了させておく
-        if (AppState.rawRows.length > 0 && AppState.textCol) {
-            runFocusAnalysis();
-        }
     } catch (e) {
         console.warn('Kuromoji init fallback/warning:', e);
-        // フォールバックでも動作させる
-        if (AppState.rawRows.length > 0 && AppState.textCol) {
-            runFocusAnalysis();
-        }
     }
 });
 
