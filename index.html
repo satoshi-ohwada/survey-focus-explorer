@@ -350,6 +350,10 @@
                                 <option value="80">80語</option>
                             </select>
                         </label>
+                        <span class="btn-export-group">
+                            <button type="button" id="btnSaveCloudImage" class="btn btn-sm" title="Word/PowerPoint向けに白背景のPNG画像として保存">📷 画像保存 (PNG)</button>
+                            <button type="button" id="btnCopyCloudImage" class="btn btn-sm" title="クリップボードに画像をコピーしてWordやPowerPointに直接貼り付け [Ctrl+V]">📋 Officeへコピー</button>
+                        </span>
                     </div>
 
                     <div id="toolbarNetworkCtrl" style="display: none;">
@@ -378,6 +382,10 @@
                             <button type="button" id="btnNetworkZoomIn" class="btn btn-sm" title="図を拡大 (Ctrl+ホイールでも可能)">➕ 拡大</button>
                             <button type="button" id="btnNetworkZoomOut" class="btn btn-sm" title="図を縮小 (Ctrl+ホイールでも可能)">➖ 縮小</button>
                             <button type="button" id="btnNetworkReset" class="btn btn-sm" title="配置と倍率を初期化">↺ リセット</button>
+                        </span>
+                        <span class="btn-export-group">
+                            <button type="button" id="btnSaveNetworkImage" class="btn btn-sm" title="Word/PowerPoint向けに白背景のPNG画像として保存">📷 画像保存 (PNG)</button>
+                            <button type="button" id="btnCopyNetworkImage" class="btn btn-sm" title="クリップボードに画像をコピーしてWordやPowerPointに直接貼り付け [Ctrl+V]">📋 Officeへコピー</button>
                         </span>
                         <small style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">※拡大縮小: Ctrl + スクロール または ボタン</small>
                     </div>
@@ -408,7 +416,19 @@
                             <button type="button" id="btnUmapZoomOut" class="btn btn-sm" title="図を縮小 (Ctrl+ホイールでも可能)">➖ 縮小</button>
                             <button type="button" id="btnUmapReset" class="btn btn-sm" title="再計算・配置リセット">↺ 再計算</button>
                         </span>
+                        <span class="btn-export-group">
+                            <button type="button" id="btnSaveUmapImage" class="btn btn-sm" title="Word/PowerPoint向けに白背景のPNG画像として保存">📷 画像保存 (PNG)</button>
+                            <button type="button" id="btnCopyUmapImage" class="btn btn-sm" title="クリップボードに画像をコピーしてWordやPowerPointに直接貼り付け [Ctrl+V]">📋 Officeへコピー</button>
+                        </span>
                         <small style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">※拡大縮小: Ctrl + スクロール または ボタン</small>
+                    </div>
+
+                    <div id="toolbarAttrCtrl" style="display: none;">
+                        <span class="btn-export-group" style="margin-left: 0;">
+                            <button type="button" id="btnSaveAttrImage" class="btn btn-sm" title="Word/PowerPoint向けに白背景のPNG画像として保存">📷 画像保存 (PNG)</button>
+                            <button type="button" id="btnCopyAttrImage" class="btn btn-sm" title="クリップボードに画像をコピーしてWordやPowerPointに直接貼り付け [Ctrl+V]">📋 Officeへコピー</button>
+                        </span>
+                        <small style="color: var(--text-muted); font-size: 11px; margin-left: 8px;">※属性グループごとの言及割合グラフ（Word/PowerPoint貼付用白背景出力）</small>
                     </div>
 
                     <div id="toolbarOpinionsCtrl" style="display: none;">
@@ -418,8 +438,8 @@
                 </div>
 
                 <div class="toolbar-group">
-                    <button type="button" id="btnSaveImage" class="btn btn-sm" title="現在の図をPNG画像で保存">
-                        📷 画像を保存
+                    <button type="button" id="btnSaveImage" class="btn btn-sm" title="現在表示中の図を白背景PNG画像で保存 (Word/PowerPoint向け)">
+                        📷 表示中の図を保存
                     </button>
                 </div>
             </div>

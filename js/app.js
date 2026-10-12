@@ -352,10 +352,28 @@ function setupUIEvents() {
         exportMatchedOpinionsCsv();
     });
 
-    // 画像保存ボタン
-    document.getElementById('btnSaveImage').addEventListener('click', () => {
-        saveCurrentImage();
-    });
+    // 各図の個別画像保存 ＆ クリップボードコピー（Word/PowerPoint向け）
+    const bindExport = (btnId, type, action) => {
+        const el = document.getElementById(btnId);
+        if (el) el.addEventListener('click', () => exportChart(type, action));
+    };
+
+    bindExport('btnSaveCloudImage', 'cloud', 'download');
+    bindExport('btnCopyCloudImage', 'cloud', 'copy');
+    bindExport('btnSaveNetworkImage', 'network', 'download');
+    bindExport('btnCopyNetworkImage', 'network', 'copy');
+    bindExport('btnSaveUmapImage', 'umap', 'download');
+    bindExport('btnCopyUmapImage', 'umap', 'copy');
+    bindExport('btnSaveAttrImage', 'attr', 'download');
+    bindExport('btnCopyAttrImage', 'attr', 'copy');
+
+    // ツールバー右端の「表示中の図を保存」ボタン
+    const btnSaveCurrent = document.getElementById('btnSaveImage');
+    if (btnSaveCurrent) {
+        btnSaveCurrent.addEventListener('click', () => {
+            exportChart(AppState.activeTab, 'download');
+        });
+    }
 
     // レポート印刷
     document.getElementById('btnPrintReport').addEventListener('click', () => {
@@ -736,6 +754,8 @@ function switchTab(tabName) {
     document.getElementById('toolbarCloudCtrl').style.display = (tabName === 'cloud') ? 'block' : 'none';
     document.getElementById('toolbarNetworkCtrl').style.display = (tabName === 'network') ? 'block' : 'none';
     document.getElementById('toolbarUmapCtrl').style.display = (tabName === 'umap') ? 'block' : 'none';
+    const attrCtrl = document.getElementById('toolbarAttrCtrl');
+    if (attrCtrl) attrCtrl.style.display = (tabName === 'attr') ? 'block' : 'none';
     document.getElementById('toolbarOpinionsCtrl').style.display = (tabName === 'opinions') ? 'flex' : 'none';
 
     // 切り替え時に描画
@@ -1003,40 +1023,147 @@ function exportMatchedOpinionsCsv() {
 }
 
 /**
- * 現在の図を画像として保存
+ * 各図の画像エクスポート（ダウンロード または クリップボードコピー）
+ * WordやPowerPointで利用することを想定し、純白（#ffffff）の背景で合成出力する
+ * @param {'cloud' | 'network' | 'umap' | 'attr'} type
+ * @param {'download' | 'copy'} action
  */
-function saveCurrentImage() {
-    let canvas = null;
-    let filename = 'chart.png';
+async function exportChart(type, action = 'download') {
+    const kw = (AppState.targetKeyword || '全体').replace(/[\\/:*?"<>|]/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-    if (AppState.activeTab === 'cloud') {
-        canvas = document.getElementById('cloudCanvas');
-        filename = `wordcloud_${AppState.targetKeyword}.png`;
-    } else if (AppState.activeTab === 'network') {
-        canvas = document.getElementById('networkCanvas');
-        filename = `network_${AppState.targetKeyword}.png`;
-    } else if (AppState.activeTab === 'umap') {
-        canvas = document.getElementById('umapCanvas');
-        filename = `umap_${AppState.targetKeyword}.png`;
-    } else if (AppState.activeTab === 'attr') {
-        if (typeof Plotly !== 'undefined') {
-            Plotly.downloadImage('attrChartContainer', {
-                format: 'png',
-                width: 1000,
-                height: 600,
-                filename: `attr_chart_${AppState.targetKeyword}`
-            });
+    const titles = {
+        cloud: `ワードクラウド_${kw}_${dateStr}`,
+        network: `共起ネットワーク_${kw}_${dateStr}`,
+        umap: `UMAP散布図_${kw}_${dateStr}`,
+        attr: `属性別クロス集計_${kw}_${dateStr}`
+    };
+    const baseTitle = titles[type] || `分析図_${kw}_${dateStr}`;
+
+    // 1. 属性別集計（Plotly グラフ）
+    if (type === 'attr') {
+        if (typeof Plotly === 'undefined') {
+            showToast('⚠️ グラフ描画ライブラリが準備できていません');
             return;
         }
+        const container = document.getElementById('attrChartContainer');
+        if (!container || !container.data || container.data.length === 0) {
+            showToast('⚠️ 保存可能な属性グラフがありません');
+            return;
+        }
+
+        if (action === 'download') {
+            Plotly.downloadImage('attrChartContainer', {
+                format: 'png',
+                width: 1100,
+                height: 620,
+                filename: baseTitle
+            });
+            showToast(`💾「${baseTitle}.png」を保存しました`);
+        } else {
+            // クリップボードへコピー
+            try {
+                const dataUrl = await Plotly.toImage('attrChartContainer', {
+                    format: 'png',
+                    width: 1100,
+                    height: 620
+                });
+                const res = await fetch(dataUrl);
+                const blob = await res.blob();
+                if (navigator.clipboard && window.ClipboardItem) {
+                    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                    showToast('📋 属性グラフをクリップボードにコピーしました！\nWordやPowerPointに [Ctrl+V] で直接貼り付けできます。');
+                } else {
+                    showToast('⚠️ お使いのブラウザは画像の直接コピーに非対応です。画像保存をご利用ください。');
+                }
+            } catch (err) {
+                console.error('Plotly copy error:', err);
+                showToast('⚠️ クリップボードへの画像コピーに失敗しました');
+            }
+        }
+        return;
     }
 
-    if (canvas) {
-        const url = canvas.toDataURL('image/png');
+    // 2. Canvas 系の図（ワードクラウド, 共起ネットワーク, UMAP）
+    let srcCanvas = null;
+    if (type === 'cloud') srcCanvas = document.getElementById('cloudCanvas');
+    else if (type === 'network') srcCanvas = document.getElementById('networkCanvas');
+    else if (type === 'umap') srcCanvas = document.getElementById('umapCanvas');
+
+    if (!srcCanvas || srcCanvas.width === 0 || srcCanvas.height === 0) {
+        showToast('⚠️ 保存可能な図が表示されていません');
+        return;
+    }
+
+    // WordやPowerPointに貼り付けた際に文字や線が明瞭に見えるよう、
+    // 透過を防ぎ、白背景（#ffffff）のオフスクリーンキャンバスに合成
+    const whiteCanvas = document.createElement('canvas');
+    whiteCanvas.width = srcCanvas.width;
+    whiteCanvas.height = srcCanvas.height;
+    const ctx = whiteCanvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
+    ctx.drawImage(srcCanvas, 0, 0);
+
+    if (action === 'download') {
+        const filename = `${baseTitle}.png`;
+        const url = whiteCanvas.toDataURL('image/png');
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
+        showToast(`💾「${filename}」を白背景PNGで保存しました`);
+    } else {
+        // クリップボードへコピー
+        if (!navigator.clipboard || !window.ClipboardItem) {
+            showToast('⚠️ お使いのブラウザは画像の直接コピーに対応していません。画像保存をご利用ください。');
+            return;
+        }
+        whiteCanvas.toBlob(async (blob) => {
+            if (!blob) {
+                showToast('⚠️ 画像の生成に失敗しました');
+                return;
+            }
+            try {
+                await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+                showToast(`📋「${baseTitle}」をクリップボードにコピーしました！\nWordやPowerPointに [Ctrl+V] で直接貼り付けできます。`);
+            } catch (err) {
+                console.warn('Clipboard write error:', err);
+                showToast('⚠️ クリップボードへの画像コピーに失敗しました。画像保存をご利用ください。');
+            }
+        }, 'image/png');
     }
+}
+
+/**
+ * 互換性のための関数
+ */
+function saveCurrentImage() {
+    exportChart(AppState.activeTab, 'download');
+}
+
+/**
+ * トースト通知を表示
+ * @param {string} message
+ */
+function showToast(message) {
+    let toast = document.getElementById('appToast');
+    if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'appToast';
+        toast.className = 'toast-notification';
+        document.body.appendChild(toast);
+    }
+    toast.textContent = message;
+    toast.classList.remove('hide');
+    toast.style.display = 'flex';
+    if (toast._timer) clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+        toast.classList.add('hide');
+        setTimeout(() => { toast.style.display = 'none'; }, 300);
+    }, 4000);
 }
 
 /**
