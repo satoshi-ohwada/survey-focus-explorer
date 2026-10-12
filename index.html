@@ -222,7 +222,7 @@
                     </div>
 
                     <div id="toolbarNetworkCtrl" style="display: none;">
-                        <label>ネットワーク表示語数:
+                        <label>表示語数:
                             <select id="selectNetworkMaxWords" class="form-select btn-sm" style="width: auto; display: inline-block;">
                                 <option value="30">30語</option>
                                 <option value="40" selected>40語</option>
@@ -236,6 +236,13 @@
                                 <option value="widest">最大（ゆったり）</option>
                             </select>
                         </label>
+                        <label style="margin-left: 10px;">文字サイズ:
+                            <select id="selectNetworkFontSize" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="normal">標準</option>
+                                <option value="large" selected>やや大 (推奨)</option>
+                                <option value="xlarge">特大</option>
+                            </select>
+                        </label>
                         <button type="button" id="btnNetworkReset" class="btn btn-sm" style="margin-left: 8px;">↺ 配置リセット</button>
                     </div>
 
@@ -246,11 +253,18 @@
                                 <option value="docs">意見マップ (回答文の分類)</option>
                             </select>
                         </label>
-                        <label style="margin-right: 12px;">文字の広がり:
+                        <label style="margin-right: 12px;">広がり:
                             <select id="selectUmapSpread" class="form-select btn-sm" style="width: auto; display: inline-block;">
                                 <option value="normal">標準</option>
                                 <option value="wide" selected>広め（重なり防止）</option>
                                 <option value="widest">最大（ゆったり）</option>
+                            </select>
+                        </label>
+                        <label style="margin-right: 12px;">文字サイズ:
+                            <select id="selectUmapFontSize" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="normal">標準</option>
+                                <option value="large" selected>やや大 (推奨)</option>
+                                <option value="xlarge">特大</option>
                             </select>
                         </label>
                         <button type="button" id="btnUmapReset" class="btn btn-sm">↺ 再計算</button>

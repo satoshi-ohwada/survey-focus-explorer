@@ -27,8 +27,10 @@ const AppState = {
     cloudMaxWords: 60,
     networkMaxWords: 40,
     networkSpacing: 'wide',
+    networkFontSize: 'large',
     umapMode: 'words',
-    umapSpread: 'wide'
+    umapSpread: 'wide',
+    umapFontSize: 'large'
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -220,6 +222,13 @@ function setupUIEvents() {
             updateNetwork();
         });
     }
+    const selectNetFontSize = document.getElementById('selectNetworkFontSize');
+    if (selectNetFontSize) {
+        selectNetFontSize.addEventListener('change', (e) => {
+            AppState.networkFontSize = e.target.value;
+            updateNetwork();
+        });
+    }
     document.getElementById('btnNetworkReset').addEventListener('click', () => {
         updateNetwork();
     });
@@ -233,6 +242,13 @@ function setupUIEvents() {
     if (selectSpread) {
         selectSpread.addEventListener('change', (e) => {
             AppState.umapSpread = e.target.value;
+            updateUmap();
+        });
+    }
+    const selectUmapFontSize = document.getElementById('selectUmapFontSize');
+    if (selectUmapFontSize) {
+        selectUmapFontSize.addEventListener('change', (e) => {
+            AppState.umapFontSize = e.target.value;
             updateUmap();
         });
     }
@@ -625,6 +641,7 @@ function updateNetwork() {
         {
             maxWords: AppState.networkMaxWords,
             spacingMode: AppState.networkSpacing,
+            fontSize: AppState.networkFontSize,
             onWordClick: (word) => {
                 document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
                 document.getElementById('inputFilterOpinionText').value = word;
@@ -652,6 +669,7 @@ function updateUmap() {
         {
             maxWords: 50,
             spreadMode: AppState.umapSpread,
+            fontSize: AppState.umapFontSize,
             onPointClick: (point) => {
                 if (point.rawDoc) {
                     // 意見プロットクリック時

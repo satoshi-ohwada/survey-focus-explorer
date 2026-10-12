@@ -120,6 +120,7 @@ const UmapVisualizer = {
         this.activeRelatedWords = activeRelatedWords || [];
         this.onPointClick = options.onPointClick;
         this.spreadMode = options.spreadMode || 'wide'; // 'normal' | 'wide' | 'widest'
+        this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
         const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
@@ -686,25 +687,33 @@ const UmapVisualizer = {
 
             // 単語ラベルの描画（白背景角丸ピルで視認性を劇的に向上）
             if (this.viewMode === 'words' || isHover) {
-                ctx.font = (p.isTarget || isHover) ? 'bold 12px sans-serif' : '11px sans-serif';
+                const fontSizes = {
+                    normal: { target: 13, related: 12, other: 11 },
+                    large:   { target: 16, related: 14.5, other: 13.5 },
+                    xlarge:  { target: 19, related: 17, other: 16 }
+                };
+                const fCfg = fontSizes[this.fontSize] || fontSizes.large;
+                const fSize = (p.isTarget || isHover) ? fCfg.target : (p.isRelated ? fCfg.related : fCfg.other);
+                const isBold = p.isTarget || p.isRelated || isHover;
+
+                ctx.font = `${isBold ? 'bold ' : ''}${fSize}px sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
 
                 const labelText = p.text;
                 const metrics = ctx.measureText(labelText);
                 const textWidth = metrics.width;
-                const textHeight = 14;
-                const pad = 4;
+                const pad = Math.max(4, Math.round(fSize * 0.35));
                 const boxW = textWidth + pad * 2;
-                const boxH = textHeight + 2;
+                const boxH = Math.round(fSize * 1.35) + 4;
                 const boxX = p.screenX - boxW / 2;
-                const boxY = p.screenY + (p.radius || 6) + 3;
+                const boxY = p.screenY + (p.radius || 6) + 4;
 
                 // 背景ピル（半透明の白背景で被りを防止）
                 ctx.save();
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-                ctx.strokeStyle = (p.isTarget || isHover) ? '#f43f5e' : '#e2e8f0';
-                ctx.lineWidth = (p.isTarget || isHover) ? 1.5 : 0.8;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+                ctx.strokeStyle = (p.isTarget || isHover) ? '#f43f5e' : (p.isRelated ? '#38bdf8' : '#cbd5e1');
+                ctx.lineWidth = (p.isTarget || isHover) ? 1.8 : 1.0;
                 ctx.beginPath();
                 ctx.roundRect
                     ? ctx.roundRect(boxX, boxY, boxW, boxH, 4)
@@ -714,8 +723,8 @@ const UmapVisualizer = {
                 ctx.restore();
 
                 // テキスト本体
-                ctx.fillStyle = p.isTarget ? '#9f1239' : (isHover ? '#0f172a' : '#1e293b');
-                ctx.fillText(labelText, p.screenX, boxY + 2);
+                ctx.fillStyle = p.isTarget ? '#9f1239' : (p.isRelated ? '#0369a1' : (isHover ? '#0f172a' : '#1e293b'));
+                ctx.fillText(labelText, p.screenX, boxY + 2.5);
             }
         });
 

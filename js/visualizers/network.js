@@ -136,6 +136,7 @@ const NetworkVisualizer = {
         this.activeRelatedWords = activeRelatedWords || [];
         this.onWordClick = options.onWordClick;
         this.spacingMode = options.spacingMode || 'wide'; // 'normal' | 'wide' | 'widest'
+        this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
         const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
@@ -425,17 +426,23 @@ const NetworkVisualizer = {
                 ctx.stroke();
             }
 
-            // テキストラベル
-            ctx.font = isTarget
-                ? 'bold 13px sans-serif'
-                : (isRelated ? 'bold 11px sans-serif' : '10px sans-serif');
+            // テキストラベル（大きく読みやすいフォント設定）
+            const fontSizes = {
+                normal: { target: 15, related: 13, other: 12 },
+                large:   { target: 17, related: 15, other: 14 },
+                xlarge:  { target: 20, related: 18, other: 16 }
+            };
+            const fCfg = fontSizes[this.fontSize] || fontSizes.large;
+            const fSize = isTarget ? fCfg.target : (isRelated ? fCfg.related : fCfg.other);
+
+            ctx.font = `bold ${fSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
 
-            const textY = node.y + node.radius + 3;
-            // ラベルの背景白ボケ
+            const textY = node.y + node.radius + 4;
+            // 白フチの太さも文字サイズに合わせて太く（文字が埋もれないようクリアに）
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 3;
+            ctx.lineWidth = Math.max(4, Math.round(fSize * 0.32));
             ctx.strokeText(node.id, node.x, textY);
             ctx.fillStyle = isTarget ? '#9f1239' : (isRelated ? '#0369a1' : '#1e293b');
             ctx.fillText(node.id, node.x, textY);
