@@ -1052,27 +1052,31 @@ async function exportChart(type, action = 'download') {
             return;
         }
 
+        // 資料・スライドで扱いやすい 4:3 比率 (1200x900) で最大化出力
+        const targetW = 1200;
+        const targetH = 900;
+
         if (action === 'download') {
             Plotly.downloadImage('attrChartContainer', {
                 format: 'png',
-                width: 1100,
-                height: 620,
+                width: targetW,
+                height: targetH,
                 filename: baseTitle
             });
-            showToast(`💾「${baseTitle}.png」を保存しました`);
+            showToast(`💾「${baseTitle}.png」(4:3・1200x900) を保存しました`);
         } else {
             // クリップボードへコピー
             try {
                 const dataUrl = await Plotly.toImage('attrChartContainer', {
                     format: 'png',
-                    width: 1100,
-                    height: 620
+                    width: targetW,
+                    height: targetH
                 });
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
                 if (navigator.clipboard && window.ClipboardItem) {
                     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-                    showToast('📋 属性グラフをクリップボードにコピーしました！\nWordやPowerPointに [Ctrl+V] で直接貼り付けできます。');
+                    showToast('📋 属性グラフ(4:3・1200x900)をクリップボードにコピーしました！\nWordやPowerPointに [Ctrl+V] で直接貼り付けできます。');
                 } else {
                     showToast('⚠️ お使いのブラウザは画像の直接コピーに非対応です。画像保存をご利用ください。');
                 }
@@ -1085,50 +1089,71 @@ async function exportChart(type, action = 'download') {
     }
 
     // 2. Canvas 系の図（ワードクラウド, 共起ネットワーク, UMAP）
-    let srcCanvas = null;
-    if (type === 'cloud') srcCanvas = document.getElementById('cloudCanvas');
-    else if (type === 'network') srcCanvas = document.getElementById('networkCanvas');
-    else if (type === 'umap') srcCanvas = document.getElementById('umapCanvas');
+    // 資料向け標準サイズ: 4:3 比率 (1200x900) で、領域いっぱいに自動拡大調整
+    const targetW = 1200;
+    const targetH = 900;
+    let exportCanvas = null;
 
-    if (!srcCanvas || srcCanvas.width === 0 || srcCanvas.height === 0) {
-        showToast('⚠️ 保存可能な図が表示されていません');
-        return;
+    if (type === 'network' && typeof NetworkVisualizer.getExportCanvas === 'function') {
+        exportCanvas = NetworkVisualizer.getExportCanvas(targetW, targetH);
+    } else if (type === 'umap' && typeof UmapVisualizer.getExportCanvas === 'function') {
+        exportCanvas = UmapVisualizer.getExportCanvas(targetW, targetH);
+    } else if (type === 'cloud' && typeof WordCloudVisualizer.getExportCanvas === 'function') {
+        exportCanvas = await WordCloudVisualizer.getExportCanvas(targetW, targetH);
     }
 
-    // WordやPowerPointに貼り付けた際に文字や線が明瞭に見えるよう、
-    // 透過を防ぎ、白背景（#ffffff）のオフスクリーンキャンバスに合成
-    const whiteCanvas = document.createElement('canvas');
-    whiteCanvas.width = srcCanvas.width;
-    whiteCanvas.height = srcCanvas.height;
-    const ctx = whiteCanvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, whiteCanvas.width, whiteCanvas.height);
-    ctx.drawImage(srcCanvas, 0, 0);
+    // フォールバック: getExportCanvas で取得できなかった場合
+    if (!exportCanvas) {
+        let srcCanvas = null;
+        if (type === 'cloud') srcCanvas = document.getElementById('cloudCanvas');
+        else if (type === 'network') srcCanvas = document.getElementById('networkCanvas');
+        else if (type === 'umap') srcCanvas = document.getElementById('umapCanvas');
+
+        if (!srcCanvas || srcCanvas.width === 0 || srcCanvas.height === 0) {
+            showToast('⚠️ 保存可能な図が表示されていません');
+            return;
+        }
+
+        // 白背景キャンバスに中央フィット合成
+        exportCanvas = document.createElement('canvas');
+        exportCanvas.width = targetW;
+        exportCanvas.height = targetH;
+        const ctx = exportCanvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetW, targetH);
+
+        const scale = Math.min((targetW - 40) / srcCanvas.width, (targetH - 40) / srcCanvas.height);
+        const drawW = srcCanvas.width * scale;
+        const drawH = srcCanvas.height * scale;
+        const drawX = (targetW - drawW) / 2;
+        const drawY = (targetH - drawH) / 2;
+        ctx.drawImage(srcCanvas, drawX, drawY, drawW, drawH);
+    }
 
     if (action === 'download') {
         const filename = `${baseTitle}.png`;
-        const url = whiteCanvas.toDataURL('image/png');
+        const url = exportCanvas.toDataURL('image/png');
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        showToast(`💾「${filename}」を白背景PNGで保存しました`);
+        showToast(`💾「${filename}」(4:3・1200x900・最大調整済) を保存しました`);
     } else {
         // クリップボードへコピー
         if (!navigator.clipboard || !window.ClipboardItem) {
             showToast('⚠️ お使いのブラウザは画像の直接コピーに対応していません。画像保存をご利用ください。');
             return;
         }
-        whiteCanvas.toBlob(async (blob) => {
+        exportCanvas.toBlob(async (blob) => {
             if (!blob) {
                 showToast('⚠️ 画像の生成に失敗しました');
                 return;
             }
             try {
                 await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-                showToast(`📋「${baseTitle}」をクリップボードにコピーしました！\nWordやPowerPointに [Ctrl+V] で直接貼り付けできます。`);
+                showToast(`📋「${baseTitle}」(4:3・1200x900・最大調整済) をクリップボードにコピーしました！\nWordやPowerPointに [Ctrl+V] で直接貼り付けできます。`);
             } catch (err) {
                 console.warn('Clipboard write error:', err);
                 showToast('⚠️ クリップボードへの画像コピーに失敗しました。画像保存をご利用ください。');

@@ -27,9 +27,12 @@ const WordCloudVisualizer = {
 
         const rankingMethod = options.rankingMethod || 'count'; // 'count' or 'tfidf'
         const maxWords = options.maxWords || 60;
+        this.lastRanking = rankingMethod;
+        this.lastMaxWords = maxWords;
+
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
-        const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
-        const height = 480;
+        const width = Math.min(960, parentW > 50 ? parentW : 960);
+        const height = 600;
 
         this.canvas.width = width;
         this.canvas.height = height;
@@ -51,9 +54,9 @@ const WordCloudVisualizer = {
         // wordcloud2.js 形式のリスト: [[text, weight], ...]
         const list = filtered.map(item => {
             const val = rankingMethod === 'tfidf' ? item.tfidf : item.count;
-            // フォントサイズの重み付け（14px 〜 64px 程度）
+            // フォントサイズの重み付け（16px 〜 68px 程度）
             const scale = maxVal > minVal ? (val - minVal) / (maxVal - minVal) : 0.5;
-            const size = 16 + scale * 48;
+            const size = 18 + scale * 50;
             return [item.text, size, item];
         });
 
@@ -80,7 +83,7 @@ const WordCloudVisualizer = {
         if (typeof WordCloud === 'function') {
             WordCloud(this.canvas, {
                 list: list,
-                gridSize: Math.round(16 * (width / 1024)),
+                gridSize: Math.round(14 * (width / 960)),
                 weightFactor: 1,
                 fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif',
                 color: colorCallback,
@@ -99,6 +102,80 @@ const WordCloudVisualizer = {
                 }
             });
         }
+    },
+
+    /**
+     * 資料向け高解像度・オートフィット（最大化＆中央配置）キャンバスを取得
+     * PowerPoint/Wordでの利用を想定した4:3比率 (1200x900)
+     * @param {number} [targetW=1200]
+     * @param {number} [targetH=900]
+     * @returns {Promise<HTMLCanvasElement|null>}
+     */
+    async getExportCanvas(targetW = 1200, targetH = 900) {
+        if (!this.currentWords || this.currentWords.length === 0) return null;
+
+        const filtered = this.currentWords.slice(0, this.lastMaxWords || 60);
+        if (filtered.length === 0) return null;
+
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = targetW;
+        exportCanvas.height = targetH;
+
+        const maxVal = Math.max(...filtered.map(w => this.lastRanking === 'tfidf' ? w.tfidf : w.count));
+        const minVal = Math.min(...filtered.map(w => this.lastRanking === 'tfidf' ? w.tfidf : w.count));
+
+        // 1200x900 用にフォントサイズをダイナミックに拡大（22px 〜 86px）
+        const list = filtered.map(item => {
+            const val = this.lastRanking === 'tfidf' ? item.tfidf : item.count;
+            const scale = maxVal > minVal ? (val - minVal) / (maxVal - minVal) : 0.5;
+            const size = 22 + scale * 64;
+            return [item.text, size, item];
+        });
+
+        const relatedSet = new Set(this.activeRelatedWords.map(w => w.toLowerCase()));
+        const targetLower = (this.targetKeyword || '').toLowerCase();
+        const resolvedLower = (this.resolvedTargetWord || '').toLowerCase();
+
+        const colorCallback = (word) => {
+            const lower = word.toLowerCase();
+            if (lower === targetLower || lower === resolvedLower || (targetLower && (lower.includes(targetLower) || targetLower.includes(lower)))) {
+                return '#e11d48';
+            }
+            if (relatedSet.has(lower)) {
+                return '#0284c7';
+            }
+            const colors = ['#3b82f6', '#6366f1', '#4f46e5', '#2563eb', '#0d9488'];
+            const idx = Math.abs(this.hashCode(word)) % colors.length;
+            return colors[idx];
+        };
+
+        return new Promise((resolve) => {
+            let finished = false;
+            const done = () => {
+                if (finished) return;
+                finished = true;
+                resolve(exportCanvas);
+            };
+
+            exportCanvas.addEventListener('wordcloudstop', done, { once: true });
+            setTimeout(done, 2200); // タイムアウトフォールバック
+
+            WordCloud(exportCanvas, {
+                list: list,
+                gridSize: 14,
+                weightFactor: 1,
+                fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif',
+                color: colorCallback,
+                backgroundColor: '#ffffff',
+                rotateRatio: 0.15,
+                rotationSteps: 2,
+                minRotation: -Math.PI / 6,
+                maxRotation: Math.PI / 6,
+                shuffle: false,
+                drawOutOfBound: false,
+                shrinkToFit: true
+            });
+        });
     },
 
     hashCode(str) {

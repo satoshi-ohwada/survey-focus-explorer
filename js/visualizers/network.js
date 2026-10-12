@@ -195,8 +195,8 @@ const NetworkVisualizer = {
         this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
-        const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
-        const height = 520;
+        const width = Math.min(960, parentW > 50 ? parentW : 960);
+        const height = 600;
         this.canvas.width = width;
         this.canvas.height = height;
 
@@ -432,14 +432,24 @@ const NetworkVisualizer = {
     },
 
     renderFrame() {
-        const ctx = this.ctx;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+        if (!this.ctx || !this.canvas) return;
+        this.renderToContext(this.ctx, this.canvas.width, this.canvas.height, this.scale, this.panX, this.panY, false);
+    },
 
-        ctx.clearRect(0, 0, w, h);
+    /**
+     * 指定のコンテキストに共起ネットワークを描画
+     */
+    renderToContext(ctx, w, h, scale, panX, panY, isExport = false) {
+        if (!isExport) {
+            ctx.clearRect(0, 0, w, h);
+        } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+        }
+
         ctx.save();
-        ctx.translate(this.panX, this.panY);
-        ctx.scale(this.scale, this.scale);
+        ctx.translate(panX, panY);
+        ctx.scale(scale, scale);
 
         // 関連語セット
         const relatedSet = new Set(this.activeRelatedWords.map(w => w.toLowerCase()));
@@ -447,16 +457,16 @@ const NetworkVisualizer = {
         // 1. エッジ描画
         const maxWeight = Math.max(...this.edges.map(e => e.weight), 1);
         this.edges.forEach(e => {
-            const isConnectedToHover = this.hoverNode && (e.source.id === this.hoverNode.id || e.target.id === this.hoverNode.id);
-            const alpha = this.hoverNode
+            const isConnectedToHover = !isExport && this.hoverNode && (e.source.id === this.hoverNode.id || e.target.id === this.hoverNode.id);
+            const alpha = (!isExport && this.hoverNode)
                 ? (isConnectedToHover ? 0.9 : 0.08)
                 : 0.25 + (e.weight / maxWeight) * 0.45;
 
-            const lineWidth = this.hoverNode && isConnectedToHover
+            const lineWidth = (!isExport && this.hoverNode && isConnectedToHover)
                 ? Math.min(4.5, 1.5 + (e.weight / maxWeight) * 3.5)
                 : Math.min(3, 0.8 + (e.weight / maxWeight) * 2.2);
 
-            ctx.strokeStyle = isConnectedToHover ? '#2563eb' : `rgba(148, 163, 184, ${alpha})`;
+            ctx.strokeStyle = (!isExport && isConnectedToHover) ? '#2563eb' : `rgba(148, 163, 184, ${alpha})`;
             ctx.lineWidth = lineWidth;
             ctx.beginPath();
             ctx.moveTo(e.source.x, e.source.y);
@@ -469,7 +479,6 @@ const NetworkVisualizer = {
         this.nodes.forEach(node => {
             const isTarget = this.isTargetNode(node.id);
             const isRelated = relatedSet.has(node.id.toLowerCase());
-            const isHover = this.hoverNode && this.hoverNode.id === node.id;
 
             let fillColor = palette[node.communityIndex % palette.length];
             let strokeColor = '#ffffff';
@@ -517,7 +526,6 @@ const NetworkVisualizer = {
             ctx.textBaseline = 'top';
 
             const textY = node.y + node.radius + 4;
-            // 白フチの太さも文字サイズに合わせて太く（文字が埋もれないようクリアに）
             ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = Math.max(4, Math.round(fSize * 0.32));
             ctx.strokeText(node.id, node.x, textY);
@@ -527,6 +535,63 @@ const NetworkVisualizer = {
 
         ctx.restore();
         this.drawLegend(ctx, w, h);
+    },
+
+    /**
+     * 資料向け高解像度・オートフィット（最大化＆中央配置）キャンバスを取得
+     * PowerPoint/Wordでの利用を想定した4:3比率 (1200x900)
+     * @param {number} [targetW=1200]
+     * @param {number} [targetH=900]
+     * @returns {HTMLCanvasElement|null}
+     */
+    getExportCanvas(targetW = 1200, targetH = 900) {
+        if (!this.nodes || this.nodes.length === 0) return null;
+
+        // ノード群のバウンディングボックスを計算（ラベル・半径込み）
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        this.nodes.forEach(n => {
+            const padX = n.radius + Math.max(24, (n.id || '').length * 8.5);
+            const padY = n.radius + 28;
+            if (n.x - padX < minX) minX = n.x - padX;
+            if (n.x + padX > maxX) maxX = n.x + padX;
+            if (n.y - padY < minY) minY = n.y - padY;
+            if (n.y + padY > maxY) maxY = n.y + padY;
+        });
+
+        const bboxW = Math.max(100, maxX - minX);
+        const bboxH = Math.max(100, maxY - minY);
+
+        // 凡例領域（右上）および周囲マージン
+        const marginX = 50;
+        const marginTop = 90; // 凡例用
+        const marginBottom = 50;
+
+        const availW = targetW - marginX * 2;
+        const availH = targetH - (marginTop + marginBottom);
+
+        // 利用可能領域に対して最大限大きくフィットさせる倍率
+        const autoScale = Math.min(availW / bboxW, availH / bboxH);
+
+        // バウンディングボックスの中心を、利用可能領域の中心に合わせる
+        const bboxCenterX = (minX + maxX) / 2;
+        const bboxCenterY = (minY + maxY) / 2;
+
+        const targetCenterX = targetW / 2;
+        const targetCenterY = marginTop + availH / 2;
+
+        const autoPanX = targetCenterX - bboxCenterX * autoScale;
+        const autoPanY = targetCenterY - bboxCenterY * autoScale;
+
+        // オフスクリーンキャンバスに白背景で描画
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = targetW;
+        exportCanvas.height = targetH;
+        const ctx = exportCanvas.getContext('2d');
+
+        this.renderToContext(ctx, targetW, targetH, autoScale, autoPanX, autoPanY, true);
+        return exportCanvas;
     },
 
     drawLegend(ctx, w, h) {

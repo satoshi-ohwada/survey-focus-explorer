@@ -685,13 +685,17 @@ body {
 
 .canvas-container {
     width: 100%;
-    height: 540px;
+    max-width: 960px;
+    height: 600px;
+    margin: 0 auto;
     position: relative;
     background: #FFFFFF;
     overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: var(--radius-md);
+    box-shadow: inset 0 0 0 1px #E2E8F0;
 }
 
 .canvas-container canvas {

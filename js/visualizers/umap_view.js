@@ -182,8 +182,8 @@ const UmapVisualizer = {
         this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
-        const width = parentW > 50 ? parentW : (this.canvas.clientWidth > 50 ? this.canvas.clientWidth : 800);
-        const height = 540;
+        const width = Math.min(960, parentW > 50 ? parentW : 960);
+        const height = 600;
         this.canvas.width = width;
         this.canvas.height = height;
 
@@ -699,14 +699,24 @@ const UmapVisualizer = {
     },
 
     renderFrame() {
-        const ctx = this.ctx;
-        const w = this.canvas.width;
-        const h = this.canvas.height;
+        if (!this.ctx || !this.canvas) return;
+        this.renderToContext(this.ctx, this.canvas.width, this.canvas.height, this.scale, this.panX, this.panY, false);
+    },
 
-        ctx.clearRect(0, 0, w, h);
+    /**
+     * 指定のコンテキストにUMAP散布図を描画
+     */
+    renderToContext(ctx, w, h, scale, panX, panY, isExport = false) {
+        if (!isExport) {
+            ctx.clearRect(0, 0, w, h);
+        } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+        }
+
         ctx.save();
-        ctx.translate(this.panX, this.panY);
-        ctx.scale(this.scale, this.scale);
+        ctx.translate(panX, panY);
+        ctx.scale(scale, scale);
 
         // 1. グリッド線
         ctx.strokeStyle = '#f1f5f9';
@@ -739,7 +749,7 @@ const UmapVisualizer = {
 
         // 3. 各プロット（点）およびラベルの描画
         this.points.forEach(p => {
-            const isHover = this.hoverPoint && this.hoverPoint.id === p.id;
+            const isHover = !isExport && this.hoverPoint && this.hoverPoint.id === p.id;
             let fillColor = palette[p.cluster % palette.length];
             let strokeColor = '#ffffff';
             let strokeWidth = 1.5;
@@ -764,7 +774,7 @@ const UmapVisualizer = {
             ctx.stroke();
 
             // 単語ラベルの描画（白背景角丸ピルで視認性を劇的に向上）
-            if (this.viewMode === 'words' || isHover) {
+            if (this.viewMode === 'words' || isHover || isExport) {
                 const fontSizes = {
                     normal: { target: 13, related: 12, other: 11 },
                     large:   { target: 16, related: 14.5, other: 13.5 },
@@ -789,7 +799,7 @@ const UmapVisualizer = {
 
                 // 背景ピル（半透明の白背景で被りを防止）
                 ctx.save();
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
                 ctx.strokeStyle = (p.isTarget || isHover) ? '#f43f5e' : (p.isRelated ? '#38bdf8' : '#cbd5e1');
                 ctx.lineWidth = (p.isTarget || isHover) ? 1.8 : 1.0;
                 ctx.beginPath();
@@ -806,8 +816,8 @@ const UmapVisualizer = {
             }
         });
 
-        // 4. ホバー時のツールチップ（最前面）
-        if (this.hoverPoint) {
+        // 4. ホバー時のツールチップ（画面表示時のみ）
+        if (!isExport && this.hoverPoint) {
             const hp = this.hoverPoint;
             const tooltipText = this.viewMode === 'docs'
                 ? `[意見] ${hp.fullText} ${hp.attribute ? `(${hp.attribute})` : ''}`
@@ -833,6 +843,64 @@ const UmapVisualizer = {
         }
 
         ctx.restore();
+    },
+
+    /**
+     * 資料向け高解像度・オートフィット（最大化＆中央配置）キャンバスを取得
+     * PowerPoint/Wordでの利用を想定した4:3比率 (1200x900)
+     * @param {number} [targetW=1200]
+     * @param {number} [targetH=900]
+     * @returns {HTMLCanvasElement|null}
+     */
+    getExportCanvas(targetW = 1200, targetH = 900) {
+        if (!this.points || this.points.length === 0) return null;
+
+        // 点群およびラベルのバウンディングボックスを計算
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        this.points.forEach(p => {
+            const padX = (p.radius || 6) + Math.max(22, (p.text || '').length * 8.5);
+            const padY = (p.radius || 6) + 32;
+            if (p.screenX - padX < minX) minX = p.screenX - padX;
+            if (p.screenX + padX > maxX) maxX = p.screenX + padX;
+            if (p.screenY - padY < minY) minY = p.screenY - padY;
+            if (p.screenY + padY > maxY) maxY = p.screenY + padY;
+        });
+
+        // クラスタハローの範囲も考慮
+        this.clusterHulls.forEach(h => {
+            if (h.cx - h.radius < minX) minX = h.cx - h.radius;
+            if (h.cx + h.radius > maxX) maxX = h.cx + h.radius;
+            if (h.cy - h.radius < minY) minY = h.cy - h.radius;
+            if (h.cy + h.radius > maxY) maxY = h.cy + h.radius;
+        });
+
+        const bboxW = Math.max(100, maxX - minX);
+        const bboxH = Math.max(100, maxY - minY);
+
+        // 周囲マージン（左右50px、上下60px）
+        const marginX = 50;
+        const marginY = 60;
+        const availW = targetW - marginX * 2;
+        const availH = targetH - marginY * 2;
+
+        const autoScale = Math.min(availW / bboxW, availH / bboxH);
+
+        const bboxCenterX = (minX + maxX) / 2;
+        const bboxCenterY = (minY + maxY) / 2;
+
+        const autoPanX = targetW / 2 - bboxCenterX * autoScale;
+        const autoPanY = targetH / 2 - bboxCenterY * autoScale;
+
+        // 1200x900 のオフスクリーンキャンバスに白背景で描画
+        const exportCanvas = document.createElement('canvas');
+        exportCanvas.width = targetW;
+        exportCanvas.height = targetH;
+        const ctx = exportCanvas.getContext('2d');
+
+        this.renderToContext(ctx, targetW, targetH, autoScale, autoPanX, autoPanY, true);
+        return exportCanvas;
     }
 };
 
