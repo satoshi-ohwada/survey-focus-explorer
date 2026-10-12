@@ -98,19 +98,52 @@ const NetworkVisualizer = {
         });
 
         c.addEventListener('wheel', (e) => {
-            e.preventDefault();
-            const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
-            const newScale = Math.max(0.4, Math.min(3.0, this.scale * zoomFactor));
-
-            const rect = c.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-
-            this.panX = mouseX - (mouseX - this.panX) * (newScale / this.scale);
-            this.panY = mouseY - (mouseY - this.panY) * (newScale / this.scale);
-            this.scale = newScale;
-            this.renderFrame();
+            // CtrlキーまたはCmdキーが押されている場合のみ図のズームを行う（スクロールトラップ防止）
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                const zoomFactor = e.deltaY < 0 ? 1.15 : 0.87;
+                this.zoom(zoomFactor, e.clientX, e.clientY);
+            }
+            // 通常のスクロール時はブラウザの標準ページスクロールを妨げない
         }, { passive: false });
+    },
+
+    /**
+     * 指定の中心点と倍率でズーム
+     * @param {number} factor 
+     * @param {number} [clientX] 
+     * @param {number} [clientY] 
+     */
+    zoom(factor, clientX, clientY) {
+        if (!this.canvas) return;
+        const rect = this.canvas.getBoundingClientRect();
+        const mouseX = (clientX !== undefined) ? (clientX - rect.left) : (this.canvas.width / 2);
+        const mouseY = (clientY !== undefined) ? (clientY - rect.top) : (this.canvas.height / 2);
+
+        const newScale = Math.max(0.3, Math.min(3.5, this.scale * factor));
+        if (Math.abs(newScale - this.scale) < 0.001) return;
+
+        this.panX = mouseX - (mouseX - this.panX) * (newScale / this.scale);
+        this.panY = mouseY - (mouseY - this.panY) * (newScale / this.scale);
+        this.scale = newScale;
+        this.renderFrame();
+    },
+
+    zoomIn() {
+        this.zoom(1.2);
+    },
+
+    zoomOut() {
+        this.zoom(0.8333);
+    },
+
+    resetZoom() {
+        const width = this.canvas ? this.canvas.width : 800;
+        const height = this.canvas ? this.canvas.height : 520;
+        this.scale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        this.panX = (width * (1 - this.scale)) / 2;
+        this.panY = (height * (1 - this.scale)) / 2;
+        this.renderFrame();
     },
 
     findNodeAt(x, y) {

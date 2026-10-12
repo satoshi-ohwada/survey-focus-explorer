@@ -242,9 +242,22 @@ function setupUIEvents() {
             updateNetwork();
         });
     }
-    document.getElementById('btnNetworkReset').addEventListener('click', () => {
-        updateNetwork();
-    });
+
+    const btnNetZoomIn = document.getElementById('btnNetworkZoomIn');
+    if (btnNetZoomIn) {
+        btnNetZoomIn.addEventListener('click', () => NetworkVisualizer.zoomIn());
+    }
+    const btnNetZoomOut = document.getElementById('btnNetworkZoomOut');
+    if (btnNetZoomOut) {
+        btnNetZoomOut.addEventListener('click', () => NetworkVisualizer.zoomOut());
+    }
+    const btnNetReset = document.getElementById('btnNetworkReset');
+    if (btnNetReset) {
+        btnNetReset.addEventListener('click', () => {
+            NetworkVisualizer.resetZoom();
+            updateNetwork();
+        });
+    }
 
     // UMAP設定
     document.getElementById('selectUmapMode').addEventListener('change', (e) => {
@@ -265,9 +278,21 @@ function setupUIEvents() {
             updateUmap();
         });
     }
-    document.getElementById('btnUmapReset').addEventListener('click', () => {
-        updateUmap();
-    });
+    const btnUmapZoomIn = document.getElementById('btnUmapZoomIn');
+    if (btnUmapZoomIn) {
+        btnUmapZoomIn.addEventListener('click', () => UmapVisualizer.zoomIn());
+    }
+    const btnUmapZoomOut = document.getElementById('btnUmapZoomOut');
+    if (btnUmapZoomOut) {
+        btnUmapZoomOut.addEventListener('click', () => UmapVisualizer.zoomOut());
+    }
+    const btnUmapReset = document.getElementById('btnUmapReset');
+    if (btnUmapReset) {
+        btnUmapReset.addEventListener('click', () => {
+            UmapVisualizer.resetZoom();
+            updateUmap();
+        });
+    }
 
     // 解析フィルター設定（品詞・複合語・除外語）の変更イベント
     const updateFiltersAndReanalyze = () => {

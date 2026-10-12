@@ -374,7 +374,12 @@
                                 <option value="xlarge">特大</option>
                             </select>
                         </label>
-                        <button type="button" id="btnNetworkReset" class="btn btn-sm" style="margin-left: 8px;">↺ 配置リセット</button>
+                        <span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;">
+                            <button type="button" id="btnNetworkZoomIn" class="btn btn-sm" title="図を拡大 (Ctrl+ホイールでも可能)">➕ 拡大</button>
+                            <button type="button" id="btnNetworkZoomOut" class="btn btn-sm" title="図を縮小 (Ctrl+ホイールでも可能)">➖ 縮小</button>
+                            <button type="button" id="btnNetworkReset" class="btn btn-sm" title="配置と倍率を初期化">↺ リセット</button>
+                        </span>
+                        <small style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">※拡大縮小: Ctrl + スクロール または ボタン</small>
                     </div>
 
                     <div id="toolbarUmapCtrl" style="display: none;">
@@ -398,7 +403,12 @@
                                 <option value="xlarge">特大</option>
                             </select>
                         </label>
-                        <button type="button" id="btnUmapReset" class="btn btn-sm">↺ 再計算</button>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;">
+                            <button type="button" id="btnUmapZoomIn" class="btn btn-sm" title="図を拡大 (Ctrl+ホイールでも可能)">➕ 拡大</button>
+                            <button type="button" id="btnUmapZoomOut" class="btn btn-sm" title="図を縮小 (Ctrl+ホイールでも可能)">➖ 縮小</button>
+                            <button type="button" id="btnUmapReset" class="btn btn-sm" title="再計算・配置リセット">↺ 再計算</button>
+                        </span>
+                        <small style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">※拡大縮小: Ctrl + スクロール または ボタン</small>
                     </div>
 
                     <div id="toolbarOpinionsCtrl" style="display: none;">
