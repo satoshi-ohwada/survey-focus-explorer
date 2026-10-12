@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アンケート・キーワード連想＆意見深掘りツール (Survey Focus Explorer)</title>
+    <link rel="icon" type="image/png" href="icon.png">
+    <link rel="stylesheet" href="css/style.css">
+    <!-- ライブラリ群 -->
+    <script src="lib/xlsx.full.min.js"></script>
+    <script src="lib/papaparse.min.js"></script>
+    <script src="lib/kuromoji/kuromoji.js"></script>
+    <script src="lib/wordcloud2.min.js"></script>
+    <script src="lib/plotly.min.js"></script>
+</head>
+<body>
+
+    <!-- ヘッダー -->
+    <header class="header">
+        <div class="container header-content">
+            <div class="logo-area">
+                <div class="logo-icon">🔍</div>
+                <div>
+                    <h1 class="logo-title">アンケート・キーワード連想＆意見深掘りツール</h1>
+                    <div class="logo-subtitle">Survey Focus Explorer ・ 指定キーワードとその関連語から意見をピンポイント深掘り</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button id="btnDemoData" class="btn" title="すぐに試せるサンプルデータをロード">
+                    💡 デモデータで試す (物価高)
+                </button>
+                <button id="btnPrintReport" class="btn btn-primary" title="全体を印刷またはPDF保存">
+                    🖨️ レポート出力 (印刷/PDF)
+                </button>
+                <button id="btnOpenDict" class="btn" title="除外語や同義語を設定">
+                    ⚙️ 辞書・ルール
+                </button>
+                <button id="btnHelp" class="btn" title="使い方を表示">
+                    ❓ 使い方
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="container" style="margin-top: 24px;">
+        <!-- 1. データ入力 ＆ 列選択セクション -->
+        <section class="card config-section">
+            <div class="data-input-tabs">
+                <button type="button" id="tabInputFile" class="data-input-tab active">
+                    📁 ファイルから読み込み (Excel / CSV / TSV / TXT)
+                </button>
+                <button type="button" id="tabInputPaste" class="data-input-tab">
+                    📋 Excel等からコピー＆ペースト
+                </button>
+            </div>
+
+            <!-- ファイルドロップゾーン -->
+            <div id="dropZoneWrapper">
+                <div id="dropZone" class="drop-zone" onclick="document.getElementById('csvFileInput').click();">
+                    <div class="drop-icon">📁</div>
+                    <div class="drop-text">ここにアンケートファイル (Excel .xlsx / CSV / TSV / TXT) をドラッグ＆ドロップ</div>
+                    <div class="drop-subtext">またはクリックして選択（Shift_JIS / UTF-8 自動判別・1行1回答テキストにも対応）</div>
+                    <input type="file" id="csvFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" style="display: none;">
+                </div>
+            </div>
+
+            <!-- コピペ入力エリア -->
+            <div id="pasteZoneWrapper" style="display: none;">
+                <div class="paste-zone-box">
+                    <div class="paste-zone-header">
+                        <span class="paste-zone-title">📋 Excelのセル範囲をコピーして貼り付けてください</span>
+                        <label style="font-size: 12px; cursor: pointer;">
+                            <input type="checkbox" id="checkPasteHasHeader" checked> 1行目を列名（見出し）として扱う
+                        </label>
+                    </div>
+                    <textarea id="pasteTextarea" class="paste-textarea" rows="5" placeholder="Excelで分析したい自由記述や属性列をコピーし、ここに貼り付けてください"></textarea>
+                    <div class="paste-zone-footer">
+                        <span id="pasteStatsInfo" class="paste-stats-info">データが入力されていません</span>
+                        <div>
+                            <button type="button" id="btnClearPaste" class="btn btn-sm">クリア</button>
+                            <button type="button" id="btnLoadPaste" class="btn btn-sm btn-primary">📥 データを取り込む</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ファイル情報バー -->
+            <div id="fileStatusBar" class="file-status-bar" style="display: none;">
+                <div id="fileNameDisplay" class="file-name-text"></div>
+                <div style="font-size: 13px; color: #15803d;" id="fileRowsDisplay"></div>
+            </div>
+
+            <!-- 列選択パネル -->
+            <div id="configGrid" class="config-panel" style="display: none;">
+                <div class="config-panel-header">
+                    <span style="font-size: 16px;">⚙️</span>
+                    <span class="config-panel-title">分析対象列の設定</span>
+                </div>
+                <div class="config-fields-grid">
+                    <div class="form-group">
+                        <label class="form-label" for="selectTextCol">
+                            <span>自由記述の列（分析対象）</span>
+                            <span class="badge-rec">自動判定</span>
+                        </label>
+                        <select id="selectTextCol" class="form-select"></select>
+                        <span class="form-hint">アンケートの自由記述テキストが入っている列</span>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="selectAttrCol">
+                            <span>属性の列（クロス集計用）</span>
+                            <span class="badge-opt">任意</span>
+                        </label>
+                        <select id="selectAttrCol" class="form-select"></select>
+                        <span class="form-hint">年代・性別・地域・満足度などの分類列</span>
+                    </div>
+                </div>
+
+                <!-- データプレビュー -->
+                <div class="preview-container">
+                    <div class="preview-header">
+                        <span style="font-weight: 600;">👀 取り込みデータ プレビュー（最初の5行）</span>
+                        <span id="previewCountText" style="color: var(--text-muted);"></span>
+                    </div>
+                    <div class="preview-table-wrapper">
+                        <table id="previewTable" class="preview-table"></table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 2. キーワード ＆ 関連語探索セクション（中核） -->
+        <section id="focusSection" class="focus-section" style="display: none;">
+            <div class="focus-header">
+                <div class="focus-title-group">
+                    <span class="focus-badge">STEP 1</span>
+                    <h2 class="focus-title">注目キーワードの指定 ＆ 関連語の特定</h2>
+                </div>
+                <span style="font-size: 12px; color: var(--text-muted);">
+                    指定キーワードとその文脈に近い関連語を含む意見を自動抽出します
+                </span>
+            </div>
+
+            <div class="focus-input-bar">
+                <div class="focus-input-wrapper">
+                    <span class="focus-input-icon">🔍</span>
+                    <input type="text" id="inputTargetKeyword" class="focus-input" placeholder="注目したい単語を入力（例: 物価高、値上げ、サポート、配送 など）" value="物価高">
+                </div>
+                <button type="button" id="btnRunFocus" class="btn-focus-run">
+                    🚀 関連語を探索 ＆ 分析
+                </button>
+            </div>
+
+            <!-- 関連語チップス -->
+            <div class="related-words-box">
+                <div class="related-words-header">
+                    <div class="related-words-title">
+                        <span>💡 自動特定された関連語（共起・文脈近傍語）:</span>
+                        <small style="color: var(--text-muted); font-weight: normal;">※クリックして意見抽出の対象に含める/外すを切り替えられます</small>
+                    </div>
+                    <div class="related-words-actions">
+                        <button type="button" id="btnSelectAllRelated" class="btn btn-sm">全選択</button>
+                        <button type="button" id="btnDeselectAllRelated" class="btn btn-sm">全解除</button>
+                    </div>
+                </div>
+                <div id="relatedChipsContainer" class="related-chips-container">
+                    <span style="color: var(--text-muted); font-size: 13px;">キーワードを入力して「🚀 関連語を探索 ＆ 分析」をクリックしてください</span>
+                </div>
+            </div>
+
+            <!-- 抽出サマリー -->
+            <div id="matchSummaryBar" class="match-summary-bar" style="display: none;">
+                <div class="match-summary-left">
+                    <span class="match-count-badge" id="matchedCountDisplay">0 件</span>
+                    <div class="match-count-desc" id="matchedRateDisplay">全 0 件中 0 件の意見を抽出 (0.0%)</div>
+                </div>
+                <div class="match-progress-wrapper" title="全回答に占める関連意見の割合">
+                    <div id="matchedProgressBar" class="match-progress-bar" style="width: 0%;"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 3. 可視化ダッシュボード ＆ 生の声セクション -->
+        <section id="dashboardSection" class="dashboard-section" style="display: none;">
+            <!-- ナビゲーションタブ -->
+            <div class="dashboard-nav-tabs">
+                <button type="button" class="nav-tab-btn active" data-tab="cloud">
+                    ☁️ ワードクラウド
+                </button>
+                <button type="button" class="nav-tab-btn" data-tab="network">
+                    🕸️ 共起ネットワーク
+                </button>
+                <button type="button" class="nav-tab-btn" data-tab="umap">
+                    🌌 UMAP 散布図 (非線形次元削減)
+                </button>
+                <button type="button" class="nav-tab-btn" data-tab="attr">
+                    📊 属性別集計 (クロス集計)
+                </button>
+                <button type="button" class="nav-tab-btn" data-tab="opinions">
+                    💬 抽出された生の声一覧 (<span id="tabOpinionCount">0</span>)
+                </button>
+            </div>
+
+            <!-- ツールバー -->
+            <div class="dashboard-toolbar">
+                <div class="toolbar-group">
+                    <!-- タブ固有のコントロール -->
+                    <div id="toolbarCloudCtrl">
+                        <label style="margin-right: 12px;">重要度基準:
+                            <select id="selectCloudRanking" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="count">出現頻度順</option>
+                                <option value="tfidf">特徴度 (TF-IDF) 順</option>
+                            </select>
+                        </label>
+                        <label>表示単語数:
+                            <select id="selectCloudMaxWords" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="40">40語</option>
+                                <option value="60" selected>60語</option>
+                                <option value="80">80語</option>
+                            </select>
+                        </label>
+                    </div>
+
+                    <div id="toolbarNetworkCtrl" style="display: none;">
+                        <label>ネットワーク表示語数:
+                            <select id="selectNetworkMaxWords" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="30">30語</option>
+                                <option value="40" selected>40語</option>
+                                <option value="50">50語</option>
+                            </select>
+                        </label>
+                        <button type="button" id="btnNetworkReset" class="btn btn-sm">↺ 配置リセット</button>
+                    </div>
+
+                    <div id="toolbarUmapCtrl" style="display: none;">
+                        <label style="margin-right: 12px;">対象:
+                            <select id="selectUmapMode" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="words" selected>単語マップ (意味の近さ)</option>
+                                <option value="docs">意見マップ (意見の分類)</option>
+                            </select>
+                        </label>
+                        <button type="button" id="btnUmapReset" class="btn btn-sm">↺ リセット</button>
+                    </div>
+
+                    <div id="toolbarOpinionsCtrl" style="display: none;">
+                        <input type="text" id="inputFilterOpinionText" class="form-input btn-sm" placeholder="意見内テキストで絞り込み..." style="width: 200px;">
+                        <button type="button" id="btnExportMatchedCsv" class="btn btn-sm">📥 抽出意見をCSV保存</button>
+                    </div>
+                </div>
+
+                <div class="toolbar-group">
+                    <button type="button" id="btnSaveImage" class="btn btn-sm" title="現在の図をPNG画像で保存">
+                        📷 画像を保存
+                    </button>
+                </div>
+            </div>
+
+            <!-- メインコンテンツ表示エリア -->
+            <div id="tabContentCloud" class="tab-content">
+                <div class="canvas-container">
+                    <canvas id="cloudCanvas"></canvas>
+                </div>
+            </div>
+
+            <div id="tabContentNetwork" class="tab-content" style="display: none;">
+                <div class="canvas-container">
+                    <canvas id="networkCanvas"></canvas>
+                </div>
+            </div>
+
+            <div id="tabContentUmap" class="tab-content" style="display: none;">
+                <div class="canvas-container">
+                    <canvas id="umapCanvas"></canvas>
+                </div>
+            </div>
+
+            <div id="tabContentAttr" class="tab-content" style="display: none;">
+                <div id="attrChartContainer" style="width: 100%; height: 500px;"></div>
+            </div>
+
+            <div id="tabContentOpinions" class="tab-content" style="display: none;">
+                <div id="opinionsListContainer" class="opinions-container"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 辞書・ルール設定モーダル -->
+    <div id="dictModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 class="modal-title">⚙️ 辞書・ルール設定</h3>
+                <button type="button" id="btnCloseDictModal" class="btn btn-sm">✕</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
+                    分析から除外したい不要語（ストップワード）や、まとめたい同義語・表記ゆれを設定できます。
+                </p>
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label class="form-label">除外ワード（1行に1単語、またはカンマ区切り）</label>
+                    <textarea id="textCustomStopwords" class="form-input" rows="4" placeholder="例: 思う, 感じる, こと, もの"></textarea>
+                </div>
+                <div class="form-group" style="margin-bottom: 14px;">
+                    <label class="form-label">同義語・表記ゆれ（置換元=代表語）</label>
+                    <textarea id="textCustomSynonyms" class="form-input" rows="4" placeholder="例: スマホ=スマートフォン&#10;値上がり=値上げ"></textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">複合語（1行に1単語）</label>
+                    <textarea id="textCustomCompounds" class="form-input" rows="3" placeholder="例: 物価高&#10;生活必需品"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCancelDict" class="btn btn-sm">キャンセル</button>
+                <button type="button" id="btnSaveDict" class="btn btn-sm btn-primary">保存して再分析</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 使い方モーダル -->
+    <div id="helpModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 class="modal-title">❓ 使い方ガイド</h3>
+                <button type="button" id="btnCloseHelpModal" class="btn btn-sm">✕</button>
+            </div>
+            <div class="modal-body" style="font-size: 13px; line-height: 1.7;">
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">1. アンケートを投入</h4>
+                <p style="margin-bottom: 12px;">Excel (.xlsx) や CSV ファイルを画面にドラッグ＆ドロップするか、Excelからセルをコピー＆ペーストしてください。「自由記述列」と「属性列」を確認します。</p>
+
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">2. 注目キーワードを入力</h4>
+                <p style="margin-bottom: 12px;">調べたいテーマ（例:「物価高」「値上げ」「対応」「アプリ」など）を入力して「🚀 関連語を探索 ＆ 分析」を押します。</p>
+
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">3. 関連語の調整</h4>
+                <p style="margin-bottom: 12px;">文脈上近くで使われている関連語がスコア順に自動表示されます。チップをクリックして対象に含める/含めないを自由に切り替えられます。</p>
+
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">4. 多角的な可視化</h4>
+                <p>抽出された意見群を対象に、ワードクラウド・共起ネットワーク・UMAP散布図・属性別クロス集計・生の声一覧を閲覧できます。</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" id="btnCloseHelpOk" class="btn btn-sm btn-primary">閉じる</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- スクリプト群 -->
+    <script src="js/csv_parser.js"></script>
+    <script src="js/stopwords_default.js"></script>
+    <script src="js/text_preprocessor.js"></script>
+    <script src="js/association_engine.js"></script>
+    <script src="js/visualizers/wordcloud.js"></script>
+    <script src="js/visualizers/network.js"></script>
+    <script src="js/visualizers/umap_view.js"></script>
+    <script src="js/visualizers/attr_charts.js"></script>
+    <script src="js/demo_data.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
