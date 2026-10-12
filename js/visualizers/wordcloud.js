@@ -57,14 +57,16 @@ const WordCloudVisualizer = {
             return [item.text, size, item];
         });
 
+        this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
         const relatedSet = new Set(this.activeRelatedWords.map(w => w.toLowerCase()));
         const targetLower = (this.targetKeyword || '').toLowerCase();
+        const resolvedLower = (this.resolvedTargetWord || '').toLowerCase();
 
         // 単語の色分けルール
         const colorCallback = (word) => {
             const lower = word.toLowerCase();
-            if (lower === targetLower) {
-                return '#e11d48'; // 注目キーワード: 鮮やかなローズレッド
+            if (lower === targetLower || lower === resolvedLower || (targetLower && (lower.includes(targetLower) || targetLower.includes(lower)))) {
+                return '#e11d48'; // 注目キーワード / 代表複合語: 鮮やかなローズレッド
             }
             if (relatedSet.has(lower)) {
                 return '#0284c7'; // 関連語: スカイブルー

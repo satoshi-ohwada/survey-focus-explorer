@@ -112,11 +112,37 @@ const UmapVisualizer = {
      * @param {string} targetKeyword
      * @param {Array<string>} activeRelatedWords
      * @param {object} options
+    /**
+     * 単語がターゲットキーワード（または代表複合語・派生語）かどうか判定
+     * @param {string} word 
+     * @returns {boolean}
+     */
+    isTargetWord(word) {
+        if (!word) return false;
+        const wLower = word.toLowerCase();
+        const tLower = (this.targetKeyword || '').toLowerCase();
+        const rLower = (this.resolvedTargetWord || '').toLowerCase();
+        if (wLower === tLower || wLower === rLower) return true;
+        if (tLower && (wLower.includes(tLower) || tLower.includes(wLower))) return true;
+        return false;
+    },
+
+    /**
+     * UMAP分析を実行して描画する
+     * @param {string} mode - 'words' または 'docs'
+     * @param {Array} wordList - 単語リスト
+     * @param {object} coocCounts - 共起行列
+     * @param {object} docFreq - 文書頻度
+     * @param {Array} matchedDocs - 抽出された意見群
+     * @param {string} targetKeyword
+     * @param {Array<string>} activeRelatedWords
+     * @param {object} options
      */
     render(mode, wordList, coocCounts, docFreq, matchedDocs, targetKeyword, activeRelatedWords, options = {}) {
         if (!this.canvas) return;
         this.viewMode = mode || 'words';
         this.targetKeyword = targetKeyword;
+        this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
         this.activeRelatedWords = activeRelatedWords || [];
         this.onPointClick = options.onPointClick;
         this.spreadMode = options.spreadMode || 'wide'; // 'normal' | 'wide' | 'widest'
@@ -147,7 +173,25 @@ const UmapVisualizer = {
      */
     computeWordUMAP(wordList, coocCounts, docFreq, matchedDocs, width, height, options) {
         const maxWords = options.maxWords || 50;
-        const topWords = wordList.slice(0, maxWords).map(w => w.text);
+        let topWords = wordList.slice(0, maxWords).map(w => w.text);
+
+        // 代表ターゲット語（中東情勢など）およびキーワードがもしwordListにあれば、topWordsに確実に含める
+        const targetToEnsure = [this.resolvedTargetWord, this.targetKeyword].filter(w => w && wordList.some(item => item.text === w));
+        for (const tw of targetToEnsure) {
+            if (!topWords.includes(tw)) {
+                if (topWords.length >= maxWords) topWords.pop();
+                topWords.unshift(tw);
+            }
+        }
+        // もし完全一致がなく、ターゲットを含む単語があればそれを確実に含める
+        if (!topWords.some(w => this.isTargetWord(w))) {
+            const found = wordList.find(item => this.isTargetWord(item.text));
+            if (found && !topWords.includes(found.text)) {
+                if (topWords.length >= maxWords) topWords.pop();
+                topWords.unshift(found.text);
+            }
+        }
+
         const V = topWords.length;
 
         if (V === 0) {
@@ -240,6 +284,7 @@ const UmapVisualizer = {
         this.points = topWords.map((word, i) => {
             const cnt = countsMap[word] || 1;
             const rScale = maxC > minC ? (cnt - minC) / (maxC - minC) : 0.5;
+            const isTarget = this.isTargetWord(word);
             return {
                 id: word,
                 text: word,
@@ -250,7 +295,7 @@ const UmapVisualizer = {
                 count: cnt,
                 radius: 8 + rScale * 14,
                 cluster: clusters[i],
-                isTarget: word.toLowerCase() === targetLower,
+                isTarget: isTarget,
                 isRelated: relatedSet.has(word.toLowerCase())
             };
         });

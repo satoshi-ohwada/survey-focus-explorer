@@ -127,12 +127,35 @@ const NetworkVisualizer = {
 
     /**
      * 共起ネットワークを構築・描画開始
+    /**
+     * ノードがターゲットキーワード（またはその代表複合語・派生語）かどうか判定
+     * @param {string} id 
+     * @returns {boolean}
+     */
+    isTargetNode(id) {
+        if (!id) return false;
+        const idLower = id.toLowerCase();
+        const tLower = (this.targetKeyword || '').toLowerCase();
+        const rLower = (this.resolvedTargetWord || '').toLowerCase();
+        if (idLower === tLower || idLower === rLower) return true;
+        if (tLower && (idLower.includes(tLower) || tLower.includes(idLower))) return true;
+        return false;
+    },
+
+    /**
+     * 共起ネットワークを描画する
+     * @param {Array<{text: string, count: number}>} wordList 
+     * @param {object} coocCounts - { "word1|||word2": count }
+     * @param {string} targetKeyword 
+     * @param {Array<string>} activeRelatedWords 
+     * @param {object} options 
      */
     render(wordList, coocCounts, targetKeyword, activeRelatedWords, options = {}) {
         if (!this.canvas) return;
         if (this.animId) cancelAnimationFrame(this.animId);
 
         this.targetKeyword = targetKeyword;
+        this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
         this.activeRelatedWords = activeRelatedWords || [];
         this.onWordClick = options.onWordClick;
         this.spacingMode = options.spacingMode || 'wide'; // 'normal' | 'wide' | 'widest'
@@ -174,8 +197,23 @@ const NetworkVisualizer = {
             connectedNodes.add(e.targetId);
         });
 
-        // ターゲットキーワードは必ずノードに含める
-        if (wordSet.has(targetKeyword)) connectedNodes.add(targetKeyword);
+        // ターゲットキーワードおよび解決された代表複合語は必ずノードに含める
+        let targetAdded = false;
+        if (wordSet.has(this.resolvedTargetWord)) {
+            connectedNodes.add(this.resolvedTargetWord);
+            targetAdded = true;
+        }
+        if (wordSet.has(this.targetKeyword)) {
+            connectedNodes.add(this.targetKeyword);
+            targetAdded = true;
+        }
+        if (!targetAdded) {
+            const match = topWords.find(w => this.isTargetNode(w.text));
+            if (match) {
+                connectedNodes.add(match.text);
+            }
+        }
+
         // 上位関連語も優先
         for (const rw of this.activeRelatedWords) {
             if (wordSet.has(rw)) connectedNodes.add(rw);
@@ -187,19 +225,24 @@ const NetworkVisualizer = {
 
         const maxCount = Math.max(...Array.from(connectedNodes).map(id => countsMap[id] || 1), 1);
         const minCount = Math.min(...Array.from(connectedNodes).map(id => countsMap[id] || 1), 1);
+        const centerX = width / 2;
+        const centerY = height / 2;
 
         this.nodes = Array.from(connectedNodes).map(id => {
             const cnt = countsMap[id] || 1;
             const rScale = maxCount > minCount ? (cnt - minCount) / (maxCount - minCount) : 0.5;
             const radius = 9 + rScale * 16;
+            const isTarget = this.isTargetNode(id);
             return {
                 id: id,
                 count: cnt,
                 radius: radius,
+                isTarget: isTarget,
                 community: id,
                 communityIndex: 0,
-                x: width / 2 + (Math.random() - 0.5) * (width * 0.7),
-                y: height / 2 + (Math.random() - 0.5) * (height * 0.7),
+                // ターゲットノード（中東情勢など）は中央に初期配置、他は周囲に分散
+                x: isTarget ? centerX : centerX + (Math.random() - 0.5) * (width * 0.7),
+                y: isTarget ? centerY : centerY + (Math.random() - 0.5) * (height * 0.7),
                 vx: 0,
                 vy: 0,
                 fx: null,
@@ -317,8 +360,10 @@ const NetworkVisualizer = {
 
             // 3. 中心重力 (Center Gravity) & 速度更新
             this.nodes.forEach(n => {
-                n.vx += (centerX - n.x) * p.gravity;
-                n.vy += (centerY - n.y) * p.gravity;
+                // ターゲットノード（中東情勢など中心語）を中心へ強固に引き寄せて中心に安定化
+                const g = n.isTarget ? p.gravity * 4.0 : p.gravity;
+                n.vx += (centerX - n.x) * g;
+                n.vy += (centerY - n.y) * g;
 
                 // 速度減衰 (Damping)
                 n.vx *= 0.85;
@@ -363,9 +408,8 @@ const NetworkVisualizer = {
         ctx.translate(this.panX, this.panY);
         ctx.scale(this.scale, this.scale);
 
-        // 関連語セット・ターゲット
+        // 関連語セット
         const relatedSet = new Set(this.activeRelatedWords.map(w => w.toLowerCase()));
-        const targetLower = (this.targetKeyword || '').toLowerCase();
 
         // 1. エッジ描画
         const maxWeight = Math.max(...this.edges.map(e => e.weight), 1);
@@ -390,7 +434,7 @@ const NetworkVisualizer = {
         // 2. ノード描画
         const palette = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
         this.nodes.forEach(node => {
-            const isTarget = node.id.toLowerCase() === targetLower;
+            const isTarget = this.isTargetNode(node.id);
             const isRelated = relatedSet.has(node.id.toLowerCase());
             const isHover = this.hoverNode && this.hoverNode.id === node.id;
 

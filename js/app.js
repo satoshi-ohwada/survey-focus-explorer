@@ -15,6 +15,7 @@ const AppState = {
     
     // キーワード ＆ 関連語
     targetKeyword: '物価高',
+    resolvedTargetWord: '物価高', // 複合語（例: 中東情勢）自動判定による中心代表語
     relatedWords: [], // [{ word, score, coocCount, docCount, checked }]
     
     // 抽出結果
@@ -463,6 +464,7 @@ async function runFocusAnalysis() {
             alert(res.warning);
         }
 
+        AppState.resolvedTargetWord = res.resolvedTargetWord || AppState.targetKeyword;
         AppState.relatedWords = res.relatedWords || [];
 
         // 4. 関連語チップの描画
@@ -488,10 +490,28 @@ function renderRelatedChips() {
     const container = document.getElementById('relatedChipsContainer');
     container.innerHTML = '';
 
+    // 複合語の自動判定により代表中心語が設定された場合、案内バッジを先頭に表示
+    if (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword) {
+        const infoBadge = document.createElement('div');
+        infoBadge.className = 'resolved-target-badge';
+        infoBadge.style.cssText = 'background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; font-size: 13px; color: #9f1239; display: flex; align-items: center; gap: 8px;';
+        infoBadge.innerHTML = `
+            <span>🎯</span>
+            <span>代表中心語: <strong>${escapeHtml(AppState.resolvedTargetWord)}</strong>（キーワード「${escapeHtml(AppState.targetKeyword)}」を内包する複合語として自動判別・中心配置）</span>
+        `;
+        container.appendChild(infoBadge);
+    }
+
     if (!AppState.relatedWords.length) {
-        container.innerHTML = `<span style="color: var(--text-muted); font-size: 13px;">共起する関連語が見つかりませんでした。別のキーワードをお試しください。</span>`;
+        const noMsg = document.createElement('div');
+        noMsg.style.cssText = 'color: var(--text-muted); font-size: 13px; padding: 4px 0;';
+        noMsg.textContent = '共起する関連語が見つかりませんでした。別のキーワードをお試しください。';
+        container.appendChild(noMsg);
         return;
     }
+
+    const chipsWrapper = document.createElement('div');
+    chipsWrapper.style.cssText = 'display: flex; flex-wrap: wrap; gap: 8px; align-items: center;';
 
     AppState.relatedWords.forEach((rw, idx) => {
         const chip = document.createElement('div');
@@ -509,8 +529,9 @@ function renderRelatedChips() {
             executeFilteringAndRender();
         });
 
-        container.appendChild(chip);
+        chipsWrapper.appendChild(chip);
     });
+    container.appendChild(chipsWrapper);
 }
 
 /**
@@ -526,15 +547,19 @@ function executeFilteringAndRender() {
         AppState.attrCol,
         AppState.targetKeyword,
         activeRelated,
-        AppState.tokensPerDoc
+        AppState.tokensPerDoc,
+        { resolvedTargetWord: AppState.resolvedTargetWord }
     );
 
     // 2. 抽出サマリーバーの更新
     const res = AppState.filterResult;
     document.getElementById('matchSummaryBar').style.display = 'flex';
     document.getElementById('matchedCountDisplay').textContent = `${res.matchedCount} 件`;
+    const targetDisplayStr = (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword)
+        ? `「${AppState.targetKeyword}（対象語: ${AppState.resolvedTargetWord}）」`
+        : `「${AppState.targetKeyword}」`;
     document.getElementById('matchedRateDisplay').textContent = 
-        `全 ${res.totalDocs} 件中 ${res.matchedCount} 件の意見を抽出 (${res.matchRate.toFixed(1)}%)`;
+        `全 ${res.totalDocs} 件中 ${res.matchedCount} 件の意見を抽出 (${res.matchRate.toFixed(1)}%) - ${targetDisplayStr}`;
     document.getElementById('matchedProgressBar').style.width = `${Math.min(100, res.matchRate)}%`;
 
     document.getElementById('tabOpinionCount').textContent = res.matchedCount;
@@ -543,7 +568,11 @@ function executeFilteringAndRender() {
     AppState.subcorpusStats = AssociationEngine.computeSubcorpusStats(
         res.matchedDocs,
         TextPreprocessor.DEFAULT_STOPWORDS,
-        80
+        80,
+        {
+            targetKeyword: AppState.targetKeyword,
+            resolvedTargetWord: AppState.resolvedTargetWord
+        }
     );
 
     // ダッシュボードを表示
@@ -614,6 +643,7 @@ function updateWordCloud() {
         AppState.targetKeyword,
         activeRelated,
         {
+            resolvedTargetWord: AppState.resolvedTargetWord,
             rankingMethod: AppState.cloudRanking,
             maxWords: AppState.cloudMaxWords,
             onWordClick: (word) => {
@@ -639,6 +669,7 @@ function updateNetwork() {
         AppState.targetKeyword,
         activeRelated,
         {
+            resolvedTargetWord: AppState.resolvedTargetWord,
             maxWords: AppState.networkMaxWords,
             spacingMode: AppState.networkSpacing,
             fontSize: AppState.networkFontSize,
@@ -667,6 +698,7 @@ function updateUmap() {
         AppState.targetKeyword,
         activeRelated,
         {
+            resolvedTargetWord: AppState.resolvedTargetWord,
             maxWords: 50,
             spreadMode: AppState.umapSpread,
             fontSize: AppState.umapFontSize,
@@ -725,28 +757,34 @@ function renderOpinionsList(filterKeyword = '') {
     }
 
     const targetLower = (AppState.targetKeyword || '').toLowerCase();
+    const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
     const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word.toLowerCase());
 
     filteredDocs.forEach(d => {
         const card = document.createElement('div');
         card.className = 'opinion-card';
 
-        // マッチしたタグ
+        // マッチしたタグ（キーワード、代表語、関連語の色分け）
         const tagsHtml = d.matchedWords.map(w => {
-            const isTarget = w.toLowerCase() === targetLower;
+            const wLower = w.toLowerCase();
+            const isTarget = wLower === targetLower || wLower === resolvedLower || (targetLower && wLower.includes(targetLower));
             return `<span class="${isTarget ? 'tag-target' : 'tag-related'}">${w}</span>`;
         }).join('');
 
         // テキストのハイライト生成
         let highlighted = escapeHtml(d.text);
+        if (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword) {
+            const regR = new RegExp(escapeRegExp(AppState.resolvedTargetWord), 'gi');
+            highlighted = highlighted.replace(regR, m => `<span class="hl-target">${m}</span>`);
+        }
         if (AppState.targetKeyword) {
             const regT = new RegExp(escapeRegExp(AppState.targetKeyword), 'gi');
             highlighted = highlighted.replace(regT, m => `<span class="hl-target">${m}</span>`);
         }
         activeRelated.forEach(rw => {
             if (rw) {
-                const regR = new RegExp(escapeRegExp(rw), 'gi');
-                highlighted = highlighted.replace(regR, m => `<span class="hl-related">${m}</span>`);
+                const regRel = new RegExp(escapeRegExp(rw), 'gi');
+                highlighted = highlighted.replace(regRel, m => `<span class="hl-related">${m}</span>`);
             }
         });
 

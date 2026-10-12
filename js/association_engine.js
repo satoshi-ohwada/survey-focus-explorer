@@ -49,12 +49,45 @@ const AssociationEngine = {
         }
 
         // 2. ターゲットキーワードを含む文書のインデックス集合を特定
+        // 形態素トークンにおける完全一致、および複合語（例: "中東" に対する "中東情勢"）の探索
+        const lowerKeyword = cleanKeyword.toLowerCase();
+        const exactTokenExists = wordDocMap.has(cleanKeyword);
         let targetDocSet = wordDocMap.get(cleanKeyword) || new Set();
 
-        // もし形態素トークンに完全一致しない場合（複合語や表記揺れなど）、原文テキストで部分一致検索
+        // キーワードを部分一致で含む複合語トークンの探索（例: "中東" に対して "中東情勢" "中東問題" 等）
+        const compoundCandidates = [];
+        for (const [w, docSet] of wordDocMap.entries()) {
+            const wLower = w.toLowerCase();
+            if (wLower !== lowerKeyword && (wLower.includes(lowerKeyword) || lowerKeyword.includes(wLower))) {
+                compoundCandidates.push({ word: w, count: wordFreq.get(w) || 0, docCount: docSet.size });
+            }
+        }
+        compoundCandidates.sort((a, b) => b.count - a.count || b.docCount - a.docCount);
+
+        // 代表ターゲット語（中心語）の解決:
+        // トークンに完全一致がない場合、最も出現頻度が高い複合語（例: "中東情勢"）を中心語として自動解決
+        let resolvedTargetWord = cleanKeyword;
+        if (!exactTokenExists && compoundCandidates.length > 0) {
+            resolvedTargetWord = compoundCandidates[0].word;
+        }
+
+        // もし形態素トークンに完全一致しない場合、複合語の文書集合および原文テキスト部分一致で補完
         if (targetDocSet.size === 0) {
             targetDocSet = new Set();
-            const lowerKeyword = cleanKeyword.toLowerCase();
+            // 代表複合語の文書を追加
+            if (wordDocMap.has(resolvedTargetWord)) {
+                for (const idx of wordDocMap.get(resolvedTargetWord)) {
+                    targetDocSet.add(idx);
+                }
+            }
+            // 他の複合語の文書も追加
+            for (const cand of compoundCandidates) {
+                const cSet = wordDocMap.get(cand.word);
+                if (cSet) {
+                    for (const idx of cSet) targetDocSet.add(idx);
+                }
+            }
+            // 原文テキストでの部分一致検索
             for (let i = 0; i < N; i++) {
                 const text = String(rawRows[i][textCol] || '').toLowerCase();
                 if (text.includes(lowerKeyword)) {
@@ -67,6 +100,7 @@ const AssociationEngine = {
         if (targetDocCount === 0) {
             return {
                 targetKeyword: cleanKeyword,
+                resolvedTargetWord: resolvedTargetWord,
                 matchedTargetDocCount: 0,
                 relatedWords: [],
                 allDocCount: N,
@@ -78,8 +112,17 @@ const AssociationEngine = {
         const candidates = [];
         const targetDocArray = Array.from(targetDocSet);
 
+        // 関連語から除外する自単語・中心語系セット（中心語そのものが関連語一覧に混ざるのを防止）
+        const targetWordVariants = new Set([
+            cleanKeyword.toLowerCase(),
+            resolvedTargetWord.toLowerCase(),
+            ...compoundCandidates.map(c => c.word.toLowerCase())
+        ]);
+
         for (const [w, docSet] of wordDocMap.entries()) {
-            if (w === cleanKeyword) continue; // 自単語は除外
+            const wLower = w.toLowerCase();
+            // 自単語およびターゲット複合語は除外（中心語として扱うため関連語リストには出さない）
+            if (targetWordVariants.has(wLower)) continue;
             if (w.length <= 1 && !/^[A-Za-z0-9]+$/.test(w)) continue; // 1文字の非英数はスキップ
 
             // 共起文書数の計算
@@ -144,6 +187,9 @@ const AssociationEngine = {
 
         return {
             targetKeyword: cleanKeyword,
+            resolvedTargetWord: resolvedTargetWord,
+            hasExactToken: exactTokenExists,
+            compoundCandidates: compoundCandidates.map(c => c.word),
             matchedTargetDocCount: targetDocCount,
             relatedWords: relatedWords,
             allDocCount: N
@@ -162,11 +208,16 @@ const AssociationEngine = {
      * @returns {object} フィルタリング結果
      */
     filterMatchedOpinions(rawRows, textCol, attrCol, targetKeyword, activeRelatedWords, tokensPerDoc, options = {}) {
-        const searchWords = [targetKeyword, ...activeRelatedWords].filter(w => w && w.trim());
-        const searchWordSet = new Set(searchWords.map(w => w.toLowerCase()));
+        const resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        // ターゲットキーワード、代表ターゲット複合語、およびチェックされた関連語
+        const searchWords = [targetKeyword, resolvedTargetWord, ...activeRelatedWords].filter(w => w && w.trim());
+        const uniqueSearchWords = Array.from(new Set(searchWords));
+        const searchWordSet = new Set(uniqueSearchWords.map(w => w.toLowerCase()));
 
         const matchedDocs = [];
         const N = rawRows.length;
+        const targetLower = (targetKeyword || '').toLowerCase();
+        const resolvedLower = (resolvedTargetWord || '').toLowerCase();
 
         for (let i = 0; i < N; i++) {
             const row = rawRows[i];
@@ -176,7 +227,7 @@ const AssociationEngine = {
 
             // マッチした単語を特定
             const hits = [];
-            for (const sw of searchWords) {
+            for (const sw of uniqueSearchWords) {
                 const lowerSw = sw.toLowerCase();
                 if (lowerText.includes(lowerSw) || tokens.some(t => t.toLowerCase() === lowerSw)) {
                     hits.push(sw);
@@ -184,7 +235,16 @@ const AssociationEngine = {
             }
 
             if (hits.length > 0) {
-                const hasKeyword = hits.includes(targetKeyword);
+                // キーワードそのもの、解決された代表語、またはキーワードを含む複合語が含まれているか判定
+                const hasKeyword = hits.some(h => {
+                    const hLower = h.toLowerCase();
+                    return hLower === targetLower || hLower === resolvedLower || (targetLower && hLower.includes(targetLower));
+                }) || lowerText.includes(targetLower) || lowerText.includes(resolvedLower) ||
+                   tokens.some(t => {
+                       const tLower = t.toLowerCase();
+                       return tLower === targetLower || tLower === resolvedLower || (targetLower && tLower.includes(targetLower));
+                   });
+
                 matchedDocs.push({
                     originalIndex: i,
                     text: originalText,
@@ -201,7 +261,7 @@ const AssociationEngine = {
             totalDocs: N,
             matchedCount: matchedDocs.length,
             matchRate: N > 0 ? (matchedDocs.length / N) * 100 : 0,
-            searchWords: searchWords,
+            searchWords: uniqueSearchWords,
             matchedDocs: matchedDocs
         };
     },
@@ -212,9 +272,10 @@ const AssociationEngine = {
      * @param {Array<object>} matchedDocs - 抽出された回答配列
      * @param {Set<string>} stopWords - 除外語セット
      * @param {number} maxWords - 最大単語数
+     * @param {object} options - オプション (targetKeyword, resolvedTargetWord など)
      * @returns {object} 単語統計データ
      */
-    computeSubcorpusStats(matchedDocs, stopWords = new Set(), maxWords = 80) {
+    computeSubcorpusStats(matchedDocs, stopWords = new Set(), maxWords = 80, options = {}) {
         const docCount = matchedDocs.length;
         if (docCount === 0) {
             return {
@@ -225,6 +286,9 @@ const AssociationEngine = {
                 uniqueWordsPerDoc: []
             };
         }
+
+        const targetKeyword = options.targetKeyword || '';
+        const resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
 
         const wordCounts = {};
         const docFreq = {};
@@ -262,7 +326,19 @@ const AssociationEngine = {
 
         // 頻度降順ソート
         wordEntries.sort((a, b) => b.count - a.count);
-        const topWords = wordEntries.slice(0, maxWords);
+
+        // 代表ターゲット語およびキーワードがもし集計内に存在すれば、上位リストに確実に残す
+        const targetsToKeep = [resolvedTargetWord, targetKeyword].filter(w => w && wordCounts[w]);
+        let topWords = wordEntries.slice(0, maxWords);
+        for (const tw of targetsToKeep) {
+            if (!topWords.some(item => item.text === tw)) {
+                const foundItem = wordEntries.find(item => item.text === tw);
+                if (foundItem) {
+                    if (topWords.length >= maxWords) topWords.pop();
+                    topWords.unshift(foundItem); // 先頭付近に確実に保持
+                }
+            }
+        }
         const topWordSet = new Set(topWords.map(w => w.text));
 
         // 3. 共起行列（ペアの共起度）の集計
