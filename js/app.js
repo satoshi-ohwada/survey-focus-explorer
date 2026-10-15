@@ -1790,7 +1790,7 @@ function setCanvasSizeMode(sizeMode) {
         document.getElementById('cloudCanvasContainer'),
         document.getElementById('networkCanvasContainer'),
         document.getElementById('umapCanvasContainer'),
-        document.getElementById('attrChartContainer')
+        document.getElementById('attrCanvasContainer')
     ];
 
     containers.forEach(c => {
@@ -1821,6 +1821,11 @@ function setCanvasSizeMode(sizeMode) {
     // DOMサイズ確定後に再描画
     requestAnimationFrame(() => {
         updateVisualizations();
+        // 属性グラフ（Plotly）の明示的リサイズ
+        const attrEl = document.getElementById('attrChartContainer');
+        if (attrEl && typeof Plotly !== 'undefined' && attrEl.data) {
+            Plotly.Plots.resize(attrEl);
+        }
     });
 }
 
