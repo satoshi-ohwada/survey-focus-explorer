@@ -115,7 +115,7 @@ const UmapVisualizer = {
 
     resetZoom() {
         const width = this.canvas ? this.canvas.width : 800;
-        const height = this.canvas ? this.canvas.height : 520;
+        const height = this.canvas ? this.canvas.height : 600;
         this.scale = this.spreadMode === 'widest' ? 0.75 : (this.spreadMode === 'wide' ? 0.85 : 0.95);
         this.panX = (width * (1 - this.scale)) / 2;
         this.panY = (height * (1 - this.scale)) / 2;
@@ -181,10 +181,18 @@ const UmapVisualizer = {
         this.spreadMode = options.spreadMode || 'wide'; // 'normal' | 'wide' | 'widest'
         this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
 
-        const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
-        const parentH = this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0;
-        const width = Math.min(1600, parentW > 50 ? parentW : 960);
-        const height = Math.min(1000, parentH > 50 ? parentH : 520);
+        const rectW = this.canvas.clientWidth || (this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0);
+        const rectH = this.canvas.clientHeight || (this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0);
+        let width = rectW > 50 ? rectW : 680;
+        let height = rectH > 50 ? rectH : 510;
+
+        // 最終保存・Officeコピー仕様 (1200x900・4:3比率) と同一の縦横比を厳密に維持
+        if (width / height > 4 / 3) {
+            width = Math.round(height * 4 / 3);
+        } else {
+            height = Math.round(width * 3 / 4);
+        }
+
         this.canvas.width = width;
         this.canvas.height = height;
 

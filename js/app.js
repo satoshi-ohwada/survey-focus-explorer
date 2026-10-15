@@ -521,6 +521,9 @@ function setupUIEvents() {
     document.getElementById('btnCloseHelpOk').addEventListener('click', () => {
         helpModal.style.display = 'none';
     });
+
+    // 初期表示サイズモードの適用 (保存・Officeコピー仕様と同じ4:3比率)
+    setCanvasSizeMode('standard');
 }
 
 /**

@@ -684,10 +684,11 @@ body {
 }
 
 .canvas-container {
+    --canvas-h: clamp(340px, 56vh, 520px);
+    width: min(calc(var(--canvas-h) * 4 / 3), 100%);
     aspect-ratio: 4 / 3;
-    height: clamp(340px, 58vh, 540px);
-    width: auto;
-    max-width: 100%;
+    height: auto;
+    max-height: var(--canvas-h);
     margin: 0 auto;
     position: relative;
     background: #FFFFFF;
@@ -701,19 +702,25 @@ body {
 
 /* 表示サイズ切り替えクラス (ファイル保存・Officeコピーと同一の4:3比率を保持) */
 .canvas-container.size-compact {
-    height: 360px !important;
-    width: 480px !important;
+    --canvas-h: 360px !important;
+    width: min(calc(var(--canvas-h) * 4 / 3), 100%) !important;
     aspect-ratio: 4 / 3 !important;
+    height: auto !important;
+    max-height: var(--canvas-h) !important;
 }
 .canvas-container.size-standard {
-    height: clamp(340px, 58vh, 520px) !important;
-    width: auto !important;
+    --canvas-h: clamp(340px, 56vh, 520px) !important;
+    width: min(calc(var(--canvas-h) * 4 / 3), 100%) !important;
     aspect-ratio: 4 / 3 !important;
+    height: auto !important;
+    max-height: var(--canvas-h) !important;
 }
 .canvas-container.size-large {
-    height: clamp(480px, 72vh, 640px) !important;
-    width: auto !important;
+    --canvas-h: clamp(480px, 72vh, 640px) !important;
+    width: min(calc(var(--canvas-h) * 4 / 3), 100%) !important;
     aspect-ratio: 4 / 3 !important;
+    height: auto !important;
+    max-height: var(--canvas-h) !important;
 }
 
 /* 全画面（フルスクリーン）モード: 画面中央に4:3比率で最大化 */
@@ -726,6 +733,7 @@ body {
     width: 100vw !important;
     max-width: 100vw !important;
     height: 100vh !important;
+    max-height: 100vh !important;
     margin: 0 !important;
     padding: 24px !important;
     z-index: 9999 !important;
@@ -740,10 +748,10 @@ body {
 /* 全画面時の中央キャンバス（4:3比率でビューポート内に美しく最大フィット） */
 .canvas-container.size-fullscreen canvas,
 .canvas-container.size-fullscreen #attrChartContainer {
+    width: min(calc((100vh - 48px) * 4 / 3), calc(100vw - 48px)) !important;
+    height: min(calc(100vh - 48px), calc((100vw - 48px) * 3 / 4)) !important;
     max-width: calc((100vh - 48px) * 4 / 3) !important;
     max-height: calc(100vh - 48px) !important;
-    width: auto !important;
-    height: 100% !important;
     aspect-ratio: 4 / 3 !important;
     background: #FFFFFF;
     border-radius: var(--radius-md);
@@ -1613,24 +1621,32 @@ body {
         font-size: 12px;
     }
     .canvas-container {
+        --canvas-h: clamp(320px, 54vh, 460px);
+        width: min(calc(var(--canvas-h) * 4 / 3), 100%);
         aspect-ratio: 4 / 3;
-        height: clamp(320px, 54vh, 460px);
-        width: auto;
+        height: auto;
+        max-height: var(--canvas-h);
     }
     .canvas-container.size-compact {
-        height: 330px !important;
-        width: 440px !important;
+        --canvas-h: 330px !important;
+        width: min(calc(var(--canvas-h) * 4 / 3), 100%) !important;
         aspect-ratio: 4 / 3 !important;
+        height: auto !important;
+        max-height: var(--canvas-h) !important;
     }
     .canvas-container.size-standard {
-        height: clamp(330px, 54vh, 460px) !important;
-        width: auto !important;
+        --canvas-h: clamp(330px, 54vh, 460px) !important;
+        width: min(calc(var(--canvas-h) * 4 / 3), 100%) !important;
         aspect-ratio: 4 / 3 !important;
+        height: auto !important;
+        max-height: var(--canvas-h) !important;
     }
     .canvas-container.size-large {
-        height: clamp(440px, 70vh, 560px) !important;
-        width: auto !important;
+        --canvas-h: clamp(440px, 70vh, 560px) !important;
+        width: min(calc(var(--canvas-h) * 4 / 3), 100%) !important;
         aspect-ratio: 4 / 3 !important;
+        height: auto !important;
+        max-height: var(--canvas-h) !important;
     }
     .canvas-container.size-fullscreen {
         height: 100vh !important;
