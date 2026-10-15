@@ -196,13 +196,16 @@ const NetworkVisualizer = {
         this.colorMode = options.colorMode || 'community'; // 'community' (話題グループ別) | 'role' (役割別)
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
-        const width = Math.min(960, parentW > 50 ? parentW : 960);
-        const height = 600;
+        const parentH = this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0;
+        const width = Math.min(1600, parentW > 50 ? parentW : 960);
+        const height = Math.min(1000, parentH > 50 ? parentH : 520);
         this.canvas.width = width;
         this.canvas.height = height;
 
-        // 初期スケール（ノードが広がるため、ゆったり全体が見える倍率に調整）
-        this.scale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        // 初期スケール（画面サイズとノード間隔設定に基づいて自動調整）
+        const heightScaleFactor = height < 420 ? 0.85 : 1.0;
+        const baseScale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        this.scale = baseScale * heightScaleFactor;
         this.panX = (width * (1 - this.scale)) / 2;
         this.panY = (height * (1 - this.scale)) / 2;
 

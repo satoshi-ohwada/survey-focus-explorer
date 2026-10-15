@@ -51,6 +51,8 @@ const AppState = {
     networkSpacing: 'wide',
     networkFontSize: 'large',
     networkColorMode: 'community',
+    canvasSizeMode: 'standard', // 'compact' | 'standard' | 'large' | 'fullscreen'
+    isFocusMode: false,         // 上部入力・設定パネルの折りたたみ集中表示状態
     umapMode: 'words',
     umapSpread: 'wide',
     umapFontSize: 'large'
@@ -366,6 +368,58 @@ function setupUIEvents() {
             updateUmap();
         });
     }
+
+    // 表示サイズ切り替えボタン群（ノートPCなど画面サイズ向け）
+    document.querySelectorAll('.view-size-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const size = btn.dataset.size;
+            setCanvasSizeMode(size);
+        });
+    });
+
+    // 全画面トグルボタン
+    const btnFullscreen = document.getElementById('btnToggleFullscreen');
+    if (btnFullscreen) {
+        btnFullscreen.addEventListener('click', () => {
+            const nextMode = AppState.canvasSizeMode === 'fullscreen' ? 'standard' : 'fullscreen';
+            setCanvasSizeMode(nextMode);
+        });
+    }
+
+    // 全画面終了ボタン（キャンバス内の✕ボタン）
+    document.querySelectorAll('.btn-exit-fullscreen').forEach(btn => {
+        btn.addEventListener('click', () => {
+            setCanvasSizeMode('standard');
+        });
+    });
+
+    // Escキーでの全画面解除
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && AppState.canvasSizeMode === 'fullscreen') {
+            setCanvasSizeMode('standard');
+        }
+    });
+
+    // 集中分析モード（上部パネル折りたたみ）トグル
+    const btnFocus = document.getElementById('btnToggleFocusMode');
+    if (btnFocus) {
+        btnFocus.addEventListener('click', () => toggleFocusMode());
+    }
+    const btnExitFocus = document.getElementById('btnExitFocusMode');
+    if (btnExitFocus) {
+        btnExitFocus.addEventListener('click', () => toggleFocusMode(false));
+    }
+
+    // ウィンドウリサイズ時の自動フィット再描画（デバウンス）
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            if (AppState.filterResult) {
+                updateVisualizations();
+            }
+        }, 150);
+    });
 
     // 解析フィルター設定（品詞・複合語・除外語）の変更イベント
     const updateFiltersAndReanalyze = () => {
@@ -998,8 +1052,10 @@ function switchTab(tabName) {
     if (attrCtrl) attrCtrl.style.display = (tabName === 'attr') ? 'block' : 'none';
     document.getElementById('toolbarOpinionsCtrl').style.display = (tabName === 'opinions') ? 'flex' : 'none';
 
-    // 切り替え時に描画
-    updateVisualizations();
+    // 切り替え時にDOMサイズ確定を待って正確なコンテナ寸法で描画
+    requestAnimationFrame(() => {
+        updateVisualizations();
+    });
 }
 
 /**
@@ -1721,4 +1777,89 @@ function escapeHtml(str) {
 
 function escapeRegExp(str) {
     return (str || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * キャンバスの表示サイズモードを設定
+ * @param {'compact' | 'standard' | 'large' | 'fullscreen'} sizeMode
+ */
+function setCanvasSizeMode(sizeMode) {
+    AppState.canvasSizeMode = sizeMode;
+
+    const containers = [
+        document.getElementById('cloudCanvasContainer'),
+        document.getElementById('networkCanvasContainer'),
+        document.getElementById('umapCanvasContainer'),
+        document.getElementById('attrChartContainer')
+    ];
+
+    containers.forEach(c => {
+        if (!c) return;
+        c.classList.remove('size-compact', 'size-standard', 'size-large', 'size-fullscreen');
+        c.classList.add(`size-${sizeMode}`);
+    });
+
+    // ボタンアクティブ状態
+    document.querySelectorAll('.view-size-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.size === sizeMode);
+    });
+
+    // 全画面ボタンのラベル切り替え
+    const btnFullscreen = document.getElementById('btnToggleFullscreen');
+    if (btnFullscreen) {
+        btnFullscreen.innerHTML = (sizeMode === 'fullscreen') ? '✕ 全画面終了' : '⛶ 全画面';
+        btnFullscreen.classList.toggle('btn-primary', sizeMode === 'fullscreen');
+    }
+
+    // 全画面時のスクロール制御
+    if (sizeMode === 'fullscreen') {
+        document.body.style.overflow = 'hidden';
+    } else {
+        document.body.style.overflow = '';
+    }
+
+    // DOMサイズ確定後に再描画
+    requestAnimationFrame(() => {
+        updateVisualizations();
+    });
+}
+
+/**
+ * 集中分析モード（上部入力・設定パネルの折りたたみ）の切り替え
+ * @param {boolean} [forceState]
+ */
+function toggleFocusMode(forceState) {
+    if (forceState !== undefined) {
+        AppState.isFocusMode = forceState;
+    } else {
+        AppState.isFocusMode = !AppState.isFocusMode;
+    }
+
+    const panelsToToggle = [
+        document.getElementById('configGrid'),
+        document.getElementById('focusSection'),
+        document.getElementById('fileStatusBar'),
+        document.getElementById('coveragePanel')
+    ];
+
+    panelsToToggle.forEach(p => {
+        if (p) p.classList.toggle('panel-collapsed', AppState.isFocusMode);
+    });
+
+    const banner = document.getElementById('focusModeBanner');
+    if (banner) {
+        banner.style.display = AppState.isFocusMode ? 'flex' : 'none';
+    }
+
+    const btnText = document.getElementById('focusModeText');
+    const btnIcon = document.getElementById('focusModeIcon');
+    if (btnText && btnIcon) {
+        btnText.textContent = AppState.isFocusMode ? '入力・設定パネルを表示' : '上部を折りたたむ (画面を広く使う)';
+        btnIcon.textContent = AppState.isFocusMode ? '🔽' : '🔼';
+    }
+
+    // 折りたたみによる画面スペース変化に合わせて再描画
+    requestAnimationFrame(() => {
+        updateVisualizations();
+    });
 }

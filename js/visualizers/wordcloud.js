@@ -31,8 +31,9 @@ const WordCloudVisualizer = {
         this.lastMaxWords = maxWords;
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
-        const width = Math.min(960, parentW > 50 ? parentW : 960);
-        const height = 600;
+        const parentH = this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0;
+        const width = Math.min(1600, parentW > 50 ? parentW : 960);
+        const height = Math.min(1000, parentH > 50 ? parentH : 520);
 
         this.canvas.width = width;
         this.canvas.height = height;
@@ -51,12 +52,16 @@ const WordCloudVisualizer = {
         const maxVal = Math.max(...filtered.map(w => rankingMethod === 'tfidf' ? w.tfidf : w.count));
         const minVal = Math.min(...filtered.map(w => rankingMethod === 'tfidf' ? w.tfidf : w.count));
 
+        // 画面の高さに応じてフォントサイズのスケールを自然に調整（ノートPCのコンパクト画面でもあふれにくい）
+        const baseMinFont = height < 420 ? 13 : 16;
+        const baseMaxFont = height < 420 ? 44 : (height > 600 ? 68 : 56);
+        const fontRange = baseMaxFont - baseMinFont;
+
         // wordcloud2.js 形式のリスト: [[text, weight], ...]
         const list = filtered.map(item => {
             const val = rankingMethod === 'tfidf' ? item.tfidf : item.count;
-            // フォントサイズの重み付け（16px 〜 68px 程度）
             const scale = maxVal > minVal ? (val - minVal) / (maxVal - minVal) : 0.5;
-            const size = 18 + scale * 50;
+            const size = baseMinFont + scale * fontRange;
             return [item.text, size, item];
         });
 

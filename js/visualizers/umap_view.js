@@ -182,12 +182,13 @@ const UmapVisualizer = {
         this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
-        const width = Math.min(960, parentW > 50 ? parentW : 960);
-        const height = 600;
+        const parentH = this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0;
+        const width = Math.min(1600, parentW > 50 ? parentW : 960);
+        const height = Math.min(1000, parentH > 50 ? parentH : 520);
         this.canvas.width = width;
         this.canvas.height = height;
 
-        this.scale = 0.92;
+        this.scale = height < 420 ? 0.86 : 0.92;
         this.panX = (width * (1 - this.scale)) / 2;
         this.panY = (height * (1 - this.scale)) / 2;
 
