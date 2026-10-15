@@ -193,6 +193,7 @@ const NetworkVisualizer = {
         this.onWordClick = options.onWordClick;
         this.spacingMode = options.spacingMode || 'wide'; // 'normal' | 'wide' | 'widest'
         this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
+        this.colorMode = options.colorMode || 'community'; // 'community' (話題グループ別) | 'role' (役割別)
 
         const parentW = this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0;
         const width = Math.min(960, parentW > 50 ? parentW : 960);
@@ -475,23 +476,56 @@ const NetworkVisualizer = {
         });
 
         // 2. ノード描画
-        const palette = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#64748b'];
+        // 話題グループ（コミュニティ）向けの多彩で見分けやすい配色パレット
+        const palette = [
+            '#10b981', // エメラルドグリーン (グループ1)
+            '#f59e0b', // アンバーオレンジ (グループ2)
+            '#8b5cf6', // バイオレットパープル (グループ3)
+            '#06b6d4', // シアン (グループ4)
+            '#ec4899', // ローズピンク (グループ5)
+            '#3b82f6', // コバルトブルー (グループ6)
+            '#f97316', // サンセットオレンジ (グループ7)
+            '#14b8a6', // ティール (グループ8)
+            '#64748b'  // スレートグレー (グループ9)
+        ];
+
         this.nodes.forEach(node => {
             const isTarget = this.isTargetNode(node.id);
             const isRelated = relatedSet.has(node.id.toLowerCase());
 
-            let fillColor = palette[node.communityIndex % palette.length];
+            let fillColor;
             let strokeColor = '#ffffff';
             let strokeWidth = 2;
 
-            if (isTarget) {
-                fillColor = '#e11d48'; // ターゲット: ローズレッド
-                strokeColor = '#ffe4e6';
-                strokeWidth = 3.5;
-            } else if (isRelated) {
-                fillColor = '#0284c7'; // 関連語: スカイブルー
-                strokeColor = '#e0f2fe';
-                strokeWidth = 2.5;
+            if (this.colorMode === 'role') {
+                // 役割別モード: ターゲット(赤)、関連語(青)、その他共起語(緑)
+                if (isTarget) {
+                    fillColor = '#e11d48'; // ターゲット: ローズレッド
+                    strokeColor = '#ffe4e6';
+                    strokeWidth = 3.5;
+                } else if (isRelated) {
+                    fillColor = '#0284c7'; // 関連語: スカイブルー
+                    strokeColor = '#e0f2fe';
+                    strokeWidth = 2.5;
+                } else {
+                    fillColor = '#10b981'; // その他: グリーン
+                    strokeColor = '#ffffff';
+                    strokeWidth = 2;
+                }
+            } else {
+                // 話題グループ（コミュニティ）別モード (推奨・デフォルト)
+                if (isTarget) {
+                    fillColor = '#e11d48'; // ターゲット語は赤色で不動の中心
+                    strokeColor = '#ffe4e6';
+                    strokeWidth = 3.5;
+                } else {
+                    // 単語間の結びつき（コミュニティ）に基づく多彩な色分け
+                    fillColor = palette[node.communityIndex % palette.length];
+                    if (isRelated) {
+                        strokeColor = '#0284c7'; // 関連語チップの語はブルーの外枠で役割を明示
+                        strokeWidth = 3;
+                    }
+                }
             }
 
             // 円
@@ -503,11 +537,18 @@ const NetworkVisualizer = {
             ctx.lineWidth = strokeWidth;
             ctx.stroke();
 
-            // ターゲットキーワードの場合は外周リング
+            // ターゲットキーワードの場合は強調外周リング
             if (isTarget) {
                 ctx.beginPath();
                 ctx.arc(node.x, node.y, node.radius + 4, 0, Math.PI * 2);
                 ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 1.8;
+                ctx.stroke();
+            } else if (this.colorMode === 'community' && isRelated) {
+                // コミュニティモード時、チェックされた関連語には外周にアクセントリングを描画
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, node.radius + 3.5, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(2, 132, 199, 0.7)';
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
             }
@@ -615,29 +656,71 @@ const NetworkVisualizer = {
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
 
-        // 1. ターゲットキーワード
-        ctx.beginPath();
-        ctx.arc(x + 16, y + 16, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#e11d48';
-        ctx.fill();
-        ctx.fillStyle = '#334155';
-        ctx.fillText('指定キーワード (注目中心)', x + 28, y + 16);
+        if (this.colorMode === 'role') {
+            // 役割別モードの凡例
+            // 1. ターゲットキーワード
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 16, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#e11d48';
+            ctx.fill();
+            ctx.fillStyle = '#334155';
+            ctx.fillText('指定キーワード (注目中心)', x + 28, y + 16);
 
-        // 2. 関連語
-        ctx.beginPath();
-        ctx.arc(x + 16, y + 36, 5, 0, Math.PI * 2);
-        ctx.fillStyle = '#0284c7';
-        ctx.fill();
-        ctx.fillStyle = '#334155';
-        ctx.fillText('関連語 (共起・文脈近傍)', x + 28, y + 36);
+            // 2. 関連語
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 36, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#0284c7';
+            ctx.fill();
+            ctx.fillStyle = '#334155';
+            ctx.fillText('関連語 (共起・文脈近傍)', x + 28, y + 36);
 
-        // 3. その他共起語
-        ctx.beginPath();
-        ctx.arc(x + 16, y + 56, 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#10b981';
-        ctx.fill();
-        ctx.fillStyle = '#334155';
-        ctx.fillText('その他の共起単語', x + 28, y + 56);
+            // 3. その他共起語
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 56, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#10b981';
+            ctx.fill();
+            ctx.fillStyle = '#334155';
+            ctx.fillText('その他の共起単語', x + 28, y + 56);
+        } else {
+            // 話題グループ（コミュニティ）別モードの凡例
+            // 1. ターゲットキーワード
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 16, 6, 0, Math.PI * 2);
+            ctx.fillStyle = '#e11d48';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 16, 8, 0, Math.PI * 2);
+            ctx.strokeStyle = '#f43f5e';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+            ctx.fillStyle = '#334155';
+            ctx.fillText('指定キーワード (中心語)', x + 28, y + 16);
+
+            // 2. 関連語マーク（アクセントリング）
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 36, 5, 0, Math.PI * 2);
+            ctx.fillStyle = '#64748b';
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + 16, y + 36, 7.5, 0, Math.PI * 2);
+            ctx.strokeStyle = '#0284c7';
+            ctx.lineWidth = 1.8;
+            ctx.stroke();
+            ctx.fillStyle = '#334155';
+            ctx.fillText('関連語 (選択中・外枠青)', x + 28, y + 36);
+
+            // 3. 話題グループ色分けサンプル
+            const dotX = x + 12;
+            const colors = ['#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
+            colors.forEach((c, idx) => {
+                ctx.beginPath();
+                ctx.arc(dotX + idx * 7, y + 56, 3, 0, Math.PI * 2);
+                ctx.fillStyle = c;
+                ctx.fill();
+            });
+            ctx.fillStyle = '#334155';
+            ctx.fillText('色: 話題グループ(クラスター)', x + 44, y + 56);
+        }
 
         ctx.restore();
     }

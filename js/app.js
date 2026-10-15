@@ -50,6 +50,7 @@ const AppState = {
     networkMaxWords: 40,
     networkSpacing: 'wide',
     networkFontSize: 'large',
+    networkColorMode: 'community',
     umapMode: 'words',
     umapSpread: 'wide',
     umapFontSize: 'large'
@@ -304,6 +305,13 @@ function setupUIEvents() {
     if (selectNetFontSize) {
         selectNetFontSize.addEventListener('change', (e) => {
             AppState.networkFontSize = e.target.value;
+            updateNetwork();
+        });
+    }
+    const selectNetColorMode = document.getElementById('selectNetworkColorMode');
+    if (selectNetColorMode) {
+        selectNetColorMode.addEventListener('change', (e) => {
+            AppState.networkColorMode = e.target.value;
             updateNetwork();
         });
     }
@@ -1036,6 +1044,7 @@ function updateNetwork() {
             maxWords: AppState.networkMaxWords,
             spacingMode: AppState.networkSpacing,
             fontSize: AppState.networkFontSize,
+            colorMode: AppState.networkColorMode,
             onWordClick: (word) => {
                 document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
                 document.getElementById('inputFilterOpinionText').value = word;
