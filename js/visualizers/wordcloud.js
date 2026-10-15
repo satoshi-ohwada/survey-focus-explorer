@@ -59,9 +59,9 @@ const WordCloudVisualizer = {
         const maxVal = Math.max(...filtered.map(w => rankingMethod === 'tfidf' ? w.tfidf : w.count));
         const minVal = Math.min(...filtered.map(w => rankingMethod === 'tfidf' ? w.tfidf : w.count));
 
-        // 画面の高さに応じてフォントサイズのスケールを自然に調整（ノートPCのコンパクト画面でもあふれにくい）
-        const baseMinFont = height < 420 ? 13 : 16;
-        const baseMaxFont = height < 420 ? 44 : (height > 600 ? 68 : 56);
+        // 画面の高さに応じてフォントサイズのスケールを自然に調整（ノートPCから大画面まで美しくフィット）
+        const baseMinFont = height < 440 ? 14 : (height > 720 ? 18 : 16);
+        const baseMaxFont = height < 440 ? 46 : (height > 750 ? 82 : (height > 600 ? 68 : 56));
         const fontRange = baseMaxFont - baseMinFont;
 
         // wordcloud2.js 形式のリスト: [[text, weight], ...]
