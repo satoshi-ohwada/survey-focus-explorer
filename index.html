@@ -200,6 +200,29 @@
                 <div id="relatedChipsContainer" class="related-chips-container">
                     <span style="color: var(--text-muted); font-size: 13px;">キーワードを入力して「🚀 関連語を探索 ＆ 分析」をクリックしてください</span>
                 </div>
+
+                <!-- 抽出条件設定バー（AND/OR・文単位/回答単位） -->
+                <div class="extraction-condition-bar">
+                    <div class="condition-item">
+                        <span class="condition-label">抽出条件（適合基準）:</span>
+                        <label class="condition-check-label" title="キーワードまたは関連語のいずれかを含む意見を幅広く抽出">
+                            <input type="radio" name="radioMatchMode" value="or" checked> <strong>［OR］</strong>キーワード または 関連語
+                        </label>
+                        <label class="condition-check-label" title="キーワードを含み、かつ選択した関連語のいずれかも含む意見を厳密に抽出（テーマドリフト・無関係な意見の混入を防止）">
+                            <input type="radio" name="radioMatchMode" value="and"> <strong>［AND］</strong>キーワード必須 ＋ 関連語
+                        </label>
+                    </div>
+                    <div class="filter-group-divider"></div>
+                    <div class="condition-item">
+                        <span class="condition-label">抽出単位:</span>
+                        <label class="condition-check-label" title="回答文全体を対象として抽出・集約">
+                            <input type="radio" name="radioExtractUnit" value="doc" checked> 回答全体
+                        </label>
+                        <label class="condition-check-label" title="キーワードや関連語を含む文（センテンス）のみに絞り込んで抽出（長文回答でのノイズ除去）">
+                            <input type="radio" name="radioExtractUnit" value="sentence"> 文（センテンス）単位
+                        </label>
+                    </div>
+                </div>
             </div>
 
             <!-- 全体規模 vs 分析対象（カバレッジ統計）パネル -->
@@ -315,7 +338,10 @@
         <section id="dashboardSection" class="dashboard-section" style="display: none;">
             <!-- ナビゲーションタブ -->
             <div class="dashboard-nav-tabs">
-                <button type="button" class="nav-tab-btn active" data-tab="cloud">
+                <button type="button" class="nav-tab-btn active" data-tab="summary">
+                    📑 意見集約・論点サマリー
+                </button>
+                <button type="button" class="nav-tab-btn" data-tab="cloud">
                     ☁️ ワードクラウド
                 </button>
                 <button type="button" class="nav-tab-btn" data-tab="network">
@@ -336,7 +362,15 @@
             <div class="dashboard-toolbar">
                 <div class="toolbar-group">
                     <!-- タブ固有のコントロール -->
-                    <div id="toolbarCloudCtrl">
+                    <div id="toolbarSummaryCtrl" style="display: flex; align-items: center; gap: 8px;">
+                        <button type="button" id="btnCopyMarkdownSummary" class="btn btn-sm btn-primary" title="集約結果（代表意見・論点・特徴語）をMarkdown形式でクリップボードにコピー">
+                            📋 要約をMarkdownでコピー
+                        </button>
+                        <span id="copySummaryToast" style="display: none; color: #15803d; font-size: 12px; font-weight: 600;">✓ クリップボードにコピーしました！</span>
+                        <small style="color: var(--text-muted); font-size: 11px;">※社内チャットや報告資料にそのまま貼り付け可能です</small>
+                    </div>
+
+                    <div id="toolbarCloudCtrl" style="display: none;">
                         <label style="margin-right: 12px;">重要度基準:
                             <select id="selectCloudRanking" class="form-select btn-sm" style="width: auto; display: inline-block;">
                                 <option value="count">出現頻度順</option>
@@ -431,9 +465,25 @@
                         <small style="color: var(--text-muted); font-size: 11px; margin-left: 8px;">※属性グループごとの言及割合グラフ（Word/PowerPoint貼付用白背景出力）</small>
                     </div>
 
-                    <div id="toolbarOpinionsCtrl" style="display: none;">
-                        <input type="text" id="inputFilterOpinionText" class="form-input btn-sm" placeholder="意見内テキストで絞り込み..." style="width: 200px;">
-                        <button type="button" id="btnExportMatchedCsv" class="btn btn-sm">📥 抽出意見をCSV保存</button>
+                    <div id="toolbarOpinionsCtrl" style="display: none; flex-wrap: wrap; align-items: center; gap: 8px;">
+                        <label style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">並び順:
+                            <select id="selectOpinionsSort" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="relevance" selected>適合度スコア順（推奨）</option>
+                                <option value="original">回答順（元データ順）</option>
+                                <option value="lengthDesc">文字数が多い順</option>
+                            </select>
+                        </label>
+                        <label style="font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">意見タイプ:
+                            <select id="selectOpinionsTypeFilter" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="all" selected>すべてのタイプ</option>
+                                <option value="issue">🔴 困りごと・課題</option>
+                                <option value="request">🔵 要望・改善提案</option>
+                                <option value="positive">🟢 肯定・満足</option>
+                                <option value="neutral">⚪ その他・事実</option>
+                            </select>
+                        </label>
+                        <input type="text" id="inputFilterOpinionText" class="form-input btn-sm" placeholder="意見内テキスト絞り込み..." style="width: 160px;">
+                        <button type="button" id="btnExportMatchedCsv" class="btn btn-sm">📥 抽出意見CSV保存</button>
                     </div>
                 </div>
 
@@ -445,7 +495,52 @@
             </div>
 
             <!-- メインコンテンツ表示エリア -->
-            <div id="tabContentCloud" class="tab-content">
+            <!-- 0. 意見集約・論点サマリータブ -->
+            <div id="tabContentSummary" class="tab-content" style="display: block;">
+                <div class="summary-dashboard">
+                    <!-- 概要サマリーカード -->
+                    <div id="summaryOverviewCard" class="summary-overview-card"></div>
+
+                    <!-- 📌 代表意見（抽出型要約） -->
+                    <div class="summary-block">
+                        <div class="summary-block-header">
+                            <div class="summary-block-title-wrap">
+                                <span class="summary-block-badge">要約</span>
+                                <h3 class="summary-block-title">📌 全体代表意見（抽出型要約 トップ3〜4）</h3>
+                            </div>
+                            <span class="summary-block-subtext">コサイン類似度セントロイド法・適合度により、この意見群の主旨を最も象徴する回答文を自動選出</span>
+                        </div>
+                        <div id="summaryRepOpinionsList" class="rep-opinions-container"></div>
+                    </div>
+
+                    <!-- 🧩 主要論点（トピック別サマリー） -->
+                    <div class="summary-block">
+                        <div class="summary-block-header">
+                            <div class="summary-block-title-wrap">
+                                <span class="summary-block-badge" style="background: #e0e7ff; color: #3730a3;">論点</span>
+                                <h3 class="summary-block-title">🧩 主要な論点グループ（トピック別サマリー）</h3>
+                            </div>
+                            <span class="summary-block-subtext">単語共起クラスタリングにより意見を話題別に分類。カードをクリックすると該当意見にドリルダウンできます</span>
+                        </div>
+                        <div id="summaryTopicsGrid" class="topics-grid"></div>
+                    </div>
+
+                    <!-- 🌟 全体比の特徴キーワード（オッズ比ランキング） -->
+                    <div class="summary-block">
+                        <div class="summary-block-header">
+                            <div class="summary-block-title-wrap">
+                                <span class="summary-block-badge" style="background: #fef3c7; color: #92400e;">特異度</span>
+                                <h3 class="summary-block-title">🌟 全体と比較した特異キーワード（出現率オッズ比上位）</h3>
+                            </div>
+                            <span class="summary-block-subtext">アンケート全体の平均出現率と比べて、この意見群で突出して多く使われている単語（特異倍率）</span>
+                        </div>
+                        <div id="summaryOddsKeywordsTable" class="odds-table-wrap"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 1. ワードクラウドタブ -->
+            <div id="tabContentCloud" class="tab-content" style="display: none;">
                 <div class="canvas-container">
                     <canvas id="cloudCanvas"></canvas>
                 </div>
@@ -534,6 +629,7 @@
     <script src="js/csv_parser.js"></script>
     <script src="js/stopwords_default.js"></script>
     <script src="js/text_preprocessor.js"></script>
+    <script src="js/summarizer.js"></script>
     <script src="js/association_engine.js"></script>
     <script src="js/visualizers/wordcloud.js"></script>
     <script src="js/visualizers/network.js"></script>

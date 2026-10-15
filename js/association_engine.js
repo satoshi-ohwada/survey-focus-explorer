@@ -209,6 +209,9 @@ const AssociationEngine = {
      */
     filterMatchedOpinions(rawRows, textCol, attrCol, targetKeyword, activeRelatedWords, tokensPerDoc, options = {}) {
         const resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        const matchMode = options.matchMode || 'or'; // 'or' | 'and'
+        const extractUnit = options.extractUnit || 'doc'; // 'doc' | 'sentence'
+
         // ターゲットキーワード、代表ターゲット複合語、およびチェックされた関連語
         const searchWords = [targetKeyword, resolvedTargetWord, ...activeRelatedWords].filter(w => w && w.trim());
         const uniqueSearchWords = Array.from(new Set(searchWords));
@@ -218,6 +221,7 @@ const AssociationEngine = {
         const N = rawRows.length;
         const targetLower = (targetKeyword || '').toLowerCase();
         const resolvedLower = (resolvedTargetWord || '').toLowerCase();
+        const activeRelatedLowerSet = new Set((activeRelatedWords || []).map(w => w.toLowerCase()));
 
         for (let i = 0; i < N; i++) {
             const row = rawRows[i];
@@ -245,16 +249,66 @@ const AssociationEngine = {
                        return tLower === targetLower || tLower === resolvedLower || (targetLower && tLower.includes(targetLower));
                    });
 
-                matchedDocs.push({
-                    originalIndex: i,
-                    text: originalText,
-                    attribute: attrCol && row[attrCol] != null ? String(row[attrCol]) : '',
-                    tokens: tokens,
-                    matchedWords: hits,
-                    hasTargetKeyword: hasKeyword,
-                    rawRow: row
-                });
+                const hasRelatedWord = hits.some(h => activeRelatedLowerSet.has(h.toLowerCase()));
+
+                // AND条件判定: キーワード必須かつ、関連語がある場合は関連語のいずれかも必須
+                let isMatch = false;
+                if (matchMode === 'and') {
+                    if (activeRelatedWords.length > 0) {
+                        isMatch = hasKeyword && hasRelatedWord;
+                    } else {
+                        isMatch = hasKeyword;
+                    }
+                } else {
+                    // OR条件（現行）
+                    isMatch = true;
+                }
+
+                if (isMatch) {
+                    let processedText = originalText;
+                    let focusedSentences = [];
+
+                    // 文（センテンス）単位の抽出モード処理
+                    if (extractUnit === 'sentence') {
+                        // 句点や改行で文に分割
+                        const rawSentences = originalText.split(/([。！？\n]+)/).filter(Boolean);
+                        const sentences = [];
+                        for (let sIdx = 0; sIdx < rawSentences.length; sIdx += 2) {
+                            const sentText = (rawSentences[sIdx] || '') + (rawSentences[sIdx + 1] || '');
+                            if (sentText.trim()) sentences.push(sentText.trim());
+                        }
+
+                        // キーワードまたは関連語を含む文を抽出
+                        const matchingSentences = sentences.filter(sent => {
+                            const sLower = sent.toLowerCase();
+                            return uniqueSearchWords.some(sw => sLower.includes(sw.toLowerCase()));
+                        });
+
+                        if (matchingSentences.length > 0) {
+                            focusedSentences = matchingSentences;
+                            processedText = matchingSentences.join(' ');
+                        }
+                    }
+
+                    matchedDocs.push({
+                        originalIndex: i,
+                        text: processedText,
+                        fullOriginalText: originalText,
+                        focusedSentences: focusedSentences,
+                        attribute: attrCol && row[attrCol] != null ? String(row[attrCol]) : '',
+                        tokens: tokens,
+                        matchedWords: hits,
+                        hasTargetKeyword: hasKeyword,
+                        hasRelatedWord: hasRelatedWord,
+                        rawRow: row
+                    });
+                }
             }
+        }
+
+        // 適合度スコアおよび意見タイプ（トーン）の付与（OpinionSummarizerが存在する場合）
+        if (typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.assignRelevanceScores) {
+            OpinionSummarizer.assignRelevanceScores(matchedDocs, targetKeyword, resolvedTargetWord, activeRelatedWords);
         }
 
         return {
@@ -262,7 +316,9 @@ const AssociationEngine = {
             matchedCount: matchedDocs.length,
             matchRate: N > 0 ? (matchedDocs.length / N) * 100 : 0,
             searchWords: uniqueSearchWords,
-            matchedDocs: matchedDocs
+            matchedDocs: matchedDocs,
+            matchMode: matchMode,
+            extractUnit: extractUnit
         };
     },
 

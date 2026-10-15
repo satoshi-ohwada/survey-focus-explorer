@@ -1107,3 +1107,368 @@ body {
     margin-left: 8px;
 }
 
+/* 抽出条件設定バー (AND/OR・文単位/回答単位) */
+.extraction-condition-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px dashed #E2E8F0;
+    font-size: 12.5px;
+}
+
+.condition-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.condition-label {
+    font-weight: 700;
+    color: #475569;
+}
+
+.condition-check-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    color: #334155;
+    user-select: none;
+}
+
+.condition-check-label:hover {
+    color: var(--primary-color);
+}
+
+/* 意見集約・論点サマリーダッシュボード */
+.summary-dashboard {
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+    padding: 18px 20px;
+}
+
+/* 概要サマリーカード */
+.summary-overview-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.summary-overview-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.summary-overview-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.summary-type-progress-wrap {
+    margin-top: 8px;
+}
+
+.summary-type-bars {
+    display: flex;
+    height: 12px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #F1F5F9;
+    margin-bottom: 10px;
+}
+
+.summary-type-bar {
+    height: 100%;
+    transition: width 0.3s ease;
+}
+
+.summary-type-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    font-size: 12.5px;
+}
+
+.summary-type-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+/* サマリーブロック */
+.summary-block {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--radius-md);
+    padding: 18px 20px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.summary-block-header {
+    margin-bottom: 16px;
+}
+
+.summary-block-title-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.summary-block-badge {
+    background: #FFE4E6;
+    color: #BE123C;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+
+.summary-block-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #1E293B;
+    margin: 0;
+}
+
+.summary-block-subtext {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+/* 代表意見カード一覧 */
+.rep-opinions-container {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.rep-opinion-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-left: 4px solid var(--primary-color);
+    border-radius: 8px;
+    padding: 14px 18px;
+    transition: all 0.15s ease;
+}
+
+.rep-opinion-card:hover {
+    background: #FFFFFF;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+    border-color: #CBD5E1;
+    border-left-color: var(--primary-color);
+}
+
+.rep-opinion-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+}
+
+.rep-rank-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #BE123C;
+    background: #FFF1F2;
+    padding: 3px 8px;
+    border-radius: 6px;
+}
+
+.rep-opinion-text {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #1E293B;
+}
+
+/* 主要論点（トピック別サマリーカード） */
+.topics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 16px;
+}
+
+.topic-card {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--radius-md);
+    padding: 16px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.topic-card:hover {
+    background: #FFFFFF;
+    border-color: #6366F1;
+    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.12);
+    transform: translateY(-2px);
+}
+
+.topic-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+}
+
+.topic-card-title {
+    font-size: 14.5px;
+    font-weight: 700;
+    color: #1E293B;
+}
+
+.topic-card-badge {
+    background: #EEF2FF;
+    color: #4F46E5;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 12px;
+    white-space: nowrap;
+}
+
+.topic-keywords-wrap {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.topic-keyword-tag {
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 11.5px;
+    color: #475569;
+    font-weight: 500;
+}
+
+.topic-rep-text {
+    font-size: 13px;
+    color: #334155;
+    line-height: 1.55;
+    background: #FFFFFF;
+    padding: 10px 12px;
+    border-radius: 6px;
+    border-left: 3px solid #6366F1;
+    margin-bottom: 10px;
+    font-style: italic;
+}
+
+.topic-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    border-top: 1px solid #E2E8F0;
+    padding-top: 8px;
+    margin-top: auto;
+}
+
+/* 特異度（オッズ比）テーブル */
+.odds-table-wrap {
+    overflow-x: auto;
+}
+
+.odds-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+}
+
+.odds-table th, .odds-table td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #E2E8F0;
+    text-align: left;
+}
+
+.odds-table th {
+    background: #F8FAFC;
+    color: #475569;
+    font-weight: 600;
+}
+
+.odds-table tr:hover td {
+    background: #F1F5F9;
+}
+
+.odds-ratio-val {
+    font-weight: 700;
+    color: #D97706;
+}
+
+/* 意見カードのバッジ */
+.opinion-score-badge {
+    background: #F1F5F9;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid #E2E8F0;
+}
+
+.opinion-type-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.opinion-type-badge.type-issue {
+    background: #FFE4E6;
+    color: #BE123C;
+    border: 1px solid #FECDD3;
+}
+
+.opinion-type-badge.type-request {
+    background: #E0F2FE;
+    color: #0369A1;
+    border: 1px solid #BAE6FD;
+}
+
+.opinion-type-badge.type-positive {
+    background: #DCFCE7;
+    color: #15803D;
+    border: 1px solid #BBF7D0;
+}
+
+.opinion-type-badge.type-neutral {
+    background: #F1F5F9;
+    color: #475569;
+    border: 1px solid #E2E8F0;
+}
+
+

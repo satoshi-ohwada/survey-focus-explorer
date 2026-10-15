@@ -34,8 +34,17 @@ const AppState = {
     totalCorpusStats: null, // 全体規模統計（文数・文字数・総単語数・語彙数・品詞別）
     coverageStats: null,    // 全体 vs 対象のカバレッジ比較統計
     
+    // 抽出条件設定
+    matchMode: 'or',       // 'or' | 'and'
+    extractUnit: 'doc',    // 'doc' | 'sentence'
+    
+    // 要約・集約データ
+    summaryData: null,
+
     // UI状態
-    activeTab: 'cloud',
+    activeTab: 'summary', // 初期タブを要約サマリーに
+    opinionsSort: 'relevance', // 'relevance' | 'original' | 'lengthDesc'
+    opinionsTypeFilter: 'all', // 'all' | 'issue' | 'request' | 'positive' | 'neutral'
     cloudRanking: 'count',
     cloudMaxWords: 60,
     networkMaxWords: 40,
@@ -69,6 +78,62 @@ document.addEventListener('DOMContentLoaded', async () => {
  * UIイベントリスナーのセットアップ
  */
 function setupUIEvents() {
+    // 抽出条件（AND/OR）ラジオボタン切り替え
+    document.querySelectorAll('input[name="radioMatchMode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            AppState.matchMode = e.target.value;
+            if (AppState.rawRows.length > 0 && AppState.targetKeyword) {
+                executeFilteringAndRender();
+            }
+        });
+    });
+
+    // 抽出単位（回答全体 vs 文単位）ラジオボタン切り替え
+    document.querySelectorAll('input[name="radioExtractUnit"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            AppState.extractUnit = e.target.value;
+            if (AppState.rawRows.length > 0 && AppState.targetKeyword) {
+                executeFilteringAndRender();
+            }
+        });
+    });
+
+    // 要約Markdownコピーボタン
+    const btnCopyMd = document.getElementById('btnCopyMarkdownSummary');
+    if (btnCopyMd) {
+        btnCopyMd.addEventListener('click', () => {
+            if (!AppState.summaryData || !OpinionSummarizer) return;
+            const mdText = OpinionSummarizer.generateMarkdownReport(AppState.summaryData);
+            navigator.clipboard.writeText(mdText).then(() => {
+                const toast = document.getElementById('copySummaryToast');
+                if (toast) {
+                    toast.style.display = 'inline';
+                    setTimeout(() => { toast.style.display = 'none'; }, 3000);
+                }
+            }).catch(err => {
+                console.error('Copy markdown error:', err);
+                alert('クリップボードへのコピーに失敗しました。');
+            });
+        });
+    }
+
+    // 意見一覧ソート切り替え
+    const selectSort = document.getElementById('selectOpinionsSort');
+    if (selectSort) {
+        selectSort.addEventListener('change', (e) => {
+            AppState.opinionsSort = e.target.value;
+            renderOpinionsList(document.getElementById('inputFilterOpinionText').value || '');
+        });
+    }
+
+    // 意見一覧タイプフィルター切り替え
+    const selectTypeFilter = document.getElementById('selectOpinionsTypeFilter');
+    if (selectTypeFilter) {
+        selectTypeFilter.addEventListener('change', (e) => {
+            AppState.opinionsTypeFilter = e.target.value;
+            renderOpinionsList(document.getElementById('inputFilterOpinionText').value || '');
+        });
+    }
     // タブ切り替え（ファイル読込 vs コピペ）
     const tabFile = document.getElementById('tabInputFile');
     const tabPaste = document.getElementById('tabInputPaste');
@@ -668,7 +733,7 @@ function renderRelatedChips() {
 function executeFilteringAndRender() {
     const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
 
-    // 1. 意見フィルタリング
+    // 1. 意見フィルタリング（AND/OR条件、文単位/回答単位を適用）
     AppState.filterResult = AssociationEngine.filterMatchedOpinions(
         AppState.rawRows,
         AppState.textCol,
@@ -676,7 +741,11 @@ function executeFilteringAndRender() {
         AppState.targetKeyword,
         activeRelated,
         AppState.tokensPerDoc,
-        { resolvedTargetWord: AppState.resolvedTargetWord }
+        {
+            resolvedTargetWord: AppState.resolvedTargetWord,
+            matchMode: AppState.matchMode,
+            extractUnit: AppState.extractUnit
+        }
     );
 
     // 2. 抽出サマリーの更新
@@ -704,11 +773,170 @@ function executeFilteringAndRender() {
         renderCoveragePanel(AppState.coverageStats);
     }
 
+    // 5. 意見集約・論点サマリーデータの生成
+    generateSummaryData();
+
     // ダッシュボードを表示
     document.getElementById('dashboardSection').style.display = 'block';
 
-    // 5. 現在のタブの可視化を更新
+    // 6. 現在のタブの可視化を更新
     updateVisualizations();
+}
+
+/**
+ * 意見集約・論点サマリーデータの生成
+ */
+function generateSummaryData() {
+    if (!AppState.filterResult || !OpinionSummarizer) return;
+    const docs = AppState.filterResult.matchedDocs;
+    const D = docs.length;
+
+    // 1. 意見タイプの集計
+    const typeCounts = { issue: 0, request: 0, positive: 0, neutral: 0 };
+    docs.forEach(d => {
+        const t = (d.opinionType && d.opinionType.type) ? d.opinionType.type : 'neutral';
+        if (typeCounts[t] !== undefined) typeCounts[t]++;
+        else typeCounts.neutral++;
+    });
+
+    const issueRate = D > 0 ? Math.round((typeCounts.issue / D) * 1000) / 10 : 0;
+    const requestRate = D > 0 ? Math.round((typeCounts.request / D) * 1000) / 10 : 0;
+    const positiveRate = D > 0 ? Math.round((typeCounts.positive / D) * 1000) / 10 : 0;
+    const neutralRate = D > 0 ? Math.round((typeCounts.neutral / D) * 1000) / 10 : 0;
+
+    const opinionTypeSummary = {
+        issueCount: typeCounts.issue,
+        issueRate: issueRate,
+        requestCount: typeCounts.request,
+        requestRate: requestRate,
+        positiveCount: typeCounts.positive,
+        positiveRate: positiveRate,
+        neutralCount: typeCounts.neutral,
+        neutralRate: neutralRate
+    };
+
+    // 2. 全体代表意見（抽出型要約）の選出
+    const repOpinions = OpinionSummarizer.extractRepresentativeOpinions(docs, AppState.subcorpusStats, 4);
+
+    // 3. 論点（トピッククラスタ）サマリーの生成
+    let topicSummaries = [];
+    if (D >= 2) {
+        const kClusters = Math.min(4, Math.max(2, Math.floor(Math.sqrt(D / 3.0))));
+        // 簡易文書ベクトルの構築とクラスタ割り当て
+        const featureWords = (AppState.subcorpusStats && AppState.subcorpusStats.wordList)
+            ? AppState.subcorpusStats.wordList.slice(0, 40).map(w => w.text)
+            : [];
+        const F = featureWords.length;
+        const wIdx = new Map(featureWords.map((w, idx) => [w, idx]));
+
+        const docVectors = docs.map(doc => {
+            const vec = new Float64Array(F);
+            (doc.tokens || []).forEach(t => {
+                if (wIdx.has(t)) vec[wIdx.get(t)] += 1;
+            });
+            let norm = 0;
+            for (let f = 0; f < F; f++) norm += vec[f] * vec[f];
+            norm = Math.sqrt(norm);
+            if (norm > 0) {
+                for (let f = 0; f < F; f++) vec[f] /= norm;
+            }
+            return vec;
+        });
+
+        // K-Means クラスタリング
+        const clusterAssignments = runQuickKMeans(docVectors, kClusters);
+        topicSummaries = OpinionSummarizer.generateTopicSummaries(docs, AppState.subcorpusStats, clusterAssignments, kClusters);
+    }
+
+    // 4. 全体比オッズ比上位キーワードの算出
+    const oddsRatioKeywords = OpinionSummarizer.computeOddsRatioKeywords(AppState.totalCorpusStats, AppState.subcorpusStats, 8);
+
+    AppState.summaryData = {
+        targetKeyword: AppState.targetKeyword,
+        resolvedTargetWord: AppState.resolvedTargetWord,
+        filterResult: AppState.filterResult,
+        repOpinions: repOpinions,
+        topicSummaries: topicSummaries,
+        oddsRatioKeywords: oddsRatioKeywords,
+        opinionTypeSummary: opinionTypeSummary
+    };
+}
+
+/**
+ * 簡易 K-Means クラスタリング
+ */
+function runQuickKMeans(vectors, k) {
+    const N = vectors.length;
+    if (N === 0) return [];
+    if (N <= k) return Array.from({ length: N }, (_, i) => i);
+    const F = vectors[0].length;
+    if (F === 0) return Array.from({ length: N }, () => 0);
+
+    // 中心点初期化 (k-means++ 的に離れた点を選択)
+    const centroids = [];
+    centroids.push(new Float64Array(vectors[0]));
+    for (let c = 1; c < k; c++) {
+        let maxD = -1, bestIdx = 0;
+        for (let i = 0; i < N; i++) {
+            let minD = Infinity;
+            for (let m = 0; m < centroids.length; m++) {
+                let dot = 0;
+                for (let f = 0; f < F; f++) dot += vectors[i][f] * centroids[m][f];
+                const d = Math.max(0, 1.0 - dot);
+                if (d < minD) minD = d;
+            }
+            if (minD > maxD) {
+                maxD = minD;
+                bestIdx = i;
+            }
+        }
+        centroids.push(new Float64Array(vectors[bestIdx]));
+    }
+
+    let assignments = new Int32Array(N);
+    for (let iter = 0; iter < 12; iter++) {
+        let changed = false;
+        // 割り当てステップ
+        for (let i = 0; i < N; i++) {
+            let maxDot = -Infinity, bestC = 0;
+            for (let c = 0; c < k; c++) {
+                let dot = 0;
+                for (let f = 0; f < F; f++) dot += vectors[i][f] * centroids[c][f];
+                if (dot > maxDot) {
+                    maxDot = dot;
+                    bestC = c;
+                }
+            }
+            if (assignments[i] !== bestC) {
+                assignments[i] = bestC;
+                changed = true;
+            }
+        }
+        if (!changed) break;
+
+        // 中心更新ステップ
+        const counts = new Int32Array(k);
+        for (let c = 0; c < k; c++) centroids[c].fill(0);
+        for (let i = 0; i < N; i++) {
+            const c = assignments[i];
+            counts[c]++;
+            for (let f = 0; f < F; f++) centroids[c][f] += vectors[i][f];
+        }
+        for (let c = 0; c < k; c++) {
+            if (counts[c] > 0) {
+                let norm = 0;
+                for (let f = 0; f < F; f++) {
+                    centroids[c][f] /= counts[c];
+                    norm += centroids[c][f] * centroids[c][f];
+                }
+                norm = Math.sqrt(norm);
+                if (norm > 0) {
+                    for (let f = 0; f < F; f++) centroids[c][f] /= norm;
+                }
+            }
+        }
+    }
+    return Array.from(assignments);
 }
 
 /**
@@ -717,7 +945,9 @@ function executeFilteringAndRender() {
 function updateVisualizations() {
     if (!AppState.filterResult) return;
 
-    if (AppState.activeTab === 'cloud') {
+    if (AppState.activeTab === 'summary') {
+        renderSummaryDashboard();
+    } else if (AppState.activeTab === 'cloud') {
         updateWordCloud();
     } else if (AppState.activeTab === 'network') {
         updateNetwork();
@@ -726,7 +956,7 @@ function updateVisualizations() {
     } else if (AppState.activeTab === 'attr') {
         updateAttrChart();
     } else if (AppState.activeTab === 'opinions') {
-        renderOpinionsList();
+        renderOpinionsList(document.getElementById('inputFilterOpinionText').value || '');
     }
 }
 
@@ -738,6 +968,7 @@ function switchTab(tabName) {
 
     // 各タブコンテンツの表示/非表示
     const tabContents = {
+        summary: 'tabContentSummary',
         cloud: 'tabContentCloud',
         network: 'tabContentNetwork',
         umap: 'tabContentUmap',
@@ -751,6 +982,7 @@ function switchTab(tabName) {
     });
 
     // ツールバーコントロールの切り替え
+    document.getElementById('toolbarSummaryCtrl').style.display = (tabName === 'summary') ? 'flex' : 'none';
     document.getElementById('toolbarCloudCtrl').style.display = (tabName === 'cloud') ? 'block' : 'none';
     document.getElementById('toolbarNetworkCtrl').style.display = (tabName === 'network') ? 'block' : 'none';
     document.getElementById('toolbarUmapCtrl').style.display = (tabName === 'umap') ? 'block' : 'none';
@@ -763,108 +995,206 @@ function switchTab(tabName) {
 }
 
 /**
- * ワードクラウド描画
+ * 意見集約・論点サマリーダッシュボードの描画
  */
-function updateWordCloud() {
-    if (!AppState.subcorpusStats) return;
-    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
+function renderSummaryDashboard() {
+    const summary = AppState.summaryData;
+    if (!summary) return;
 
-    WordCloudVisualizer.render(
-        AppState.subcorpusStats.wordList,
-        AppState.targetKeyword,
-        activeRelated,
-        {
-            resolvedTargetWord: AppState.resolvedTargetWord,
-            rankingMethod: AppState.cloudRanking,
-            maxWords: AppState.cloudMaxWords,
-            onWordClick: (word) => {
-                // 単語クリックで生の声一覧へジャンプ
-                document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                document.getElementById('inputFilterOpinionText').value = word;
-                renderOpinionsList(word);
-            }
+    // 1. 概要サマリーカード
+    const overviewEl = document.getElementById('summaryOverviewCard');
+    if (overviewEl && summary.opinionTypeSummary) {
+        const ots = summary.opinionTypeSummary;
+        const res = summary.filterResult;
+        overviewEl.innerHTML = `
+            <div class="summary-overview-header">
+                <div class="summary-overview-title">
+                    <span>📊</span>
+                    <span>「${escapeHtml(summary.targetKeyword)}」関連意見の集約概要</span>
+                    <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">
+                        (${res.matchedCount.toLocaleString()} 件 / 全 ${res.totalDocs.toLocaleString()} 件中 ${res.matchRate.toFixed(1)}%)
+                    </span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted);">
+                    抽出条件: <strong>${AppState.matchMode === 'and' ? 'AND (キーワード必須＋関連語)' : 'OR (キーワード または 関連語)'}</strong> / 
+                    単位: <strong>${AppState.extractUnit === 'sentence' ? '文単位' : '回答全体'}</strong>
+                </div>
+            </div>
+            <div class="summary-type-progress-wrap">
+                <div style="font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">
+                    意見タイプ構成比（ルールベース自動分類）:
+                </div>
+                <div class="summary-type-bars">
+                    <div class="summary-type-bar" style="width: ${ots.issueRate}%; background: #e11d48;" title="困りごと・課題: ${ots.issueCount}件 (${ots.issueRate}%)"></div>
+                    <div class="summary-type-bar" style="width: ${ots.requestRate}%; background: #0284c7;" title="要望・改善提案: ${ots.requestCount}件 (${ots.requestRate}%)"></div>
+                    <div class="summary-type-bar" style="width: ${ots.positiveRate}%; background: #10b981;" title="肯定・満足: ${ots.positiveCount}件 (${ots.positiveRate}%)"></div>
+                    <div class="summary-type-bar" style="width: ${ots.neutralRate}%; background: #94a3b8;" title="その他・事実: ${ots.neutralCount}件 (${ots.neutralRate}%)"></div>
+                </div>
+                <div class="summary-type-legend">
+                    <div class="summary-type-legend-item">
+                        <span class="legend-dot" style="background: #e11d48;"></span>
+                        <span>🔴 困りごと・課題: <strong>${ots.issueCount}件</strong> (${ots.issueRate}%)</span>
+                    </div>
+                    <div class="summary-type-legend-item">
+                        <span class="legend-dot" style="background: #0284c7;"></span>
+                        <span>🔵 要望・改善提案: <strong>${ots.requestCount}件</strong> (${ots.requestRate}%)</span>
+                    </div>
+                    <div class="summary-type-legend-item">
+                        <span class="legend-dot" style="background: #10b981;"></span>
+                        <span>🟢 肯定・満足: <strong>${ots.positiveCount}件</strong> (${ots.positiveRate}%)</span>
+                    </div>
+                    <div class="summary-type-legend-item">
+                        <span class="legend-dot" style="background: #94a3b8;"></span>
+                        <span>⚪ その他・事実: <strong>${ots.neutralCount}件</strong> (${ots.neutralRate}%)</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // 2. 代表意見（抽出型要約）カード一覧
+    const repListEl = document.getElementById('summaryRepOpinionsList');
+    if (repListEl) {
+        repListEl.innerHTML = '';
+        if (!summary.repOpinions || summary.repOpinions.length === 0) {
+            repListEl.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">代表意見が見つかりませんでした</div>`;
+        } else {
+            summary.repOpinions.forEach(rep => {
+                const doc = rep.doc;
+                const card = document.createElement('div');
+                card.className = 'rep-opinion-card';
+
+                const typeObj = doc.opinionType || { label: '意見', icon: '💬', color: '#64748b' };
+                const attrBadge = doc.attribute ? `<span class="opinion-badge-attr">${escapeHtml(doc.attribute)}</span>` : '';
+                const scoreBadge = `<span class="opinion-score-badge">適合度: ${doc.relevanceScore || 50}%</span>`;
+
+                card.innerHTML = `
+                    <div class="rep-opinion-header">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="rep-rank-badge">★ 代表意見 #${rep.rank}</span>
+                            <span class="opinion-type-badge type-${doc.opinionType ? doc.opinionType.type : 'neutral'}">
+                                ${typeObj.icon} ${typeObj.label}
+                            </span>
+                            ${attrBadge}
+                        </div>
+                        ${scoreBadge}
+                    </div>
+                    <div class="rep-opinion-text">${formatHighlightedText(doc.text)}</div>
+                `;
+                repListEl.appendChild(card);
+            });
         }
-    );
-}
+    }
 
-/**
- * 共起ネットワーク描画
- */
-function updateNetwork() {
-    if (!AppState.subcorpusStats) return;
-    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
+    // 3. 主要論点（トピック別サマリーカード）
+    const topicsGridEl = document.getElementById('summaryTopicsGrid');
+    if (topicsGridEl) {
+        topicsGridEl.innerHTML = '';
+        if (!summary.topicSummaries || summary.topicSummaries.length === 0) {
+            topicsGridEl.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">論点グループを分類するのに十分な回答数がありません</div>`;
+        } else {
+            summary.topicSummaries.forEach(topic => {
+                const card = document.createElement('div');
+                card.className = 'topic-card';
 
-    NetworkVisualizer.render(
-        AppState.subcorpusStats.wordList,
-        AppState.subcorpusStats.coocCounts,
-        AppState.targetKeyword,
-        activeRelated,
-        {
-            resolvedTargetWord: AppState.resolvedTargetWord,
-            maxWords: AppState.networkMaxWords,
-            spacingMode: AppState.networkSpacing,
-            fontSize: AppState.networkFontSize,
-            onWordClick: (word) => {
-                document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                document.getElementById('inputFilterOpinionText').value = word;
-                renderOpinionsList(word);
-            }
-        }
-    );
-}
+                const kwTags = topic.keywords.map(kw => `<span class="topic-keyword-tag">${escapeHtml(kw)}</span>`).join('');
+                const repText = (topic.representativeOpinions && topic.representativeOpinions.length > 0)
+                    ? `「${escapeHtml(topic.representativeOpinions[0].text.length > 75 ? topic.representativeOpinions[0].text.substring(0, 75) + '…' : topic.representativeOpinions[0].text)}」`
+                    : '代表意見なし';
 
-/**
- * UMAP散布図描画
- */
-function updateUmap() {
-    if (!AppState.subcorpusStats || !AppState.filterResult) return;
-    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
+                card.innerHTML = `
+                    <div>
+                        <div class="topic-card-header">
+                            <span class="topic-card-title">${escapeHtml(topic.name)}</span>
+                            <span class="topic-card-badge">${topic.docCount}件 (${topic.shareRate}%)</span>
+                        </div>
+                        <div class="topic-keywords-wrap">${kwTags}</div>
+                        <div class="topic-rep-text">${repText}</div>
+                    </div>
+                    <div class="topic-card-footer">
+                        <span>💬 クリックして該当の生の声を見る</span>
+                        <span>🔍 ドリルダウン</span>
+                    </div>
+                `;
 
-    UmapVisualizer.render(
-        AppState.umapMode,
-        AppState.subcorpusStats.wordList,
-        AppState.subcorpusStats.coocCounts,
-        AppState.subcorpusStats.docFreq,
-        AppState.filterResult.matchedDocs,
-        AppState.targetKeyword,
-        activeRelated,
-        {
-            resolvedTargetWord: AppState.resolvedTargetWord,
-            maxWords: 50,
-            spreadMode: AppState.umapSpread,
-            fontSize: AppState.umapFontSize,
-            onPointClick: (point) => {
-                if (point.rawDoc) {
-                    // 意見プロットクリック時
+                // クリックで該当トピックの生の声一覧へジャンプ
+                card.addEventListener('click', () => {
                     document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                    document.getElementById('inputFilterOpinionText').value = point.rawDoc.matchedWords[0] || '';
-                    renderOpinionsList(point.rawDoc.matchedWords[0] || '');
-                } else {
-                    // 単語プロットクリック時
-                    document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                    document.getElementById('inputFilterOpinionText').value = point.text;
-                    renderOpinionsList(point.text);
-                }
-            }
+                    const primaryKw = topic.keywords[0] || '';
+                    document.getElementById('inputFilterOpinionText').value = primaryKw;
+                    renderOpinionsList(primaryKw);
+                });
+
+                topicsGridEl.appendChild(card);
+            });
         }
-    );
+    }
+
+    // 4. 全体比の特徴キーワード（オッズ比ランキング）
+    const oddsTableEl = document.getElementById('summaryOddsKeywordsTable');
+    if (oddsTableEl) {
+        oddsTableEl.innerHTML = '';
+        if (!summary.oddsRatioKeywords || summary.oddsRatioKeywords.length === 0) {
+            oddsTableEl.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">特異度データを計算中、または差分データがありません</div>`;
+        } else {
+            let trRows = summary.oddsRatioKeywords.map((k, i) => `
+                <tr>
+                    <td style="font-weight: 700; color: #475569;">#${i + 1}</td>
+                    <td><strong>${escapeHtml(k.word)}</strong></td>
+                    <td>${k.count} 回 (${k.matchedDf} 件)</td>
+                    <td>${k.matchedRatePercent}%</td>
+                    <td>${k.totalRatePercent}%</td>
+                    <td><span class="odds-ratio-val">約 ${k.oddsRatio} 倍</span></td>
+                </tr>
+            `).join('');
+
+            oddsTableEl.innerHTML = `
+                <table class="odds-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 40px;">順位</th>
+                            <th>単語</th>
+                            <th>意見内出現数</th>
+                            <th>この意見群での出現率</th>
+                            <th>アンケート全体での出現率</th>
+                            <th>特異度（倍率）</th>
+                        </tr>
+                    </thead>
+                    <tbody>${trRows}</tbody>
+                </table>
+            `;
+        }
+    }
 }
 
 /**
- * 属性別クロス集計描画
+ * ハイライト付きテキスト整形ヘルパー
  */
-function updateAttrChart() {
-    if (!AppState.filterResult) return;
-    AttrChartVisualizer.render(
-        AppState.rawRows,
-        AppState.filterResult.matchedDocs,
-        AppState.attrCol,
-        AppState.targetKeyword
-    );
+function formatHighlightedText(rawText) {
+    let highlighted = escapeHtml(rawText);
+    const targetLower = (AppState.targetKeyword || '').toLowerCase();
+    const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
+    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word.toLowerCase());
+
+    if (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword) {
+        const regR = new RegExp(escapeRegExp(AppState.resolvedTargetWord), 'gi');
+        highlighted = highlighted.replace(regR, m => `<span class="hl-target">${m}</span>`);
+    }
+    if (AppState.targetKeyword) {
+        const regT = new RegExp(escapeRegExp(AppState.targetKeyword), 'gi');
+        highlighted = highlighted.replace(regT, m => `<span class="hl-target">${m}</span>`);
+    }
+    activeRelated.forEach(rw => {
+        if (rw) {
+            const regRel = new RegExp(escapeRegExp(rw), 'gi');
+            highlighted = highlighted.replace(regRel, m => `<span class="hl-related">${m}</span>`);
+        }
+    });
+    return highlighted;
 }
 
 /**
- * 生の声（回答文）一覧の描画
+ * 生の声（回答文）一覧の描画（ソート・タイプフィルタ・適合度バッジ対応）
  */
 function renderOpinionsList(filterKeyword = '') {
     const container = document.getElementById('opinionsListContainer');
@@ -875,23 +1205,40 @@ function renderOpinionsList(filterKeyword = '') {
         return;
     }
 
-    const docs = AppState.filterResult.matchedDocs;
+    let docs = [...AppState.filterResult.matchedDocs];
     const filterLower = (filterKeyword || '').toLowerCase().trim();
 
-    const filteredDocs = filterLower
-        ? docs.filter(d => d.text.toLowerCase().includes(filterLower))
-        : docs;
+    // 1. テキスト絞り込み
+    if (filterLower) {
+        docs = docs.filter(d => d.text.toLowerCase().includes(filterLower));
+    }
 
-    if (filteredDocs.length === 0) {
-        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted);">「${filterKeyword}」に該当する意見が見つかりませんでした</div>`;
+    // 2. 意見タイプフィルター
+    if (AppState.opinionsTypeFilter && AppState.opinionsTypeFilter !== 'all') {
+        docs = docs.filter(d => {
+            const t = (d.opinionType && d.opinionType.type) ? d.opinionType.type : 'neutral';
+            return t === AppState.opinionsTypeFilter;
+        });
+    }
+
+    // 3. ソート順の適用
+    if (AppState.opinionsSort === 'relevance') {
+        docs.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+    } else if (AppState.opinionsSort === 'original') {
+        docs.sort((a, b) => a.originalIndex - b.originalIndex);
+    } else if (AppState.opinionsSort === 'lengthDesc') {
+        docs.sort((a, b) => b.text.length - a.text.length);
+    }
+
+    if (docs.length === 0) {
+        container.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--text-muted);">指定した条件に該当する意見が見つかりませんでした</div>`;
         return;
     }
 
     const targetLower = (AppState.targetKeyword || '').toLowerCase();
     const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
-    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word.toLowerCase());
 
-    filteredDocs.forEach(d => {
+    docs.forEach(d => {
         const card = document.createElement('div');
         card.className = 'opinion-card';
 
@@ -899,32 +1246,37 @@ function renderOpinionsList(filterKeyword = '') {
         const tagsHtml = d.matchedWords.map(w => {
             const wLower = w.toLowerCase();
             const isTarget = wLower === targetLower || wLower === resolvedLower || (targetLower && wLower.includes(targetLower));
-            return `<span class="${isTarget ? 'tag-target' : 'tag-related'}">${w}</span>`;
+            return `<span class="${isTarget ? 'tag-target' : 'tag-related'}">${escapeHtml(w)}</span>`;
         }).join('');
 
-        // テキストのハイライト生成
-        let highlighted = escapeHtml(d.text);
-        if (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword) {
-            const regR = new RegExp(escapeRegExp(AppState.resolvedTargetWord), 'gi');
-            highlighted = highlighted.replace(regR, m => `<span class="hl-target">${m}</span>`);
-        }
-        if (AppState.targetKeyword) {
-            const regT = new RegExp(escapeRegExp(AppState.targetKeyword), 'gi');
-            highlighted = highlighted.replace(regT, m => `<span class="hl-target">${m}</span>`);
-        }
-        activeRelated.forEach(rw => {
-            if (rw) {
-                const regRel = new RegExp(escapeRegExp(rw), 'gi');
-                highlighted = highlighted.replace(regRel, m => `<span class="hl-related">${m}</span>`);
-            }
-        });
+        // 意見タイプバッジ
+        const typeObj = d.opinionType || { type: 'neutral', label: 'その他', icon: '⚪' };
+        const typeBadge = `<span class="opinion-type-badge type-${typeObj.type}">${typeObj.icon} ${typeObj.label}</span>`;
+
+        // 適合度スコアバッジ
+        const scoreBadge = (d.relevanceScore !== undefined)
+            ? `<span class="opinion-score-badge">適合度: ${d.relevanceScore}%</span>`
+            : '';
+
+        // 属性バッジ
+        const attrBadge = d.attribute ? `<span class="opinion-badge-attr">${escapeHtml(d.attribute)}</span>` : '';
+
+        // 文単位抽出の場合、フォーカス案内
+        const unitNotice = (AppState.extractUnit === 'sentence' && d.focusedSentences && d.focusedSentences.length > 0)
+            ? `<small style="color: #0284c7; font-size: 11px; margin-left: 6px;">[抽出文表示]</small>`
+            : '';
 
         card.innerHTML = `
             <div class="opinion-meta">
-                <div class="opinion-matched-tags">${tagsHtml}</div>
-                ${d.attribute ? `<span class="opinion-badge-attr">${escapeHtml(d.attribute)}</span>` : ''}
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                    <div class="opinion-matched-tags">${tagsHtml}</div>
+                    ${typeBadge}
+                    ${attrBadge}
+                    ${unitNotice}
+                </div>
+                ${scoreBadge}
             </div>
-            <div class="opinion-text">${highlighted}</div>
+            <div class="opinion-text">${formatHighlightedText(d.text)}</div>
         `;
 
         container.appendChild(card);
