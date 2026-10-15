@@ -304,45 +304,148 @@ const NetworkVisualizer = {
                 weight: e.weight
             }));
 
-        // 2. コミュニティ検出 (Label Propagation)
-        this.detectCommunities();
-
-        // 3. 物理シミュレーションの実行（高速に初期収束させる）
+        // 2. 物理シミュレーションの実行（共起関係に基づく自然な空間配置・島形成へ高速収束）
         this.simulateLayout(160);
+
+        // 3. 空間配置（近傍クラスタ）とトポロジー共起結合を融合した高精度コミュニティ検出
+        this.detectCommunities();
 
         // 4. 初回描画
         this.renderFrame();
     },
 
+    /**
+     * 話題グループ（コミュニティ）の判定
+     * 単純なラベル伝播ではなく、物理シミュレーションによる空間的近接性と
+     * 単語間の共起エッジ重みを融合した凝集型階層クラスタリング（Agglomerative Hierarchical Clustering）
+     */
     detectCommunities() {
-        for (let iter = 0; iter < 10; iter++) {
-            this.nodes.forEach(node => {
-                const neighborLabels = {};
-                this.edges.forEach(edge => {
-                    if (edge.source.id === node.id) {
-                        neighborLabels[edge.target.community] = (neighborLabels[edge.target.community] || 0) + edge.weight;
-                    } else if (edge.target.id === node.id) {
-                        neighborLabels[edge.source.community] = (neighborLabels[edge.source.community] || 0) + edge.weight;
-                    }
-                });
-                let maxLabel = node.community;
-                let maxWeight = 0;
-                Object.entries(neighborLabels).forEach(([lbl, wt]) => {
-                    if (wt > maxWeight) {
-                        maxWeight = wt;
-                        maxLabel = lbl;
-                    }
-                });
-                node.community = maxLabel;
-            });
+        if (!this.nodes || this.nodes.length === 0) return;
+
+        // ターゲットノード（注目語）と一般ノードを分離
+        const nonTargetNodes = this.nodes.filter(n => !n.isTarget);
+        const N = nonTargetNodes.length;
+        if (N === 0) {
+            this.communityThemes = [];
+            return;
         }
 
-        const counts = {};
-        this.nodes.forEach(n => { counts[n.community] = (counts[n.community] || 0) + 1; });
-        const sorted = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+        // ノード数に応じた最適な話題グループ数 k (3〜5)
+        let k = 3;
+        if (N >= 29) k = 5;
+        else if (N >= 15) k = 4;
+        k = Math.min(k, N);
+
+        // エッジ重みマップの構築
+        const edgeMap = new Map();
+        this.edges.forEach(e => {
+            edgeMap.set(`${e.source.id}|||${e.target.id}`, e.weight);
+            edgeMap.set(`${e.target.id}|||${e.source.id}`, e.weight);
+        });
+
+        // 画面座標のスパンを計算（正規化用）
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        nonTargetNodes.forEach(n => {
+            if (n.x < minX) minX = n.x;
+            if (n.x > maxX) maxX = n.x;
+            if (n.y < minY) minY = n.y;
+            if (n.y > maxY) maxY = n.y;
+        });
+        const maxSpan = Math.max(10, Math.hypot(maxX - minX, maxY - minY));
+
+        // 各ノードを独立した初期クラスタにする
+        let clusters = nonTargetNodes.map((n, i) => ({
+            id: i,
+            nodes: [n],
+            cx: n.x,
+            cy: n.y
+        }));
+
+        // クラスタ間距離の計算関数 (空間的セントロイド距離 × 共起結合ボーナス)
+        const calcClusterDist = (c1, c2) => {
+            const spatialDist = Math.hypot(c1.cx - c2.cx, c1.cy - c2.cy) / maxSpan;
+            let totalWeight = 0;
+            let pairCount = 0;
+            c1.nodes.forEach(n1 => {
+                c2.nodes.forEach(n2 => {
+                    const w = edgeMap.get(`${n1.id}|||${n2.id}`) || 0;
+                    totalWeight += w;
+                    pairCount++;
+                });
+            });
+            const avgWeight = pairCount > 0 ? totalWeight / pairCount : 0;
+            // エッジで結ばれている場合は距離を最大0.5割引
+            const coocDiscount = Math.max(0.4, 1.0 - Math.min(0.6, avgWeight * 0.06));
+            return spatialDist * coocDiscount;
+        };
+
+        // 目標クラスタ数 k になるまで最も距離の近いクラスタを逐次統合
+        while (clusters.length > k) {
+            let minDist = Infinity;
+            let mergeI = 0, mergeJ = 1;
+
+            for (let i = 0; i < clusters.length; i++) {
+                for (let j = i + 1; j < clusters.length; j++) {
+                    const d = calcClusterDist(clusters[i], clusters[j]);
+                    if (d < minDist) {
+                        minDist = d;
+                        mergeI = i;
+                        mergeJ = j;
+                    }
+                }
+            }
+
+            const cA = clusters[mergeI];
+            const cB = clusters[mergeJ];
+            const mergedNodes = [...cA.nodes, ...cB.nodes];
+            const avgX = mergedNodes.reduce((s, n) => s + n.x, 0) / mergedNodes.length;
+            const avgY = mergedNodes.reduce((s, n) => s + n.y, 0) / mergedNodes.length;
+
+            clusters.splice(mergeJ, 1);
+            clusters[mergeI] = {
+                id: cA.id,
+                nodes: mergedNodes,
+                cx: avgX,
+                cy: avgY
+            };
+        }
+
+        // 視覚的調和のため、画面中心からの角度順（時計回り）にクラスタをソート
+        const centerX = this.canvas.width / 2;
+        const centerY = this.canvas.height / 2;
+        clusters.sort((a, b) => {
+            const angleA = Math.atan2(a.cy - centerY, a.cx - centerX);
+            const angleB = Math.atan2(b.cy - centerY, b.cx - centerX);
+            return angleA - angleB;
+        });
+
+        // 各ノードへ communityIndex とコミュニティIDを反映
+        clusters.forEach((c, idx) => {
+            c.nodes.forEach(n => {
+                n.communityIndex = idx;
+                n.community = `c_${idx}`;
+            });
+        });
+
+        // ターゲットノードは独立した中心（communityIndex = -1）
         this.nodes.forEach(n => {
-            const idx = sorted.indexOf(n.community);
-            n.communityIndex = idx >= 0 ? idx : 0;
+            if (n.isTarget) {
+                n.communityIndex = -1;
+                n.community = 'target';
+            }
+        });
+
+        // 各話題グループのテーマ名・代表語を保存（凡例・ツールチップ用）
+        this.communityThemes = clusters.map((c, idx) => {
+            const sortedWords = [...c.nodes].sort((a, b) => (b.count || 0) - (a.count || 0));
+            const topWords = sortedWords.slice(0, 2).map(n => n.id);
+            return {
+                index: idx,
+                name: `グループ ${idx + 1}`,
+                label: topWords.join('・') || `グループ ${idx + 1}`,
+                count: c.nodes.length,
+                members: c.nodes
+            };
         });
     },
 
@@ -468,26 +571,6 @@ const NetworkVisualizer = {
 
         // 1. エッジ描画
         const maxWeight = Math.max(...this.edges.map(e => e.weight), 1);
-        this.edges.forEach(e => {
-            const isConnectedToHover = !isExport && this.hoverNode && (e.source.id === this.hoverNode.id || e.target.id === this.hoverNode.id);
-            const alpha = (!isExport && this.hoverNode)
-                ? (isConnectedToHover ? 0.9 : 0.08)
-                : 0.25 + (e.weight / maxWeight) * 0.45;
-
-            const lineWidth = (!isExport && this.hoverNode && isConnectedToHover)
-                ? Math.min(4.5, 1.5 + (e.weight / maxWeight) * 3.5)
-                : Math.min(3, 0.8 + (e.weight / maxWeight) * 2.2);
-
-            ctx.strokeStyle = (!isExport && isConnectedToHover) ? '#2563eb' : `rgba(148, 163, 184, ${alpha})`;
-            ctx.lineWidth = lineWidth;
-            ctx.beginPath();
-            ctx.moveTo(e.source.x, e.source.y);
-            ctx.lineTo(e.target.x, e.target.y);
-            ctx.stroke();
-        });
-
-        // 2. ノード描画
-        // 話題グループ（コミュニティ）向けの多彩で見分けやすい配色パレット
         const palette = [
             '#10b981', // エメラルドグリーン (グループ1)
             '#f59e0b', // アンバーオレンジ (グループ2)
@@ -500,6 +583,36 @@ const NetworkVisualizer = {
             '#64748b'  // スレートグレー (グループ9)
         ];
 
+        this.edges.forEach(e => {
+            const isConnectedToHover = !isExport && this.hoverNode && (e.source.id === this.hoverNode.id || e.target.id === this.hoverNode.id);
+            const isSameCommunity = this.colorMode === 'community' && e.source.communityIndex >= 0 && e.source.communityIndex === e.target.communityIndex;
+
+            const alpha = (!isExport && this.hoverNode)
+                ? (isConnectedToHover ? 0.92 : 0.06)
+                : (isSameCommunity ? 0.40 + (e.weight / maxWeight) * 0.45 : 0.18 + (e.weight / maxWeight) * 0.35);
+
+            const lineWidth = (!isExport && this.hoverNode && isConnectedToHover)
+                ? Math.min(4.5, 1.8 + (e.weight / maxWeight) * 3.5)
+                : (isSameCommunity ? Math.min(3.2, 1.0 + (e.weight / maxWeight) * 2.2) : Math.min(2.0, 0.7 + (e.weight / maxWeight) * 1.5));
+
+            if (!isExport && isConnectedToHover) {
+                ctx.strokeStyle = '#2563eb';
+            } else if (isSameCommunity) {
+                ctx.strokeStyle = palette[e.source.communityIndex % palette.length];
+            } else {
+                ctx.strokeStyle = `rgba(148, 163, 184, ${alpha})`;
+            }
+
+            ctx.globalAlpha = (!isExport && isConnectedToHover) ? 1.0 : alpha;
+            ctx.lineWidth = lineWidth;
+            ctx.beginPath();
+            ctx.moveTo(e.source.x, e.source.y);
+            ctx.lineTo(e.target.x, e.target.y);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        });
+
+        // 2. ノード描画
         this.nodes.forEach(node => {
             const isTarget = this.isTargetNode(node.id);
             const isRelated = relatedSet.has(node.id.toLowerCase());
@@ -531,7 +644,8 @@ const NetworkVisualizer = {
                     strokeWidth = 3.5;
                 } else {
                     // 単語間の結びつき（コミュニティ）に基づく多彩な色分け
-                    fillColor = palette[node.communityIndex % palette.length];
+                    const cIdx = node.communityIndex >= 0 ? node.communityIndex : 0;
+                    fillColor = palette[cIdx % palette.length];
                     if (isRelated) {
                         strokeColor = '#0284c7'; // 関連語チップの語はブルーの外枠で役割を明示
                         strokeWidth = 3;
@@ -584,6 +698,42 @@ const NetworkVisualizer = {
             ctx.fillStyle = isTarget ? '#9f1239' : (isRelated ? '#0369a1' : '#1e293b');
             ctx.fillText(node.id, node.x, textY);
         });
+
+        // 3. ホバーノードの詳細ツールチップ
+        if (!isExport && this.hoverNode) {
+            const hn = this.hoverNode;
+            let groupLabel = '';
+            if (hn.isTarget) {
+                groupLabel = '注目キーワード (中心語)';
+            } else if (this.communityThemes && this.communityThemes[hn.communityIndex]) {
+                groupLabel = `話題: ${this.communityThemes[hn.communityIndex].label}`;
+            } else {
+                groupLabel = `グループ ${(hn.communityIndex || 0) + 1}`;
+            }
+
+            const tipText = `${hn.id} (出現: ${hn.count}回 / ${groupLabel})`;
+            ctx.font = 'bold 12px sans-serif';
+            const metrics = ctx.measureText(tipText);
+            const tipW = metrics.width + 16;
+            const tipH = 26;
+            const tipX = hn.x - tipW / 2;
+            const tipY = hn.y - hn.radius - 32;
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect ? ctx.roundRect(tipX, tipY, tipW, tipH, 5) : ctx.rect(tipX, tipY, tipW, tipH);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(tipText, hn.x, tipY + tipH / 2);
+            ctx.restore();
+        }
 
         ctx.restore();
         this.drawLegend(ctx, w, h);
@@ -647,19 +797,21 @@ const NetworkVisualizer = {
     },
 
     drawLegend(ctx, w, h) {
-        // 右上に簡潔な凡例を表示
-        const pad = 12;
-        const boxW = 190;
-        const boxH = 75;
+        const pad = 14;
+        const themes = this.communityThemes || [];
+        const isCommMode = this.colorMode === 'community' && themes.length > 0;
+
+        const boxH = this.colorMode === 'role' ? 76 : (isCommMode ? 56 + themes.length * 20 : 76);
+        const boxW = isCommMode ? 220 : 190;
         const x = w - boxW - pad;
         const y = pad;
 
         ctx.save();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.strokeStyle = '#e2e8f0';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.93)';
+        ctx.strokeStyle = '#cbd5e1';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, 6) : ctx.rect(x, y, boxW, boxH);
+        ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, 8) : ctx.rect(x, y, boxW, boxH);
         ctx.fill();
         ctx.stroke();
 
@@ -669,28 +821,25 @@ const NetworkVisualizer = {
 
         if (this.colorMode === 'role') {
             // 役割別モードの凡例
-            // 1. ターゲットキーワード
             ctx.beginPath();
             ctx.arc(x + 16, y + 16, 6, 0, Math.PI * 2);
             ctx.fillStyle = '#e11d48';
             ctx.fill();
-            ctx.fillStyle = '#334155';
+            ctx.fillStyle = '#1e293b';
             ctx.fillText('指定キーワード (注目中心)', x + 28, y + 16);
 
-            // 2. 関連語
             ctx.beginPath();
             ctx.arc(x + 16, y + 36, 5, 0, Math.PI * 2);
             ctx.fillStyle = '#0284c7';
             ctx.fill();
-            ctx.fillStyle = '#334155';
+            ctx.fillStyle = '#1e293b';
             ctx.fillText('関連語 (共起・文脈近傍)', x + 28, y + 36);
 
-            // 3. その他共起語
             ctx.beginPath();
             ctx.arc(x + 16, y + 56, 4, 0, Math.PI * 2);
             ctx.fillStyle = '#10b981';
             ctx.fill();
-            ctx.fillStyle = '#334155';
+            ctx.fillStyle = '#1e293b';
             ctx.fillText('その他の共起単語', x + 28, y + 56);
         } else {
             // 話題グループ（コミュニティ）別モードの凡例
@@ -704,10 +853,10 @@ const NetworkVisualizer = {
             ctx.strokeStyle = '#f43f5e';
             ctx.lineWidth = 1.5;
             ctx.stroke();
-            ctx.fillStyle = '#334155';
+            ctx.fillStyle = '#1e293b';
             ctx.fillText('指定キーワード (中心語)', x + 28, y + 16);
 
-            // 2. 関連語マーク（アクセントリング）
+            // 2. 関連語アクセントリング
             ctx.beginPath();
             ctx.arc(x + 16, y + 36, 5, 0, Math.PI * 2);
             ctx.fillStyle = '#64748b';
@@ -717,20 +866,37 @@ const NetworkVisualizer = {
             ctx.strokeStyle = '#0284c7';
             ctx.lineWidth = 1.8;
             ctx.stroke();
-            ctx.fillStyle = '#334155';
-            ctx.fillText('関連語 (選択中・外枠青)', x + 28, y + 36);
+            ctx.fillStyle = '#1e293b';
+            ctx.fillText('選択中の関連語 (青外枠)', x + 28, y + 36);
 
-            // 3. 話題グループ色分けサンプル
-            const dotX = x + 12;
-            const colors = ['#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'];
-            colors.forEach((c, idx) => {
-                ctx.beginPath();
-                ctx.arc(dotX + idx * 7, y + 56, 3, 0, Math.PI * 2);
-                ctx.fillStyle = c;
-                ctx.fill();
-            });
-            ctx.fillStyle = '#334155';
-            ctx.fillText('色: 話題グループ(クラスター)', x + 44, y + 56);
+            // 3. 各話題グループのテーマ一覧
+            const palette = [
+                '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#3b82f6', '#f97316', '#14b8a6', '#64748b'
+            ];
+            if (isCommMode) {
+                themes.forEach((th, idx) => {
+                    const rowY = y + 56 + idx * 20;
+                    const cColor = palette[idx % palette.length];
+                    ctx.beginPath();
+                    ctx.arc(x + 16, rowY, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = cColor;
+                    ctx.fill();
+
+                    ctx.fillStyle = '#334155';
+                    ctx.font = 'bold 10px sans-serif';
+                    ctx.fillText(`${th.name}: ${th.label} (${th.count}語)`, x + 28, rowY);
+                });
+            } else {
+                const dotX = x + 12;
+                ['#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'].forEach((c, idx) => {
+                    ctx.beginPath();
+                    ctx.arc(dotX + idx * 7, y + 56, 3, 0, Math.PI * 2);
+                    ctx.fillStyle = c;
+                    ctx.fill();
+                });
+                ctx.fillStyle = '#334155';
+                ctx.fillText('色: 話題グループ(クラスター)', x + 44, y + 56);
+            }
         }
 
         ctx.restore();
