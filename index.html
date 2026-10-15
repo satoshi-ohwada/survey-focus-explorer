@@ -394,12 +394,26 @@
                                 <option value="tfidf">特徴度 (TF-IDF) 順</option>
                             </select>
                         </label>
-                        <label>表示単語数:
-                            <select id="selectCloudMaxWords" class="form-select btn-sm" style="width: auto; display: inline-block;">
-                                <option value="40">40語</option>
-                                <option value="60" selected>60語</option>
-                                <option value="80">80語</option>
+                        <label style="margin-right: 12px;">形状:
+                            <select id="selectCloudShape" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="circle" selected>雲形（楕円）</option>
+                                <option value="square">長方形（矩形）</option>
                             </select>
+                        </label>
+                        <label style="margin-right: 12px;">単語数:
+                            <input type="number" id="inputCloudMaxWords" class="form-select btn-sm" min="10" max="300" step="5" value="60" list="cloudMaxWordsList" style="width: 76px; display: inline-block; padding: 2px 6px;"> 語
+                            <datalist id="cloudMaxWordsList">
+                                <option value="20">20語</option>
+                                <option value="30">30語</option>
+                                <option value="40">40語</option>
+                                <option value="50">50語</option>
+                                <option value="60">60語</option>
+                                <option value="80">80語</option>
+                                <option value="100">100語</option>
+                                <option value="120">120語</option>
+                                <option value="150">150語</option>
+                                <option value="200">200語</option>
+                            </datalist>
                         </label>
                         <span class="btn-export-group">
                             <button type="button" id="btnSaveCloudImage" class="btn btn-sm" title="Word/PowerPoint向けに白背景のPNG画像として保存">📷 画像保存 (PNG)</button>

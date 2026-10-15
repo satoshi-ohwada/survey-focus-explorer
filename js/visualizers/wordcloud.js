@@ -26,9 +26,11 @@ const WordCloudVisualizer = {
         this.activeRelatedWords = activeRelatedWords || [];
 
         const rankingMethod = options.rankingMethod || 'count'; // 'count' or 'tfidf'
-        const maxWords = options.maxWords || 60;
+        const maxWords = parseInt(options.maxWords, 10) || 60;
+        const shape = options.shape || 'circle'; // 'circle' (雲形) or 'square' (長方形)
         this.lastRanking = rankingMethod;
         this.lastMaxWords = maxWords;
+        this.lastShape = shape;
 
         const rectW = this.canvas.clientWidth || (this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0);
         const rectH = this.canvas.clientHeight || (this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0);
@@ -59,10 +61,18 @@ const WordCloudVisualizer = {
         const maxVal = Math.max(...filtered.map(w => rankingMethod === 'tfidf' ? w.tfidf : w.count));
         const minVal = Math.min(...filtered.map(w => rankingMethod === 'tfidf' ? w.tfidf : w.count));
 
+        // 単語数に応じた適応的フォントサイズ調整（語数が多いときは詰め、少ないときは見栄えよく）
+        let wordCountScale = 1.0;
+        if (filtered.length > 70) {
+            wordCountScale = Math.max(0.65, Math.sqrt(70 / filtered.length));
+        } else if (filtered.length < 35) {
+            wordCountScale = 1.15;
+        }
+
         // 画面の高さに応じてフォントサイズのスケールを自然に調整（ノートPCから大画面まで美しくフィット）
-        const baseMinFont = height < 440 ? 14 : (height > 720 ? 18 : 16);
-        const baseMaxFont = height < 440 ? 46 : (height > 750 ? 82 : (height > 600 ? 68 : 56));
-        const fontRange = baseMaxFont - baseMinFont;
+        const baseMinFont = Math.round((height < 440 ? 12 : (height > 720 ? 16 : 14)) * wordCountScale);
+        const baseMaxFont = Math.round((height < 440 ? 44 : (height > 750 ? 80 : (height > 600 ? 66 : 54))) * wordCountScale);
+        const fontRange = Math.max(10, baseMaxFont - baseMinFont);
 
         // wordcloud2.js 形式のリスト: [[text, weight], ...]
         const list = filtered.map(item => {
@@ -92,6 +102,11 @@ const WordCloudVisualizer = {
             return colors[idx];
         };
 
+        const isSquare = (shape === 'square' || shape === 'rect');
+        const cloudShape = isSquare ? 'square' : 'circle';
+        // 矩形時はキャンバス比率（4:3なら約0.75）、雲形時は自然な広がりを生む0.65
+        const ellipticity = isSquare ? (height / width) : 0.65;
+
         if (typeof WordCloud === 'function') {
             WordCloud(this.canvas, {
                 list: list,
@@ -100,10 +115,12 @@ const WordCloudVisualizer = {
                 fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif',
                 color: colorCallback,
                 backgroundColor: '#ffffff',
-                rotateRatio: 0.15,
-                rotationSteps: 2,
-                minRotation: -Math.PI / 6,
-                maxRotation: Math.PI / 6,
+                shape: cloudShape,
+                ellipticity: ellipticity,
+                rotateRatio: 0,
+                rotationSteps: 0,
+                minRotation: 0,
+                maxRotation: 0,
                 shuffle: false,
                 drawOutOfBound: false,
                 shrinkToFit: true,
@@ -126,7 +143,8 @@ const WordCloudVisualizer = {
     async getExportCanvas(targetW = 1200, targetH = 900) {
         if (!this.currentWords || this.currentWords.length === 0) return null;
 
-        const filtered = this.currentWords.slice(0, this.lastMaxWords || 60);
+        const maxWords = this.lastMaxWords || 60;
+        const filtered = this.currentWords.slice(0, maxWords);
         if (filtered.length === 0) return null;
 
         const exportCanvas = document.createElement('canvas');
@@ -136,11 +154,22 @@ const WordCloudVisualizer = {
         const maxVal = Math.max(...filtered.map(w => this.lastRanking === 'tfidf' ? w.tfidf : w.count));
         const minVal = Math.min(...filtered.map(w => this.lastRanking === 'tfidf' ? w.tfidf : w.count));
 
-        // 1200x900 用にフォントサイズをダイナミックに拡大（22px 〜 86px）
+        let wordCountScale = 1.0;
+        if (filtered.length > 70) {
+            wordCountScale = Math.max(0.65, Math.sqrt(70 / filtered.length));
+        } else if (filtered.length < 35) {
+            wordCountScale = 1.15;
+        }
+
+        const baseMin = Math.round(18 * wordCountScale);
+        const baseMax = Math.round(86 * wordCountScale);
+        const range = Math.max(12, baseMax - baseMin);
+
+        // 1200x900 用にフォントサイズをダイナミックに拡大
         const list = filtered.map(item => {
             const val = this.lastRanking === 'tfidf' ? item.tfidf : item.count;
             const scale = maxVal > minVal ? (val - minVal) / (maxVal - minVal) : 0.5;
-            const size = 22 + scale * 64;
+            const size = baseMin + scale * range;
             return [item.text, size, item];
         });
 
@@ -161,6 +190,10 @@ const WordCloudVisualizer = {
             return colors[idx];
         };
 
+        const isSquare = (this.lastShape === 'square' || this.lastShape === 'rect');
+        const cloudShape = isSquare ? 'square' : 'circle';
+        const ellipticity = isSquare ? (targetH / targetW) : 0.65;
+
         return new Promise((resolve) => {
             let finished = false;
             const done = () => {
@@ -179,10 +212,12 @@ const WordCloudVisualizer = {
                 fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif',
                 color: colorCallback,
                 backgroundColor: '#ffffff',
-                rotateRatio: 0.15,
-                rotationSteps: 2,
-                minRotation: -Math.PI / 6,
-                maxRotation: Math.PI / 6,
+                shape: cloudShape,
+                ellipticity: ellipticity,
+                rotateRatio: 0,
+                rotationSteps: 0,
+                minRotation: 0,
+                maxRotation: 0,
                 shuffle: false,
                 drawOutOfBound: false,
                 shrinkToFit: true

@@ -47,6 +47,7 @@ const AppState = {
     opinionsTypeFilter: 'all', // 'all' | 'issue' | 'request' | 'positive' | 'neutral'
     cloudRanking: 'count',
     cloudMaxWords: 60,
+    cloudShape: 'circle',
     networkMaxWords: 40,
     networkSpacing: 'wide',
     networkFontSize: 'large',
@@ -286,10 +287,33 @@ function setupUIEvents() {
         AppState.cloudRanking = e.target.value;
         updateWordCloud();
     });
-    document.getElementById('selectCloudMaxWords').addEventListener('change', (e) => {
-        AppState.cloudMaxWords = parseInt(e.target.value, 10);
-        updateWordCloud();
-    });
+    const selectCloudShape = document.getElementById('selectCloudShape');
+    if (selectCloudShape) {
+        selectCloudShape.addEventListener('change', (e) => {
+            AppState.cloudShape = e.target.value;
+            updateWordCloud();
+        });
+    }
+    const inputCloudMaxWords = document.getElementById('inputCloudMaxWords');
+    if (inputCloudMaxWords) {
+        const handleMaxWordsChange = () => {
+            let val = parseInt(inputCloudMaxWords.value, 10);
+            if (isNaN(val) || val < 5) val = 60;
+            if (val > 300) val = 300;
+            if (AppState.cloudMaxWords !== val) {
+                AppState.cloudMaxWords = val;
+                updateWordCloud();
+            }
+        };
+        inputCloudMaxWords.addEventListener('change', handleMaxWordsChange);
+    }
+    const oldSelectCloudMaxWords = document.getElementById('selectCloudMaxWords');
+    if (oldSelectCloudMaxWords && oldSelectCloudMaxWords !== inputCloudMaxWords) {
+        oldSelectCloudMaxWords.addEventListener('change', (e) => {
+            AppState.cloudMaxWords = parseInt(e.target.value, 10) || 60;
+            updateWordCloud();
+        });
+    }
 
     // ネットワーク設定
     document.getElementById('selectNetworkMaxWords').addEventListener('change', (e) => {
@@ -1076,6 +1100,7 @@ function updateWordCloud() {
             resolvedTargetWord: AppState.resolvedTargetWord,
             rankingMethod: AppState.cloudRanking,
             maxWords: AppState.cloudMaxWords,
+            shape: AppState.cloudShape,
             onWordClick: (word) => {
                 // 単語クリックで生の声一覧へジャンプ
                 document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
