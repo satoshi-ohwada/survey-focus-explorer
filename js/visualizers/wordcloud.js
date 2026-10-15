@@ -89,7 +89,7 @@ const WordCloudVisualizer = {
         if (typeof WordCloud === 'function') {
             WordCloud(this.canvas, {
                 list: list,
-                gridSize: Math.max(4, Math.round(5 * (width / 960))),
+                gridSize: Math.max(6, Math.round(8 * (width / 960))),
                 weightFactor: 1,
                 fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif',
                 color: colorCallback,
@@ -128,8 +128,8 @@ const WordCloudVisualizer = {
         }
 
         const isSquare = (shape === 'square' || shape === 'rect');
-        // 領域充填率目標: 長方形は四隅まで使えるため0.70、雲形（楕円）は0.60
-        const targetFill = isSquare ? 0.70 : 0.60;
+        // 領域充填率目標: 単語間の適度なスペースと視認性を両立（長方形 0.63、雲形 0.52）
+        const targetFill = isSquare ? 0.63 : 0.52;
         const targetArea = (width * height) * targetFill;
 
         const maxVal = Math.max(...filtered.map(w => rankingMethod === 'tfidf' ? w.tfidf : w.count));
@@ -240,7 +240,7 @@ const WordCloudVisualizer = {
 
             WordCloud(exportCanvas, {
                 list: list,
-                gridSize: Math.max(6, Math.round(5 * (targetW / 960))),
+                gridSize: Math.max(8, Math.round(9 * (targetW / 960))),
                 weightFactor: 1,
                 fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif',
                 color: colorCallback,
