@@ -995,6 +995,107 @@ function switchTab(tabName) {
 }
 
 /**
+ * ワードクラウド描画
+ */
+function updateWordCloud() {
+    if (!AppState.subcorpusStats) return;
+    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
+
+    WordCloudVisualizer.render(
+        AppState.subcorpusStats.wordList,
+        AppState.targetKeyword,
+        activeRelated,
+        {
+            resolvedTargetWord: AppState.resolvedTargetWord,
+            rankingMethod: AppState.cloudRanking,
+            maxWords: AppState.cloudMaxWords,
+            onWordClick: (word) => {
+                // 単語クリックで生の声一覧へジャンプ
+                document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
+                document.getElementById('inputFilterOpinionText').value = word;
+                renderOpinionsList(word);
+            }
+        }
+    );
+}
+
+/**
+ * 共起ネットワーク描画
+ */
+function updateNetwork() {
+    if (!AppState.subcorpusStats) return;
+    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
+
+    NetworkVisualizer.render(
+        AppState.subcorpusStats.wordList,
+        AppState.subcorpusStats.coocCounts,
+        AppState.targetKeyword,
+        activeRelated,
+        {
+            resolvedTargetWord: AppState.resolvedTargetWord,
+            maxWords: AppState.networkMaxWords,
+            spacingMode: AppState.networkSpacing,
+            fontSize: AppState.networkFontSize,
+            onWordClick: (word) => {
+                document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
+                document.getElementById('inputFilterOpinionText').value = word;
+                renderOpinionsList(word);
+            }
+        }
+    );
+}
+
+/**
+ * UMAP散布図描画
+ */
+function updateUmap() {
+    if (!AppState.subcorpusStats || !AppState.filterResult) return;
+    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
+
+    UmapVisualizer.render(
+        AppState.umapMode,
+        AppState.subcorpusStats.wordList,
+        AppState.subcorpusStats.coocCounts,
+        AppState.subcorpusStats.docFreq,
+        AppState.filterResult.matchedDocs,
+        AppState.targetKeyword,
+        activeRelated,
+        {
+            resolvedTargetWord: AppState.resolvedTargetWord,
+            maxWords: 50,
+            spreadMode: AppState.umapSpread,
+            fontSize: AppState.umapFontSize,
+            onPointClick: (point) => {
+                if (point.rawDoc) {
+                    // 意見プロットクリック時
+                    document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
+                    document.getElementById('inputFilterOpinionText').value = (point.rawDoc.matchedWords && point.rawDoc.matchedWords[0]) || '';
+                    renderOpinionsList((point.rawDoc.matchedWords && point.rawDoc.matchedWords[0]) || '');
+                } else {
+                    // 単語プロットクリック時
+                    document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
+                    document.getElementById('inputFilterOpinionText').value = point.text;
+                    renderOpinionsList(point.text);
+                }
+            }
+        }
+    );
+}
+
+/**
+ * 属性別クロス集計描画
+ */
+function updateAttrChart() {
+    if (!AppState.filterResult) return;
+    AttrChartVisualizer.render(
+        AppState.rawRows,
+        AppState.filterResult.matchedDocs,
+        AppState.attrCol,
+        AppState.targetKeyword
+    );
+}
+
+/**
  * 意見集約・論点サマリーダッシュボードの描画
  */
 function renderSummaryDashboard() {
