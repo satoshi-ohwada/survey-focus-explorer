@@ -765,10 +765,10 @@ const NetworkVisualizer = {
         const bboxW = Math.max(100, maxX - minX);
         const bboxH = Math.max(100, maxY - minY);
 
-        // 凡例領域（右上）および周囲マージン
+        // 周囲マージン（凡例が下部スリムバーのため上下均等に美しくフィット）
         const marginX = 50;
-        const marginTop = 90; // 凡例用
-        const marginBottom = 50;
+        const marginTop = 50;
+        const marginBottom = 55;
 
         const availW = targetW - marginX * 2;
         const availH = targetH - (marginTop + marginBottom);
@@ -796,108 +796,125 @@ const NetworkVisualizer = {
         return exportCanvas;
     },
 
+    /**
+     * 凡例（Legend）の描画
+     * 図との重なりを防止するため、内容を最小限に凝縮し、
+     * 最もノードと干渉しにくい左下隅にスリムなインラインバッジバーとして配置
+     */
     drawLegend(ctx, w, h) {
-        const pad = 14;
-        const themes = this.communityThemes || [];
-        const isCommMode = this.colorMode === 'community' && themes.length > 0;
-
-        const boxH = this.colorMode === 'role' ? 76 : (isCommMode ? 56 + themes.length * 20 : 76);
-        const boxW = isCommMode ? 220 : 190;
-        const x = w - boxW - pad;
-        const y = pad;
-
         ctx.save();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.93)';
-        ctx.strokeStyle = '#cbd5e1';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, 8) : ctx.rect(x, y, boxW, boxH);
-        ctx.fill();
-        ctx.stroke();
-
-        ctx.font = '11px sans-serif';
+        ctx.font = '10.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
 
+        const palette = [
+            '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#3b82f6', '#f97316', '#14b8a6', '#64748b'
+        ];
+
+        // 最小限の凡例アイテムを構成
+        const items = [];
+        items.push({ type: 'target', label: '中心語', color: '#e11d48' });
+        items.push({ type: 'related', label: '関連語', color: '#0284c7' });
+
         if (this.colorMode === 'role') {
-            // 役割別モードの凡例
-            ctx.beginPath();
-            ctx.arc(x + 16, y + 16, 6, 0, Math.PI * 2);
-            ctx.fillStyle = '#e11d48';
-            ctx.fill();
-            ctx.fillStyle = '#1e293b';
-            ctx.fillText('指定キーワード (注目中心)', x + 28, y + 16);
-
-            ctx.beginPath();
-            ctx.arc(x + 16, y + 36, 5, 0, Math.PI * 2);
-            ctx.fillStyle = '#0284c7';
-            ctx.fill();
-            ctx.fillStyle = '#1e293b';
-            ctx.fillText('関連語 (共起・文脈近傍)', x + 28, y + 36);
-
-            ctx.beginPath();
-            ctx.arc(x + 16, y + 56, 4, 0, Math.PI * 2);
-            ctx.fillStyle = '#10b981';
-            ctx.fill();
-            ctx.fillStyle = '#1e293b';
-            ctx.fillText('その他の共起単語', x + 28, y + 56);
+            items.push({ type: 'dot', label: '共起語', color: '#10b981' });
         } else {
-            // 話題グループ（コミュニティ）別モードの凡例
-            // 1. ターゲットキーワード
-            ctx.beginPath();
-            ctx.arc(x + 16, y + 16, 6, 0, Math.PI * 2);
-            ctx.fillStyle = '#e11d48';
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(x + 16, y + 16, 8, 0, Math.PI * 2);
-            ctx.strokeStyle = '#f43f5e';
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-            ctx.fillStyle = '#1e293b';
-            ctx.fillText('指定キーワード (中心語)', x + 28, y + 16);
-
-            // 2. 関連語アクセントリング
-            ctx.beginPath();
-            ctx.arc(x + 16, y + 36, 5, 0, Math.PI * 2);
-            ctx.fillStyle = '#64748b';
-            ctx.fill();
-            ctx.beginPath();
-            ctx.arc(x + 16, y + 36, 7.5, 0, Math.PI * 2);
-            ctx.strokeStyle = '#0284c7';
-            ctx.lineWidth = 1.8;
-            ctx.stroke();
-            ctx.fillStyle = '#1e293b';
-            ctx.fillText('選択中の関連語 (青外枠)', x + 28, y + 36);
-
-            // 3. 各話題グループのテーマ一覧
-            const palette = [
-                '#10b981', '#f59e0b', '#8b5cf6', '#06b6d4', '#ec4899', '#3b82f6', '#f97316', '#14b8a6', '#64748b'
-            ];
-            if (isCommMode) {
+            const themes = this.communityThemes || [];
+            if (themes.length > 0) {
                 themes.forEach((th, idx) => {
-                    const rowY = y + 56 + idx * 20;
-                    const cColor = palette[idx % palette.length];
-                    ctx.beginPath();
-                    ctx.arc(x + 16, rowY, 5, 0, Math.PI * 2);
-                    ctx.fillStyle = cColor;
-                    ctx.fill();
-
-                    ctx.fillStyle = '#334155';
-                    ctx.font = 'bold 10px sans-serif';
-                    ctx.fillText(`${th.name}: ${th.label} (${th.count}語)`, x + 28, rowY);
+                    const shortLabel = (th.label || '').split('・')[0] || `G${idx + 1}`;
+                    items.push({
+                        type: 'dot',
+                        label: shortLabel,
+                        color: palette[idx % palette.length]
+                    });
                 });
             } else {
-                const dotX = x + 12;
-                ['#10b981', '#f59e0b', '#8b5cf6', '#06b6d4'].forEach((c, idx) => {
+                items.push({ type: 'multi-dots', label: '話題グループ', colors: ['#10b981', '#f59e0b', '#8b5cf6'] });
+            }
+        }
+
+        // 横幅の自動計算
+        let totalContentW = 0;
+        const itemWidths = items.map(item => {
+            let itemW = 0;
+            if (item.type === 'target') itemW = 14 + ctx.measureText(item.label).width;
+            else if (item.type === 'related') itemW = 14 + ctx.measureText(item.label).width;
+            else if (item.type === 'multi-dots') itemW = 26 + ctx.measureText(item.label).width;
+            else itemW = 13 + ctx.measureText(item.label).width;
+            totalContentW += itemW + 10;
+            return itemW;
+        });
+
+        const boxPadX = 10;
+        const boxH = 26;
+        const boxW = Math.min(w - 28, totalContentW + boxPadX * 2 - 2);
+
+        // 左下隅に配置（ネットワーク図の中心から離れ、最も重なりにくいエリア）
+        const x = 14;
+        const y = h - boxH - 12;
+
+        // 背景プレート（半透明白＋淡いボーダー）
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        ctx.strokeStyle = 'rgba(203, 213, 225, 0.85)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, 6) : ctx.rect(x, y, boxW, boxH);
+        ctx.fill();
+        ctx.stroke();
+
+        // アイテムの描画
+        let curX = x + boxPadX;
+        const midY = y + boxH / 2;
+
+        items.forEach((item, idx) => {
+            if (item.type === 'target') {
+                ctx.beginPath();
+                ctx.arc(curX + 5, midY, 4.5, 0, Math.PI * 2);
+                ctx.fillStyle = item.color;
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(curX + 5, midY, 6.5, 0, Math.PI * 2);
+                ctx.strokeStyle = '#f43f5e';
+                ctx.lineWidth = 1.2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#334155';
+                ctx.fillText(item.label, curX + 14, midY);
+            } else if (item.type === 'related') {
+                ctx.beginPath();
+                ctx.arc(curX + 5, midY, 4, 0, Math.PI * 2);
+                ctx.fillStyle = '#64748b';
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(curX + 5, midY, 5.8, 0, Math.PI * 2);
+                ctx.strokeStyle = '#0284c7';
+                ctx.lineWidth = 1.4;
+                ctx.stroke();
+
+                ctx.fillStyle = '#334155';
+                ctx.fillText(item.label, curX + 14, midY);
+            } else if (item.type === 'multi-dots') {
+                item.colors.forEach((c, cIdx) => {
                     ctx.beginPath();
-                    ctx.arc(dotX + idx * 7, y + 56, 3, 0, Math.PI * 2);
+                    ctx.arc(curX + 4 + cIdx * 6, midY, 2.5, 0, Math.PI * 2);
                     ctx.fillStyle = c;
                     ctx.fill();
                 });
                 ctx.fillStyle = '#334155';
-                ctx.fillText('色: 話題グループ(クラスター)', x + 44, y + 56);
+                ctx.fillText(item.label, curX + 24, midY);
+            } else {
+                ctx.beginPath();
+                ctx.arc(curX + 4, midY, 4, 0, Math.PI * 2);
+                ctx.fillStyle = item.color;
+                ctx.fill();
+
+                ctx.fillStyle = '#334155';
+                ctx.fillText(item.label, curX + 12, midY);
             }
-        }
+
+            curX += itemWidths[idx] + 10;
+        });
 
         ctx.restore();
     }
