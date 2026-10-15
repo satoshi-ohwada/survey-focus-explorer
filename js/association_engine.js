@@ -112,18 +112,22 @@ const AssociationEngine = {
         const candidates = [];
         const targetDocArray = Array.from(targetDocSet);
 
-        // 関連語から除外する自単語・中心語系セット（中心語そのものが関連語一覧に混ざるのを防止）
+        // 関連語から除外する自単語・代表語セット（中心語そのものが関連語一覧に混ざるのを防止）
+        // ※「大雪」「雪道」などの派生語・複合語は重要な関連語であるため除外しない
         const targetWordVariants = new Set([
             cleanKeyword.toLowerCase(),
-            resolvedTargetWord.toLowerCase(),
-            ...compoundCandidates.map(c => c.word.toLowerCase())
+            resolvedTargetWord.toLowerCase()
         ]);
 
         for (const [w, docSet] of wordDocMap.entries()) {
             const wLower = w.toLowerCase();
-            // 自単語およびターゲット複合語は除外（中心語として扱うため関連語リストには出さない）
+            // 自単語および解決された代表中心語は除外（中心語として扱うため関連語リストには出さない）
             if (targetWordVariants.has(wLower)) continue;
-            if (w.length <= 1 && !/^[A-Za-z0-9]+$/.test(w)) continue; // 1文字の非英数はスキップ
+
+            const isKanji = /^[\p{Script=Han}]$/u.test(w);
+            const isAlphaNum = /^[A-Za-z0-9]+$/.test(w);
+            const isTarget = (wLower === cleanKeyword.toLowerCase() || wLower === resolvedTargetWord.toLowerCase());
+            if (w.length <= 1 && !isKanji && !isAlphaNum && !isTarget) continue; // 漢字・英数以外の1文字記号・ひらがな等はスキップ
 
             // 共起文書数の計算
             let coocCount = 0;
@@ -356,7 +360,10 @@ const AssociationEngine = {
             const docSet = new Set();
             for (const w of tokens) {
                 if (stopWords.has(w)) continue;
-                if (w.length <= 1 && !/^[A-Za-z0-9]+$/.test(w)) continue;
+                const isKanji = /^[\p{Script=Han}]$/u.test(w);
+                const isAlphaNum = /^[A-Za-z0-9]+$/.test(w);
+                const isTarget = (w.toLowerCase() === targetKeyword.toLowerCase() || w.toLowerCase() === resolvedTargetWord.toLowerCase());
+                if (w.length <= 1 && !isKanji && !isAlphaNum && !isTarget) continue;
 
                 wordCounts[w] = (wordCounts[w] || 0) + 1;
                 docSet.add(w);

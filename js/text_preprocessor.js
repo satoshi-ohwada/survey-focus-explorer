@@ -270,8 +270,8 @@ const TextPreprocessor = {
             processed = processed.split(src).join(rep);
         });
 
-        // 漢字の連続（2文字以上）、カタカナの連続（2文字以上）、英単語を抽出
-        const matches = processed.match(/[\p{Script=Han}]{2,}|[\p{Script=Katakana}ー]{2,}|[a-zA-Z0-9]{2,}/gu) || [];
+        // 漢字（1文字以上。日本語では漢字1文字が重要な概念を持つため）、カタカナの連続（2文字以上）、英単語を抽出
+        const matches = processed.match(/[\p{Script=Han}]{1,}|[\p{Script=Katakana}ー]{2,}|[a-zA-Z0-9]{2,}/gu) || [];
         const words = [];
         for (const m of matches) {
             if (!this.isStopWord(m)) {
@@ -308,7 +308,11 @@ const TextPreprocessor = {
         let compoundNoun = '';
 
         const pushWord = (w, p) => {
-            if (w.length >= 2 && !this.isStopWord(w)) {
+            const isKanji = /^[\p{Script=Han}]$/u.test(w);
+            const isTargetKeyword = options.targetKeyword && w.toLowerCase() === options.targetKeyword.toLowerCase();
+            const isValidLength = w.length >= 2 || isKanji || isTargetKeyword;
+
+            if (isValidLength && !this.isStopWord(w)) {
                 // 数字のみ、または記号のみの単語は除外
                 if (!/^[0-9０-９]+$/.test(w) && !/^[^\p{L}\p{N}]+$/u.test(w)) {
                     resultWords.push(w);
