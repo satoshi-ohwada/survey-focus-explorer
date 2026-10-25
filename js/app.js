@@ -761,6 +761,9 @@ function setupUIEvents() {
 async function handleFileUpload(file) {
     try {
         const parsed = await CsvParser.parse(file);
+        if (file && file.name) {
+            parsed.fileName = file.name;
+        }
         loadParsedData(parsed);
     } catch (err) {
         alert('ファイルの読み込みに失敗しました: ' + err.message);

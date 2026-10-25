@@ -196,7 +196,7 @@ const CsvParser = {
 
         // .txt でカンマ/タブが一定でなければ「1行1回答のプレーンテキスト」として処理
         if (isTxtFile && !hasConsistentCommas && !hasConsistentTabs) {
-            return this.parsePlainText(rawLines);
+            return this.parsePlainText(rawLines, fileName);
         }
 
         // CSV/TSVの場合、PapaParseで解析
@@ -209,7 +209,7 @@ const CsvParser = {
         // もしPapaParseで列が1列しかなく、かつヘッダー名が長すぎる場合はテキストファイルとみなす
         const fields = (parsed.meta.fields || []).map(f => f.replace(/^\uFEFF/, '').trim());
         if (fields.length === 1 && fields[0].length > 25) {
-            return this.parsePlainText(rawLines);
+            return this.parsePlainText(rawLines, fileName);
         }
 
         if (fields.length > 0 && parsed.data.length > 0) {
@@ -224,22 +224,24 @@ const CsvParser = {
 
             return {
                 headers: fields,
-                rows: sanitizedRows
+                rows: sanitizedRows,
+                fileName: fileName || 'data.csv'
             };
         }
 
         // フォールバック: プレーンテキストとして処理
-        return this.parsePlainText(rawLines);
+        return this.parsePlainText(rawLines, fileName);
     },
 
     /**
      * 1行1回答のテキスト（watcher.txtのようなファイル）をパースする
      * @param {string[]} lines 
-     * @returns {{headers: string[], rows: object[]}}
+     * @param {string} [fileName]
+     * @returns {{headers: string[], rows: object[], fileName: string}}
      */
-    parsePlainText(lines) {
+    parsePlainText(lines, fileName = '') {
         if (lines.length === 0) {
-            return { headers: ['自由記述テキスト'], rows: [] };
+            return { headers: ['自由記述テキスト'], rows: [], fileName: fileName || 'input.txt' };
         }
 
         const firstLine = lines[0].trim();
@@ -266,7 +268,8 @@ const CsvParser = {
 
         return {
             headers: ['ID', headerName],
-            rows: rows
+            rows: rows,
+            fileName: fileName || 'input.txt'
         };
     },
 
