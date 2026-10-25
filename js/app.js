@@ -811,33 +811,23 @@ function loadParsedData(parsed) {
         attrSelect.appendChild(opt2);
     });
 
-    // 列の自動推測（自由記述・発言内容列 / 属性・立場列）
+    // 列の高精度自動推測（自由記述・発言内容列 / 属性・立場列）
     let guessedText = AppState.headers[0];
-    const textKeywordCandidates = ['自由記述', '発言内容', '発言', '意見', 'コメント', '本文', 'テキスト', '回答'];
-    const matchedTextHeader = AppState.headers.find(h => textKeywordCandidates.some(k => h.includes(k)));
-
-    if (matchedTextHeader) {
-        guessedText = matchedTextHeader;
+    if (typeof CsvParser !== 'undefined' && typeof CsvParser.guessTextColumn === 'function') {
+        guessedText = CsvParser.guessTextColumn(AppState.headers, AppState.rawRows) || AppState.headers[0];
     } else {
-        let maxAvgLen = 0;
-        AppState.headers.forEach(h => {
-            const lens = AppState.rawRows.slice(0, 30).map(r => String(r[h] || '').length);
-            const avg = lens.reduce((a, b) => a + b, 0) / (lens.length || 1);
-            if (avg > maxAvgLen) {
-                maxAvgLen = avg;
-                guessedText = h;
-            }
-        });
+        const textKeywordCandidates = ['自由記述', '自由回答', '発言内容', '発言', 'ご意見', '意見', 'コメント', '本文', 'テキスト', '回答'];
+        const matched = AppState.headers.find(h => textKeywordCandidates.some(k => h.includes(k)));
+        guessedText = matched || AppState.headers[0];
     }
     textSelect.value = guessedText;
     AppState.textCol = guessedText;
 
     // 属性列の推測（座談会の発言者・立場・所属、アンケートの年代・性別・満足度など）
-    const attrCandidates = [
-        '発言者', '出席者', '参加者', '立場', '役職', '所属', '区分', '属性',
-        '年代', '年齢', '性別', 'カテゴリ', '満足度', '地域', '部門', 'グループ'
-    ];
-    const guessedAttr = AppState.headers.find(h => attrCandidates.some(c => h.includes(c)));
+    let guessedAttr = '';
+    if (typeof CsvParser !== 'undefined' && typeof CsvParser.guessAttributeColumn === 'function') {
+        guessedAttr = CsvParser.guessAttributeColumn(AppState.headers, AppState.rawRows, guessedText);
+    }
     if (guessedAttr && guessedAttr !== guessedText) {
         attrSelect.value = guessedAttr;
         AppState.attrCol = guessedAttr;
