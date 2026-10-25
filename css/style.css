@@ -94,8 +94,16 @@ body {
 
 .header-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
     align-items: center;
+}
+
+.header-actions .btn {
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
 /* ボタン共通 */
@@ -977,12 +985,14 @@ body {
    キーワード ＆ 関連語探索パネル（中核セクション）
    ======================================================== */
 .focus-section {
-    background: #FFFFFF;
-    border: 1px solid #CBD5E1;
+    background: linear-gradient(180deg, #FFF9FA 0%, #FFFFFF 100px);
+    border: 2px solid #FDA4AF;
+    border-top: 5px solid #E11D48;
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-md);
-    padding: 24px;
+    box-shadow: 0 6px 24px rgba(225, 29, 72, 0.10);
+    padding: 24px 28px;
     margin-bottom: 24px;
+    position: relative;
 }
 
 .focus-header {
@@ -999,25 +1009,26 @@ body {
 }
 
 .focus-badge {
-    background: #FEE2E2;
-    color: #991B1B;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 4px;
+    background: linear-gradient(135deg, #E11D48, #BE123C);
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 6px;
     letter-spacing: 0.5px;
+    box-shadow: 0 2px 6px rgba(225, 29, 72, 0.3);
 }
 
 .focus-title {
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--text-main);
+    font-size: 18px;
+    font-weight: 800;
+    color: #0F172A;
 }
 
 .focus-input-bar {
     display: flex;
     gap: 12px;
-    margin-bottom: 18px;
+    margin-bottom: 14px;
 }
 
 .focus-input-wrapper {
@@ -1029,43 +1040,58 @@ body {
 
 .focus-input-icon {
     position: absolute;
-    left: 14px;
-    font-size: 18px;
-    color: #94A3B8;
+    left: 16px;
+    font-size: 20px;
+    color: #E11D48;
 }
 
 .focus-input {
     width: 100%;
-    padding: 12px 16px 12px 44px;
-    font-size: 15px;
-    font-weight: 600;
-    border: 2px solid #E2E8F0;
+    padding: 14px 18px 14px 48px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #0F172A;
+    border: 2px solid #FB7185;
+    background: #FFFFFF;
     border-radius: var(--radius-md);
     outline: none;
-    transition: all 0.2s;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04), 0 2px 8px rgba(225, 29, 72, 0.08);
+    transition: all 0.2s ease;
+}
+
+.focus-input::placeholder {
+    color: #94A3B8;
+    font-weight: 500;
 }
 
 .focus-input:focus {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.12);
+    border-color: #E11D48;
+    background: #FFFFFF;
+    box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.20), inset 0 1px 2px rgba(0, 0, 0, 0.02);
 }
 
 .btn-focus-run {
-    padding: 12px 28px;
-    font-size: 15px;
+    padding: 14px 32px;
+    font-size: 16px;
     font-weight: 700;
-    background: linear-gradient(135deg, #E11D48, #BE123C);
+    background: linear-gradient(135deg, #E11D48 0%, #BE123C 100%);
     color: #FFFFFF;
     border: none;
     border-radius: var(--radius-md);
     cursor: pointer;
-    box-shadow: 0 3px 10px rgba(225, 29, 72, 0.3);
-    transition: all 0.2s;
+    box-shadow: 0 4px 14px rgba(225, 29, 72, 0.35);
+    transition: all 0.2s ease;
+    white-space: nowrap;
 }
 
 .btn-focus-run:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 5px 14px rgba(225, 29, 72, 0.4);
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(225, 29, 72, 0.45);
+}
+
+.btn-focus-run:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(225, 29, 72, 0.3);
 }
 
 /* 関連語エリア */
@@ -2656,16 +2682,16 @@ body {
     gap: 8px;
     flex-wrap: wrap;
     margin-top: 10px;
-    padding: 8px 12px;
-    background: #F8FAFC;
-    border: 1px solid var(--border-color);
+    padding: 8px 14px;
+    background: #FFF5F6;
+    border: 1px solid #FECDD3;
     border-radius: var(--radius-sm);
     font-size: 12px;
 }
 
 .frequent-keywords-label {
-    font-weight: 600;
-    color: #475569;
+    font-weight: 700;
+    color: #BE123C;
 }
 
 .frequent-keywords-list {
