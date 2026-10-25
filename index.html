@@ -757,12 +757,23 @@
                         <small style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">※拡大縮小: Ctrl + スクロール または ボタン</small>
                     </div>
 
-                    <div id="toolbarAttrCtrl" style="display: none;">
+                    <div id="toolbarAttrCtrl" style="display: none; align-items: center; gap: 10px; flex-wrap: wrap;">
                         <span class="btn-export-group" style="margin-left: 0;">
                             <button type="button" id="btnSaveAttrImage" class="btn btn-sm" title="Word/PowerPoint向けに白背景のPNG画像として保存">📷 画像保存 (PNG)</button>
                             <button type="button" id="btnCopyAttrImage" class="btn btn-sm" title="クリップボードに画像をコピーしてWordやPowerPointに直接貼り付け [Ctrl+V]">📋 Officeへコピー</button>
                         </span>
-                        <small style="color: var(--text-muted); font-size: 11px; margin-left: 8px;">※属性グループごとの言及割合グラフ（Word/PowerPoint貼付用白背景出力）</small>
+                        <div style="display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: 6px; padding: 2px 8px;">
+                            <span style="color: #475569; font-size: 11.5px;">集計基準:</span>
+                            <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 2px 4px;" title="各属性グループ内で、そのキーワードに関する意見を挙げた人の割合（関心度・浸透率）">
+                                <input type="radio" name="radioAttrCalcMode" value="rate" checked>
+                                <span><b>言及率</b> (属性内の関心度 %)</span>
+                            </label>
+                            <label style="cursor: pointer; display: inline-flex; align-items: center; gap: 3px; margin: 0; padding: 2px 4px;" title="抽出されたキーワード関連意見の全体の中で、どの属性がどれくらいを占めているか（内訳・ボリューム感）">
+                                <input type="radio" name="radioAttrCalcMode" value="share">
+                                <span><b>構成比</b> (意見全体の内訳 %)</span>
+                            </label>
+                        </div>
+                        <small style="color: var(--text-muted); font-size: 11px;">※関心度の強さを比較（言及率）／意見全体のボリューム内訳を比較（構成比）</small>
                     </div>
 
                     <div id="toolbarOpinionsCtrl" style="display: none; flex-wrap: wrap; align-items: center; gap: 8px;">

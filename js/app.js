@@ -58,6 +58,7 @@ const AppState = {
     activeTab: 'summary', // 初期タブを要約サマリーに
     opinionsSort: 'relevance', // 'relevance' | 'original' | 'lengthDesc'
     opinionsTypeFilter: 'all', // 'all' | 'issue' | 'request' | 'positive' | 'neutral'
+    attrCalcMode: 'rate',      // 'rate' (属性内言及率 %) | 'share' (意見全体構成比 %)
     cloudRanking: 'count',
     cloudMaxWords: 60,
     cloudShape: 'circle',
@@ -116,6 +117,16 @@ function setupUIEvents() {
             AppState.extractUnit = e.target.value;
             if (AppState.rawRows.length > 0 && AppState.targetKeyword) {
                 executeFilteringAndRender();
+            }
+        });
+    });
+
+    // 属性クロス集計基準（言及率 vs 構成比）ラジオボタン切り替え
+    document.querySelectorAll('input[name="radioAttrCalcMode"]').forEach(radio => {
+        radio.addEventListener('change', (e) => {
+            AppState.attrCalcMode = e.target.value;
+            if (AppState.filterResult) {
+                updateAttrChart();
             }
         });
     });
@@ -2233,7 +2244,8 @@ function updateAttrChart() {
         AppState.targetKeyword,
         {
             isFiltered: isFiltered,
-            totalRawCount: AppState.rawRows.length
+            totalRawCount: AppState.rawRows.length,
+            calcMode: AppState.attrCalcMode
         }
     );
 }

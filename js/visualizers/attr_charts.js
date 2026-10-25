@@ -34,6 +34,7 @@ const AttrChartVisualizer = {
         }
 
         const isFiltered = options.isFiltered || false;
+        const calcMode = options.calcMode || 'rate'; // 'rate' (属性内言及率 %) | 'share' (意見全体構成比 %)
 
         // 1. 分析対象（絞り込み後）における属性ごとの件数集計
         const totalByAttr = {};
@@ -44,9 +45,11 @@ const AttrChartVisualizer = {
 
         // 2. 抽出された意見における属性ごとの件数集計
         const matchedByAttr = {};
+        let totalMatched = 0;
         matchedDocs.forEach(d => {
             const val = d.attribute && d.attribute.trim() !== '' ? d.attribute.trim() : '（未回答・不明）';
             matchedByAttr[val] = (matchedByAttr[val] || 0) + 1;
+            totalMatched++;
         });
 
         // 属性カテゴリのリスト
@@ -56,53 +59,75 @@ const AttrChartVisualizer = {
             return;
         }
 
-        // 割合（言及率%）の計算
+        // 数値の計算（言及率 rate % ＆ 構成比 share %）
         const dataRows = attrCategories.map(cat => {
             const tot = totalByAttr[cat] || 0;
             const mat = matchedByAttr[cat] || 0;
+            // 言及率: 各属性グループ内でキーワードに関する意見を言った人の割合
             const rate = tot > 0 ? (mat / tot) * 100 : 0;
+            // 構成比: 抽出された関連意見全体の中で、この属性が占める割合
+            const share = totalMatched > 0 ? (mat / totalMatched) * 100 : 0;
             return {
                 category: cat,
                 total: tot,
                 matched: mat,
-                rate: Math.round(rate * 10) / 10
+                rate: Math.round(rate * 10) / 10,
+                share: Math.round(share * 10) / 10
             };
         });
 
-        // 出現率の降順にソート
-        dataRows.sort((a, b) => b.rate - a.rate);
+        // 選択されたモードの数値で降順ソート
+        if (calcMode === 'share') {
+            dataRows.sort((a, b) => b.share - a.share);
+        } else {
+            dataRows.sort((a, b) => b.rate - a.rate);
+        }
 
         const denomLabel = isFiltered ? '対象' : '全';
         const yCats = dataRows.map(d => d.category).reverse();
-        const xRates = dataRows.map(d => d.rate).reverse();
-        const textLabels = dataRows.map(d => `${d.rate}% (${d.matched}件 / ${denomLabel}${d.total}件)`).reverse();
+        const xValues = dataRows.map(d => (calcMode === 'share' ? d.share : d.rate)).reverse();
+        const textLabels = dataRows.map(d => {
+            if (calcMode === 'share') {
+                return `${d.share}% (${d.matched}件 / 意見全体${totalMatched.toLocaleString()}件)`;
+            } else {
+                return `${d.rate}% (${d.matched}件 / ${denomLabel}${d.total.toLocaleString()}件)`;
+            }
+        }).reverse();
+
+        const barColor = calcMode === 'share' ? '#0284c7' : '#2563eb';
 
         const trace = {
             type: 'bar',
             orientation: 'h',
-            x: xRates,
+            x: xValues,
             y: yCats,
             text: textLabels,
             textposition: 'auto',
             marker: {
-                color: '#2563eb',
+                color: barColor,
                 opacity: 0.85
             },
             hoverinfo: 'text'
         };
 
+        const modeTitle = calcMode === 'share'
+            ? `属性別「${targetKeyword}」関連意見の構成比 (内訳 %)`
+            : `属性別「${targetKeyword}」関連意見の言及割合 (%)`;
+
         const titleSub = isFiltered
             ? ` <span style="font-size: 12px; font-weight: normal; color: #64748b;">(絞り込み後の分析対象 ${targetRows.length.toLocaleString()}件 を基準に集計)</span>`
             : '';
 
+        const axisTitle = calcMode === 'share' ? '意見全体の構成比 (%)' : '属性内の言及割合 (%)';
+
         const layout = {
             title: {
-                text: `<b>属性別「${targetKeyword}」関連意見の言及割合 (%)</b>${titleSub}`,
+                text: `<b>${modeTitle}</b>${titleSub}`,
                 font: { size: 15, color: '#1e293b' }
             },
             margin: { l: 120, r: 40, t: 50, b: 50 },
             xaxis: {
-                title: '言及割合 (%)',
+                title: axisTitle,
                 ticksuffix: '%',
                 rangemode: 'tozero',
                 gridcolor: '#f1f5f9'
