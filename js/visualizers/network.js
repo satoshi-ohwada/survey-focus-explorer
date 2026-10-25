@@ -655,6 +655,39 @@ const NetworkVisualizer = {
         });
 
         // 2. ノード描画
+        // 【描画レイヤーの分離（白い傷の解消）】
+        // 各ノードごとに「円を描いた直後にテキスト」を描画すると、文字（特に「学」「高」等の上部に点やツ冠がある漢字）の
+        // 白フチ（strokeText）が円の下端に食い込み、「白い傷・切り欠き」が発生してしまいます。
+        // また、近接ノードの文字の白フチが他のノードの円を侵食するのを防ぐため、
+        // 「全テキストラベル描画」→「全ノード円・強調リング描画」の順で2層描画します。
+
+        const fontSizes = {
+            normal: { target: 15, related: 13, other: 12 },
+            large:   { target: 17, related: 15, other: 14 },
+            xlarge:  { target: 20, related: 18, other: 16 }
+        };
+        const fCfg = fontSizes[this.fontSize] || fontSizes.large;
+
+        // (1) 第1層: 全ノードのテキストラベルを描画
+        this.nodes.forEach(node => {
+            const isTarget = this.isTargetNode(node.id);
+            const isRelated = relatedSet.has(node.id.toLowerCase());
+            const fSize = isTarget ? fCfg.target : (isRelated ? fCfg.related : fCfg.other);
+
+            ctx.font = `bold ${fSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            const textMargin = Math.max(6, Math.round(fSize * 0.38));
+            const textY = node.y + node.radius + textMargin;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = Math.max(4, Math.round(fSize * 0.32));
+            ctx.strokeText(node.id, node.x, textY);
+            ctx.fillStyle = isTarget ? '#9f1239' : (isRelated ? '#0369a1' : '#1e293b');
+            ctx.fillText(node.id, node.x, textY);
+        });
+
+        // (2) 第2層: 全ノード本体の円・リングを描画（上層レイヤーとして描くことで、文字の白フチによる傷や欠けを完全解消）
         this.nodes.forEach(node => {
             const isTarget = this.isTargetNode(node.id);
             const isRelated = relatedSet.has(node.id.toLowerCase());
@@ -719,26 +752,6 @@ const NetworkVisualizer = {
                 ctx.lineWidth = 1.5;
                 ctx.stroke();
             }
-
-            // テキストラベル（大きく読みやすいフォント設定）
-            const fontSizes = {
-                normal: { target: 15, related: 13, other: 12 },
-                large:   { target: 17, related: 15, other: 14 },
-                xlarge:  { target: 20, related: 18, other: 16 }
-            };
-            const fCfg = fontSizes[this.fontSize] || fontSizes.large;
-            const fSize = isTarget ? fCfg.target : (isRelated ? fCfg.related : fCfg.other);
-
-            ctx.font = `bold ${fSize}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-
-            const textY = node.y + node.radius + 4;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = Math.max(4, Math.round(fSize * 0.32));
-            ctx.strokeText(node.id, node.x, textY);
-            ctx.fillStyle = isTarget ? '#9f1239' : (isRelated ? '#0369a1' : '#1e293b');
-            ctx.fillText(node.id, node.x, textY);
         });
 
         // 3. ホバーノードの詳細ツールチップ
@@ -797,7 +810,7 @@ const NetworkVisualizer = {
 
         this.nodes.forEach(n => {
             const padX = n.radius + Math.max(24, (n.id || '').length * 8.5);
-            const padY = n.radius + 28;
+            const padY = n.radius + 32;
             if (n.x - padX < minX) minX = n.x - padX;
             if (n.x + padX > maxX) maxX = n.x + padX;
             if (n.y - padY < minY) minY = n.y - padY;
