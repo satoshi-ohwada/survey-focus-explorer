@@ -583,24 +583,66 @@ const NetworkVisualizer = {
             '#64748b'  // スレートグレー (グループ9)
         ];
 
+        // エッジを「キーワード直結（第1次共起）」と「関連語同士（第2次共起）」に分離
+        const directEdges = [];
+        const subEdges = [];
         this.edges.forEach(e => {
+            const isDirect = this.isTargetNode(e.source.id) || this.isTargetNode(e.target.id);
+            if (isDirect) directEdges.push(e);
+            else subEdges.push(e);
+        });
+
+        // (1) 関連語同士のエッジ描画（細めの破線・背景の文脈メッシュとして描画）
+        subEdges.forEach(e => {
             const isConnectedToHover = !isExport && this.hoverNode && (e.source.id === this.hoverNode.id || e.target.id === this.hoverNode.id);
             const isSameCommunity = this.colorMode === 'community' && e.source.communityIndex >= 0 && e.source.communityIndex === e.target.communityIndex;
 
             const alpha = (!isExport && this.hoverNode)
-                ? (isConnectedToHover ? 0.92 : 0.06)
-                : (isSameCommunity ? 0.40 + (e.weight / maxWeight) * 0.45 : 0.18 + (e.weight / maxWeight) * 0.35);
+                ? (isConnectedToHover ? 0.88 : 0.04)
+                : (isSameCommunity ? 0.32 + (e.weight / maxWeight) * 0.35 : 0.16 + (e.weight / maxWeight) * 0.25);
 
             const lineWidth = (!isExport && this.hoverNode && isConnectedToHover)
-                ? Math.min(4.5, 1.8 + (e.weight / maxWeight) * 3.5)
-                : (isSameCommunity ? Math.min(3.2, 1.0 + (e.weight / maxWeight) * 2.2) : Math.min(2.0, 0.7 + (e.weight / maxWeight) * 1.5));
+                ? Math.min(3.2, 1.4 + (e.weight / maxWeight) * 2.5)
+                : (isSameCommunity ? Math.min(2.0, 0.8 + (e.weight / maxWeight) * 1.4) : Math.min(1.4, 0.6 + (e.weight / maxWeight) * 1.0));
 
             if (!isExport && isConnectedToHover) {
-                ctx.strokeStyle = '#2563eb';
+                ctx.strokeStyle = '#3b82f6';
+                ctx.setLineDash([5, 3]);
             } else if (isSameCommunity) {
                 ctx.strokeStyle = palette[e.source.communityIndex % palette.length];
+                ctx.setLineDash([4, 3]);
             } else {
                 ctx.strokeStyle = `rgba(148, 163, 184, ${alpha})`;
+                ctx.setLineDash([3, 3]);
+            }
+
+            ctx.globalAlpha = (!isExport && isConnectedToHover) ? 1.0 : alpha;
+            ctx.lineWidth = lineWidth;
+            ctx.beginPath();
+            ctx.moveTo(e.source.x, e.source.y);
+            ctx.lineTo(e.target.x, e.target.y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.globalAlpha = 1.0;
+        });
+
+        // (2) キーワード直結エッジ描画（太めの実線・手前に描画して主軸・幹を強力に強調）
+        directEdges.forEach(e => {
+            const isConnectedToHover = !isExport && this.hoverNode && (e.source.id === this.hoverNode.id || e.target.id === this.hoverNode.id);
+
+            const alpha = (!isExport && this.hoverNode)
+                ? (isConnectedToHover ? 1.0 : 0.08)
+                : 0.55 + (e.weight / maxWeight) * 0.40;
+
+            const lineWidth = (!isExport && this.hoverNode && isConnectedToHover)
+                ? Math.min(5.5, 2.8 + (e.weight / maxWeight) * 3.8)
+                : Math.min(4.2, 1.8 + (e.weight / maxWeight) * 2.6);
+
+            ctx.setLineDash([]); // 実線
+            if (!isExport && isConnectedToHover) {
+                ctx.strokeStyle = '#2563eb';
+            } else {
+                ctx.strokeStyle = '#2563eb';
             }
 
             ctx.globalAlpha = (!isExport && isConnectedToHover) ? 1.0 : alpha;
@@ -834,6 +876,10 @@ const NetworkVisualizer = {
             }
         }
 
+        // 線種の凡例（直接共起 vs 関連語同士の共起）
+        items.push({ type: 'edge-direct', label: '直接共起', color: '#2563eb' });
+        items.push({ type: 'edge-sub', label: '関連語間', color: '#94a3b8' });
+
         // 横幅の自動計算
         let totalContentW = 0;
         const itemWidths = items.map(item => {
@@ -841,6 +887,7 @@ const NetworkVisualizer = {
             if (item.type === 'target') itemW = 14 + ctx.measureText(item.label).width;
             else if (item.type === 'related') itemW = 14 + ctx.measureText(item.label).width;
             else if (item.type === 'multi-dots') itemW = 26 + ctx.measureText(item.label).width;
+            else if (item.type === 'edge-direct' || item.type === 'edge-sub') itemW = 22 + ctx.measureText(item.label).width;
             else itemW = 13 + ctx.measureText(item.label).width;
             totalContentW += itemW + 10;
             return itemW;
@@ -903,6 +950,32 @@ const NetworkVisualizer = {
                 });
                 ctx.fillStyle = '#334155';
                 ctx.fillText(item.label, curX + 24, midY);
+            } else if (item.type === 'edge-direct') {
+                ctx.save();
+                ctx.strokeStyle = item.color;
+                ctx.lineWidth = 2.4;
+                ctx.setLineDash([]);
+                ctx.beginPath();
+                ctx.moveTo(curX + 2, midY);
+                ctx.lineTo(curX + 16, midY);
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.fillStyle = '#334155';
+                ctx.fillText(item.label, curX + 20, midY);
+            } else if (item.type === 'edge-sub') {
+                ctx.save();
+                ctx.strokeStyle = item.color;
+                ctx.lineWidth = 1.4;
+                ctx.setLineDash([3, 2]);
+                ctx.beginPath();
+                ctx.moveTo(curX + 2, midY);
+                ctx.lineTo(curX + 16, midY);
+                ctx.stroke();
+                ctx.restore();
+
+                ctx.fillStyle = '#64748b';
+                ctx.fillText(item.label, curX + 20, midY);
             } else {
                 ctx.beginPath();
                 ctx.arc(curX + 4, midY, 4, 0, Math.PI * 2);
