@@ -1154,6 +1154,15 @@ const UmapVisualizer = {
             ctx.fillRect(0, 0, w, h);
         }
 
+        if (this.points.length === 0) {
+            ctx.fillStyle = '#64748b';
+            ctx.font = '14px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('表示可能なデータがありません（抽出単語または意見データが不足しています）', w / 2, h / 2);
+            return;
+        }
+
         ctx.save();
         ctx.translate(panX, panY);
         ctx.scale(scale, scale);

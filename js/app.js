@@ -120,13 +120,41 @@ function setupUIEvents() {
         });
     });
 
+    /**
+     * テキストをクリップボードにコピー（navigator.clipboard が未対応・非HTTPS環境用のフォールバック付き）
+     */
+    function copyTextToClipboard(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(text);
+        }
+        return new Promise((resolve, reject) => {
+            try {
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                textArea.style.position = 'fixed';
+                textArea.style.left = '-9999px';
+                textArea.style.top = '0';
+                textArea.style.opacity = '0';
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                const successful = document.execCommand('copy');
+                document.body.removeChild(textArea);
+                if (successful) resolve();
+                else reject(new Error('execCommand copy failed'));
+            } catch (err) {
+                reject(err);
+            }
+        });
+    }
+
     // 要約Markdownコピーボタン
     const btnCopyMd = document.getElementById('btnCopyMarkdownSummary');
     if (btnCopyMd) {
         btnCopyMd.addEventListener('click', () => {
             if (!AppState.summaryData || !OpinionSummarizer) return;
             const mdText = OpinionSummarizer.generateMarkdownReport(AppState.summaryData);
-            navigator.clipboard.writeText(mdText).then(() => {
+            copyTextToClipboard(mdText).then(() => {
                 const toast = document.getElementById('copySummaryToast');
                 if (toast) {
                     toast.style.display = 'inline';
@@ -2106,6 +2134,17 @@ function switchTab(tabName) {
 }
 
 /**
+ * 単語または意見のキーワードでフィルタして「生の声一覧」タブに遷移する
+ */
+function jumpToOpinions(filterWord = '') {
+    const tabBtn = document.querySelector('.nav-tab-btn[data-tab="opinions"]');
+    if (tabBtn) tabBtn.click();
+    const filterInput = document.getElementById('inputFilterOpinionText');
+    if (filterInput) filterInput.value = filterWord;
+    renderOpinionsList(filterWord);
+}
+
+/**
  * ワードクラウド描画
  */
 function updateWordCloud() {
@@ -2122,10 +2161,7 @@ function updateWordCloud() {
             maxWords: AppState.cloudMaxWords,
             shape: AppState.cloudShape,
             onWordClick: (word) => {
-                // 単語クリックで生の声一覧へジャンプ
-                document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                document.getElementById('inputFilterOpinionText').value = word;
-                renderOpinionsList(word);
+                jumpToOpinions(word);
             }
         }
     );
@@ -2150,9 +2186,7 @@ function updateNetwork() {
             fontSize: AppState.networkFontSize,
             colorMode: AppState.networkColorMode,
             onWordClick: (word) => {
-                document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                document.getElementById('inputFilterOpinionText').value = word;
-                renderOpinionsList(word);
+                jumpToOpinions(word);
             }
         }
     );
@@ -2182,15 +2216,10 @@ function updateUmap() {
             minClusterSize: AppState.umapMinClusterSize,
             onPointClick: (point) => {
                 if (point.rawDoc) {
-                    // 意見プロットクリック時
-                    document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                    document.getElementById('inputFilterOpinionText').value = (point.rawDoc.matchedWords && point.rawDoc.matchedWords[0]) || '';
-                    renderOpinionsList((point.rawDoc.matchedWords && point.rawDoc.matchedWords[0]) || '');
+                    const matchedWord = (point.rawDoc.matchedWords && point.rawDoc.matchedWords[0]) || '';
+                    jumpToOpinions(matchedWord);
                 } else {
-                    // 単語プロットクリック時
-                    document.querySelector('.nav-tab-btn[data-tab="opinions"]').click();
-                    document.getElementById('inputFilterOpinionText').value = point.text;
-                    renderOpinionsList(point.text);
+                    jumpToOpinions(point.text || '');
                 }
             }
         }

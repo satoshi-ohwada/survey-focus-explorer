@@ -562,6 +562,15 @@ const NetworkVisualizer = {
             ctx.fillRect(0, 0, w, h);
         }
 
+        if (this.nodes.length === 0) {
+            ctx.fillStyle = '#64748b';
+            ctx.font = '14px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('表示可能な共起データがありません（共起ペアが不足しているか、頻度条件を満たしていません）', w / 2, h / 2);
+            return;
+        }
+
         ctx.save();
         ctx.translate(panX, panY);
         ctx.scale(scale, scale);
