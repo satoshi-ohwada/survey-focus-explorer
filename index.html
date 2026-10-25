@@ -43,8 +43,18 @@
     </header>
 
     <main class="container" style="margin-top: 24px;">
-        <!-- 1. データ入力 ＆ 列選択セクション -->
+        <!-- STEP 1: データ入力 ＆ 取捨選択セクション -->
         <section class="card config-section">
+            <div class="section-step-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="step-badge" style="background: var(--primary-color); color: #fff; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 4px;">STEP 1</span>
+                    <h2 style="font-size: 15px; font-weight: 700; margin: 0; color: var(--text-main);">データの読み込み ＆ 取捨選択</h2>
+                </div>
+                <span style="font-size: 12px; color: var(--text-muted);">
+                    Excel・CSV等の取り込み、分析列の選択、属性絞り込み・不要行削除
+                </span>
+            </div>
+
             <div class="data-input-tabs">
                 <button type="button" id="tabInputFile" class="data-input-tab active">
                     📁 ファイルから読み込み (Excel / CSV / TSV / TXT)
@@ -201,15 +211,203 @@
             </div>
         </section>
 
-        <!-- 2. キーワード ＆ 関連語探索セクション（中核） -->
-        <section id="focusSection" class="focus-section" style="display: none;">
-            <div class="focus-header">
-                <div class="focus-title-group">
-                    <span class="focus-badge">STEP 1</span>
-                    <h2 class="focus-title">注目キーワードの指定 ＆ 関連語の特定</h2>
+        <!-- STEP 2: 解析条件 ＆ カスタム辞書設定セクション（キーワード指定前） -->
+        <section id="prepSection" class="card prep-section" style="display: none; margin-top: 18px;">
+            <div class="prep-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span class="step-badge" style="background: var(--primary-color); color: #fff; font-size: 11px; font-weight: 800; padding: 3px 8px; border-radius: 4px;">STEP 2</span>
+                    <h2 style="font-size: 15px; font-weight: 700; margin: 0; color: var(--text-main);">解析条件 ＆ カスタム辞書の設定</h2>
                 </div>
                 <span style="font-size: 12px; color: var(--text-muted);">
-                    指定キーワードとその文脈に近い関連語を含む意見を自動抽出します
+                    形態素解析の抽出品詞、複合語、除外語、表記ゆれ統一ルールを設定します
+                </span>
+            </div>
+
+            <!-- 抽出品詞選択エリア -->
+            <div class="pos-config-area">
+                <div class="pos-config-header">
+                    <div class="pos-config-title">
+                        <span style="font-size: 15px;">🔤</span>
+                        <span>抽出品詞の選択</span>
+                        <span style="font-size: 11.5px; font-weight: normal; color: var(--text-muted);">（分析対象とする品詞にチェック）</span>
+                    </div>
+                    <div class="pos-config-actions">
+                        <button type="button" id="btnPosReset" class="btn btn-xs">標準に戻す</button>
+                        <button type="button" id="btnPosSelectAll" class="btn btn-xs">すべて選択</button>
+                    </div>
+                </div>
+
+                <div class="pos-chips-grid">
+                    <label class="pos-chip is-checked" for="posNoun" title="名詞（一般・固有名詞・複合語）を抽出します">
+                        <input type="checkbox" id="posNoun" class="pos-checkbox" data-pos="noun" checked>
+                        <div class="pos-chip-body">
+                            <div class="pos-chip-header">
+                                <span class="pos-chip-icon">🏷️</span>
+                                <span class="pos-chip-label">名詞</span>
+                            </div>
+                            <span class="pos-chip-sub">一般・固有名詞・複合語</span>
+                        </div>
+                    </label>
+
+                    <label class="pos-chip is-checked" for="posVerb" title="動詞の自立語（基本形）を抽出します">
+                        <input type="checkbox" id="posVerb" class="pos-checkbox" data-pos="verb" checked>
+                        <div class="pos-chip-body">
+                            <div class="pos-chip-header">
+                                <span class="pos-chip-icon">🏃</span>
+                                <span class="pos-chip-label">動詞</span>
+                            </div>
+                            <span class="pos-chip-sub">自立語（基本形）</span>
+                        </div>
+                    </label>
+
+                    <label class="pos-chip is-checked" for="posAdj" title="形容詞の自立語（基本形）を抽出します">
+                        <input type="checkbox" id="posAdj" class="pos-checkbox" data-pos="adj" checked>
+                        <div class="pos-chip-body">
+                            <div class="pos-chip-header">
+                                <span class="pos-chip-icon">✨</span>
+                                <span class="pos-chip-label">形容詞</span>
+                            </div>
+                            <span class="pos-chip-sub">自立語（基本形）</span>
+                        </div>
+                    </label>
+
+                    <label class="pos-chip" for="posAdv" title="副詞を抽出します">
+                        <input type="checkbox" id="posAdv" class="pos-checkbox" data-pos="adv">
+                        <div class="pos-chip-body">
+                            <div class="pos-chip-header">
+                                <span class="pos-chip-icon">⚡</span>
+                                <span class="pos-chip-label">副詞</span>
+                            </div>
+                            <span class="pos-chip-sub">修飾・強調など</span>
+                        </div>
+                    </label>
+
+                    <label class="pos-chip" for="posIntj" title="感動詞を抽出します">
+                        <input type="checkbox" id="posIntj" class="pos-checkbox" data-pos="intj">
+                        <div class="pos-chip-body">
+                            <div class="pos-chip-header">
+                                <span class="pos-chip-icon">💬</span>
+                                <span class="pos-chip-label">感動詞</span>
+                            </div>
+                            <span class="pos-chip-sub">挨拶・感嘆など</span>
+                        </div>
+                    </label>
+                </div>
+
+                <!-- 基本オプション（連続名詞結合・標準除外語） -->
+                <div class="basic-options-bar">
+                    <label class="filter-check-label" title="「物価高」など連続する名詞を自動的に1つの単語として結合します">
+                        <input type="checkbox" id="checkMergeNouns" checked> 連続する名詞を自動結合
+                    </label>
+                    <div class="filter-group-divider"></div>
+                    <label class="filter-check-label" title="定型的な助動詞・一般的表現（こと、思う等）を除外します">
+                        <input type="checkbox" id="checkUseStopwords" checked> 標準除外語（ストップワード）を適用
+                    </label>
+                </div>
+            </div>
+
+            <!-- カスタム辞書・除外ワード設定（アコーディオン） -->
+            <div id="dictionarySection" class="dictionary-accordion is-open" style="margin-top: 14px;">
+                <div id="dictionaryHeader" class="dict-header" role="button" tabindex="0" title="クリックして辞書設定を開閉">
+                    <div class="dict-header-left">
+                        <span class="dict-icon">📖</span>
+                        <span class="dict-title">カスタム辞書・表記ゆれ統一 ＆ 除外ワード設定（任意）</span>
+                        <span id="dictRuleSummaryBadge" class="dict-badge">登録: 0件</span>
+                    </div>
+                    <div class="dict-header-right">
+                        <span class="dict-hint">クリックで折りたたみ／展開</span>
+                        <span id="dictAccordionIcon" class="dict-accordion-icon">▲</span>
+                    </div>
+                </div>
+                <div id="dictionaryBody" class="dict-body" style="display: block;">
+                    <div class="dict-intro-bar">
+                        <span class="dict-intro-text">
+                            特定の専門用語を1単語として扱ったり、アンケート共通の不要語を除外、表記ゆれを1つに統合して分析精度を高めます。
+                        </span>
+                        <div class="dict-toolbar">
+                            <button type="button" id="btnImportRules" class="btn btn-xs" title="テキストファイルから設定を読み込みます">
+                                📥 設定を読込
+                            </button>
+                            <button type="button" id="btnExportRules" class="btn btn-xs" title="現在の設定をテキストファイルに書き出します">
+                                📤 設定を出力
+                            </button>
+                            <a id="btnDownloadTemplate" href="data/custom_rules.txt" download="custom_rules.txt" class="dict-link" title="見本ファイルをダウンロード">
+                                📄 見本ファイル
+                            </a>
+                            <button type="button" id="btnClearAllRules" class="dict-link dict-link-danger" title="画面上のルールをすべて初期化">
+                                全クリア
+                            </button>
+                            <input type="file" id="rulesFileInput" accept=".txt,.csv" style="display: none;">
+                        </div>
+                    </div>
+
+                    <div class="dict-grid">
+                        <!-- ① 除外ワード（ストップワード） -->
+                        <div class="dict-card">
+                            <div class="dict-card-header">
+                                <div class="dict-card-title">
+                                    <span>🚫 除外する語（ストップワード）</span>
+                                    <span id="badgeStopwordsCount" class="dict-card-count">0</span>
+                                </div>
+                                <button type="button" id="btnResetStopwords" class="dict-mini-btn" title="登録した除外語をクリア">クリア</button>
+                            </div>
+                            <p class="dict-card-desc">分析から除外したい不要語・前提語（例:「回答」「アンケート」「意見」等）</p>
+                            <div class="dict-input-row">
+                                <input type="text" id="inputNewStopword" class="dict-input" placeholder="除外する単語を入力">
+                                <button type="button" id="btnAddStopword" class="btn btn-xs btn-primary">追加</button>
+                            </div>
+                            <div id="stopwordsList" class="dict-tag-list"></div>
+                        </div>
+
+                        <!-- ② 複合語（強制抽出ワード） -->
+                        <div class="dict-card">
+                            <div class="dict-card-header">
+                                <div class="dict-card-title">
+                                    <span>🔗 複合語（分割させない語）</span>
+                                    <span id="badgeCompoundsCount" class="dict-card-count">0</span>
+                                </div>
+                                <button type="button" id="btnClearCompounds" class="dict-mini-btn" title="複合語をすべてクリア">クリア</button>
+                            </div>
+                            <p class="dict-card-desc">分割されたくない専門用語・重要フレーズ（例:「アフターサポート」「生成AI」）</p>
+                            <div class="dict-input-row">
+                                <input type="text" id="inputNewCompound" class="dict-input" placeholder="結合したい複合語を入力">
+                                <button type="button" id="btnAddCompound" class="btn btn-xs btn-primary">追加</button>
+                            </div>
+                            <div id="compoundWordsList" class="dict-tag-list"></div>
+                        </div>
+
+                        <!-- ③ 表記ゆれの統一（同義語） -->
+                        <div class="dict-card">
+                            <div class="dict-card-header">
+                                <div class="dict-card-title">
+                                    <span>🔄 統合する語（表記ゆれ・同義語）</span>
+                                    <span id="badgeSynonymsCount" class="dict-card-count">0</span>
+                                </div>
+                                <button type="button" id="btnClearSynonyms" class="dict-mini-btn" title="表記ゆれルールをすべてクリア">クリア</button>
+                            </div>
+                            <p class="dict-card-desc">別の表現を1つに統合（例:「在宅勤務」→「テレワーク」）</p>
+                            <div class="dict-input-row dict-input-row-synonym">
+                                <input type="text" id="inputSynonymFrom" class="dict-input" placeholder="元の語 (例: 在宅勤務)">
+                                <span class="dict-arrow">→</span>
+                                <input type="text" id="inputSynonymTo" class="dict-input" placeholder="統一後 (例: テレワーク)">
+                                <button type="button" id="btnAddSynonym" class="btn btn-xs btn-primary">追加</button>
+                            </div>
+                            <div id="synonymRulesList" class="dict-tag-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- STEP 3: キーワード ＆ 関連語探索セクション（最後に実行） -->
+        <section id="focusSection" class="focus-section" style="display: none; margin-top: 18px;">
+            <div class="focus-header">
+                <div class="focus-title-group">
+                    <span class="focus-badge">STEP 3</span>
+                    <h2 class="focus-title">注目キーワードの指定 ＆ 分析スタート</h2>
+                </div>
+                <span style="font-size: 12px; color: var(--text-muted);">
+                    設定した解析条件とデータに基づき、注目キーワードと文脈に近い関連語を特定して分析を開始します
                 </span>
             </div>
 
@@ -219,44 +417,15 @@
                     <input type="text" id="inputTargetKeyword" class="focus-input" placeholder="注目したい単語を入力（例: 物価高、値上げ、サポート、配送 など）">
                 </div>
                 <button type="button" id="btnRunFocus" class="btn-focus-run">
-                    🚀 関連語を探索 ＆ 分析
+                    🚀 関連語を探索 ＆ 分析スタート
                 </button>
             </div>
-            <div id="focusRunHint" style="font-size: 11.5px; color: var(--text-muted); margin-top: 6px; text-align: right;"></div>
-
-            <!-- 解析フィルター設定（品詞・複合語・ストップワード設定） -->
-            <div class="analysis-filter-bar">
-                <div class="filter-group-item">
-                    <span class="filter-group-title">対象品詞:</span>
-                    <label class="filter-check-label" title="名詞を分析対象に含めます">
-                        <input type="checkbox" id="checkPosNoun" checked> 名詞
-                    </label>
-                    <label class="filter-check-label" title="自立動詞を分析対象に含めます">
-                        <input type="checkbox" id="checkPosVerb" checked> 動詞
-                    </label>
-                    <label class="filter-check-label" title="自立形容詞を分析対象に含めます">
-                        <input type="checkbox" id="checkPosAdj" checked> 形容詞
-                    </label>
-                    <label class="filter-check-label" title="副詞を分析対象に含めます">
-                        <input type="checkbox" id="checkPosAdv"> 副詞
-                    </label>
-                </div>
-                <div class="filter-group-divider"></div>
-                <div class="filter-group-item">
-                    <label class="filter-check-label" title="「中東情勢」など連続する名詞を自動的に1つの単語として結合します">
-                        <input type="checkbox" id="checkMergeNouns" checked> 連続する名詞を結合
-                    </label>
-                </div>
-                <div class="filter-group-divider"></div>
-                <div class="filter-group-item">
-                    <label class="filter-check-label" title="定型的な助動詞・一般的表現（こと、思う等）を除外します">
-                        <input type="checkbox" id="checkUseStopwords" checked> 標準除外語
-                    </label>
-                    <button type="button" id="btnOpenDictFilter" class="btn btn-sm" style="padding: 2px 8px; font-size: 11.5px; margin-left: 6px;">
-                        ⚙️ 辞書・除外語編集
-                    </button>
-                </div>
+            <!-- 頻出単語サジェストバー -->
+            <div id="frequentKeywordsBar" class="frequent-keywords-bar" style="display: none;">
+                <span class="frequent-keywords-label">💡 頻出キーワード候補（クリックで入力）:</span>
+                <div id="frequentKeywordsList" class="frequent-keywords-list"></div>
             </div>
+            <div id="focusRunHint" style="font-size: 11.5px; color: var(--text-muted); margin-top: 6px; text-align: right;"></div>
 
             <!-- 関連語チップス -->
             <div class="related-words-box">
@@ -699,36 +868,39 @@
         </section>
     </main>
 
-    <!-- 辞書・ルール設定モーダル -->
-    <div id="dictModal" class="modal-overlay" style="display: none;">
-        <div class="modal-card">
+    <!-- 辞書・ルール設定インポート確認モーダル -->
+    <div id="rulesImportModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card" style="max-width: 480px;">
             <div class="modal-header">
-                <h3 class="modal-title">⚙️ 辞書・ルール設定</h3>
-                <button type="button" id="btnCloseDictModal" class="btn btn-sm">✕</button>
+                <h3 class="modal-title">辞書・ルール設定の読み込み</h3>
+                <button type="button" id="btnRulesModalClose" class="btn btn-sm">✕</button>
             </div>
             <div class="modal-body">
-                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
-                    分析から除外したい不要語（ストップワード）や、まとめたい同義語・表記ゆれを設定できます。
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+                    読み込んだファイルから以下の設定が検出されました：
                 </p>
-                <div class="form-group" style="margin-bottom: 14px;">
-                    <label class="form-label">除外ワード（1行に1単語、またはカンマ区切り）</label>
-                    <textarea id="textCustomStopwords" class="form-input" rows="4" placeholder="例: 思う, 感じる, こと, もの"></textarea>
+                <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 6px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; line-height: 1.8;">
+                    <div>🚫 除外ワード: <strong id="modalStopwordCount" style="color: #2563EB;">0</strong> 件</div>
+                    <div>🔗 複合語: <strong id="modalCompoundCount" style="color: #2563EB;">0</strong> 件</div>
+                    <div>🔄 表記ゆれの統一: <strong id="modalSynonymCount" style="color: #2563EB;">0</strong> 件</div>
                 </div>
-                <div class="form-group" style="margin-bottom: 14px;">
-                    <label class="form-label">同義語・表記ゆれ（置換元=代表語）</label>
-                    <textarea id="textCustomSynonyms" class="form-input" rows="4" placeholder="例: スマホ=スマートフォン&#10;値上がり=値上げ"></textarea>
+                <p style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 14px;">
+                    現在の画面上の設定とどのように統合しますか？
+                </p>
+                <div style="display: flex; gap: 8px; justify-content: flex-end;">
+                    <button type="button" id="btnImportReplace" class="btn btn-sm btn-danger" title="現在の設定を破棄してファイルの内容に置き換えます">
+                        上書き（置き換え）
+                    </button>
+                    <button type="button" id="btnImportMerge" class="btn btn-sm btn-primary" title="現在の設定を残したままファイルの内容を追加します">
+                        追加（マージ）
+                    </button>
                 </div>
-                <div class="form-group">
-                    <label class="form-label">複合語（1行に1単語）</label>
-                    <textarea id="textCustomCompounds" class="form-input" rows="3" placeholder="例: 物価高&#10;生活必需品"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" id="btnCancelDict" class="btn btn-sm">キャンセル</button>
-                <button type="button" id="btnSaveDict" class="btn btn-sm btn-primary">保存して再分析</button>
             </div>
         </div>
     </div>
+
+    <!-- トースト通知 -->
+    <div id="toastNotification" class="toast-notification" style="display: none;"></div>
 
     <!-- 使い方モーダル -->
     <div id="helpModal" class="modal-overlay" style="display: none;">
@@ -738,11 +910,18 @@
                 <button type="button" id="btnCloseHelpModal" class="btn btn-sm">✕</button>
             </div>
             <div class="modal-body" style="font-size: 13px; line-height: 1.7;">
-                <h4 style="margin-bottom: 6px; color: var(--primary-color);">1. アンケートを投入</h4>
-                <p style="margin-bottom: 12px;">Excel (.xlsx) や CSV ファイルを画面にドラッグ＆ドロップするか、Excelからセルをコピー＆ペーストしてください。「自由記述列」と「属性列」を確認します。</p>
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 1. アンケートを投入 ＆ 取捨選択</h4>
+                <p style="margin-bottom: 12px;">Excel (.xlsx) や CSV ファイルをドラッグ＆ドロップするか、貼り付けます。自由記述列・属性列を確認し、列オートフィルターや不要行の削除で母集団を整えます。</p>
 
-                <h4 style="margin-bottom: 6px; color: var(--primary-color);">2. 注目キーワードを入力</h4>
-                <p style="margin-bottom: 12px;">調べたいテーマ（例:「物価高」「値上げ」「対応」「アプリ」など）を入力して「🚀 関連語を探索 ＆ 分析」を押します。</p>
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 2. 解析条件 ＆ カスタム辞書を設定</h4>
+                <p style="margin-bottom: 12px;">抽出品詞（名詞・動詞・形容詞など）の選択や、分割したくない複合語、除外したい語、表記ゆれ統一（同義語）をキーワード指定前にあらかじめ設定できます。</p>
+
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 3. 注目キーワードを指定して分析スタート</h4>
+                <p style="margin-bottom: 12px;">調べたいテーマ（例:「物価高」「値上げ」「サポート」など）を入力（または頻出候補をクリック）し、「🚀 関連語を探索 ＆ 分析スタート」を押します。</p>
+
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 4. 探索結果の確認 ＆ 可視化ダッシュボード</h4>
+                <p style="margin-bottom: 0;">自動特定された関連語の選択切り替え、要約サマリー、共起ネットワーク、ワードクラウド、属性クロス集計などを総合的に活用してインサイトを発見します。</p>
+            </div>
 
                 <h4 style="margin-bottom: 6px; color: var(--primary-color);">3. 関連語の調整</h4>
                 <p style="margin-bottom: 12px;">文脈上近くで使われている関連語がスコア順に自動表示されます。チップをクリックして対象に含める/含めないを自由に切り替えられます。</p>
