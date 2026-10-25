@@ -721,7 +721,21 @@ function setupUIEvents() {
     bindExport('btnSaveAttrImage', 'attr', 'download');
     bindExport('btnCopyAttrImage', 'attr', 'copy');
 
-    // ツールバー右端の「表示中の図を保存」ボタン
+    // ツールバー右側の統一画像保存 ＆ Officeコピーボタン
+    const btnSaveChart = document.getElementById('btnSaveCurrentChart');
+    if (btnSaveChart) {
+        btnSaveChart.addEventListener('click', () => {
+            exportChart(AppState.activeTab, 'download');
+        });
+    }
+    const btnCopyChart = document.getElementById('btnCopyCurrentChart');
+    if (btnCopyChart) {
+        btnCopyChart.addEventListener('click', () => {
+            exportChart(AppState.activeTab, 'copy');
+        });
+    }
+
+    // ツールバー右端の「表示中の図を保存」ボタン（後方互換）
     const btnSaveCurrent = document.getElementById('btnSaveImage');
     if (btnSaveCurrent) {
         btnSaveCurrent.addEventListener('click', () => {
@@ -2123,13 +2137,28 @@ function switchTab(tabName) {
     });
 
     // ツールバーコントロールの切り替え
+    const isChartTab = ['cloud', 'network', 'umap', 'attr'].includes(tabName);
     document.getElementById('toolbarSummaryCtrl').style.display = (tabName === 'summary') ? 'flex' : 'none';
-    document.getElementById('toolbarCloudCtrl').style.display = (tabName === 'cloud') ? 'block' : 'none';
-    document.getElementById('toolbarNetworkCtrl').style.display = (tabName === 'network') ? 'block' : 'none';
-    document.getElementById('toolbarUmapCtrl').style.display = (tabName === 'umap') ? 'block' : 'none';
+    document.getElementById('toolbarCloudCtrl').style.display = (tabName === 'cloud') ? 'flex' : 'none';
+    document.getElementById('toolbarNetworkCtrl').style.display = (tabName === 'network') ? 'flex' : 'none';
+    document.getElementById('toolbarUmapCtrl').style.display = (tabName === 'umap') ? 'flex' : 'none';
     const attrCtrl = document.getElementById('toolbarAttrCtrl');
-    if (attrCtrl) attrCtrl.style.display = (tabName === 'attr') ? 'block' : 'none';
+    if (attrCtrl) attrCtrl.style.display = (tabName === 'attr') ? 'flex' : 'none';
     document.getElementById('toolbarOpinionsCtrl').style.display = (tabName === 'opinions') ? 'flex' : 'none';
+
+    // ツールバー右側のアクションコントロールの切り替え
+    const actSummary = document.getElementById('actionSummaryCtrl');
+    if (actSummary) actSummary.style.display = (tabName === 'summary') ? 'flex' : 'none';
+    const actCharts = document.getElementById('actionChartsCtrl');
+    if (actCharts) actCharts.style.display = isChartTab ? 'flex' : 'none';
+    const actOpinions = document.getElementById('actionOpinionsCtrl');
+    if (actOpinions) actOpinions.style.display = (tabName === 'opinions') ? 'flex' : 'none';
+
+    // 4:3 比率切り替え ＆ 全画面ボタン（図タブのみ表示）
+    const viewSizeEl = document.getElementById('viewSizeControls');
+    if (viewSizeEl) viewSizeEl.style.display = isChartTab ? 'inline-flex' : 'none';
+    const btnFullscreen = document.getElementById('btnToggleFullscreen');
+    if (btnFullscreen) btnFullscreen.style.display = isChartTab ? 'inline-flex' : 'none';
 
     // 切り替え時にDOMサイズ確定を待って正確なコンテナ寸法で描画
     requestAnimationFrame(() => {
