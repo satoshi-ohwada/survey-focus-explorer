@@ -704,20 +704,35 @@
                     </div>
 
                     <div id="toolbarUmapCtrl" style="display: none;">
-                        <label style="margin-right: 12px;">対象:
+                        <label style="margin-right: 10px;">対象:
                             <select id="selectUmapMode" class="form-select btn-sm" style="width: auto; display: inline-block;">
                                 <option value="words" selected>単語マップ (語のまとまり)</option>
                                 <option value="docs">意見マップ (回答文の分類)</option>
                             </select>
                         </label>
-                        <label style="margin-right: 12px;">広がり:
+                        <label style="margin-right: 10px;">手法:
+                            <select id="selectUmapClustering" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="hdbscan" selected>HDBSCAN (密度・自動検出 [推奨])</option>
+                                <option value="kmeans">k-means (均等・固定数)</option>
+                            </select>
+                        </label>
+                        <label id="labelUmapMinClusterSize" style="margin-right: 10px;">最小グループ:
+                            <select id="selectUmapMinClusterSize" class="form-select btn-sm" style="width: auto; display: inline-block;">
+                                <option value="auto" selected>自動 (推奨)</option>
+                                <option value="2">2件</option>
+                                <option value="3">3件</option>
+                                <option value="4">4件</option>
+                                <option value="5">5件</option>
+                            </select>
+                        </label>
+                        <label style="margin-right: 10px;">広がり:
                             <select id="selectUmapSpread" class="form-select btn-sm" style="width: auto; display: inline-block;">
                                 <option value="normal">標準</option>
                                 <option value="wide" selected>広め（重なり防止）</option>
                                 <option value="widest">最大（ゆったり）</option>
                             </select>
                         </label>
-                        <label style="margin-right: 12px;">文字サイズ:
+                        <label style="margin-right: 10px;">文字サイズ:
                             <select id="selectUmapFontSize" class="form-select btn-sm" style="width: auto; display: inline-block;">
                                 <option value="normal">標準</option>
                                 <option value="large" selected>やや大 (推奨)</option>
@@ -737,6 +752,7 @@
                             <span>🎨 色: <strong>話題グループ（島）別</strong></span>
                             <span><strong style="color: #e11d48;">🎯</strong> 中心語</span>
                             <span><strong style="color: #0284c7;">◆</strong> 関連語</span>
+                            <span><strong style="color: #94a3b8;">●</strong> 個別・特異意見</span>
                         </span>
                         <small style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">※拡大縮小: Ctrl + スクロール または ボタン</small>
                     </div>

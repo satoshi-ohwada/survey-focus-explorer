@@ -18,6 +18,8 @@ const UmapVisualizer = {
     startY: 0,
     viewMode: 'words', // 'words' (単語マップ) または 'docs' (意見マップ)
     spreadMode: 'wide', // 'normal' | 'wide' | 'widest'
+    clusteringMethod: 'hdbscan', // 'hdbscan' (HDBSCAN 密度・自動検出 [推奨]) | 'kmeans' (K-Means 固定数)
+    minClusterSize: 'auto', // 'auto' | 2 | 3 | 4 | 5
     targetKeyword: '',
     activeRelatedWords: [],
     onPointClick: null,
@@ -180,6 +182,8 @@ const UmapVisualizer = {
         this.onPointClick = options.onPointClick;
         this.spreadMode = options.spreadMode || 'wide'; // 'normal' | 'wide' | 'widest'
         this.fontSize = options.fontSize || 'large'; // 'normal' | 'large' | 'xlarge'
+        this.clusteringMethod = options.clusteringMethod || this.clusteringMethod || 'hdbscan';
+        this.minClusterSize = options.minClusterSize || this.minClusterSize || 'auto';
 
         const rectW = this.canvas.clientWidth || (this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0);
         const rectH = this.canvas.clientHeight || (this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0);
@@ -339,18 +343,16 @@ const UmapVisualizer = {
             };
         });
 
-        // 4. キャンバス座標スケーリング ＆ デクラスタリング（適度な重なり防止）
+        // 4. キャンバス座標スケーリング
         this.scaleCoordinatesToCanvas(width, height);
+
+        // 5. UMAPの幾何・密度構造に基づくクラスタリングの実行 (HDBSCAN または K-Means++)
+        this.applyClustering();
+
+        // 6. 表示上の重なり防止・リラクゼーション
         this.relaxPoints(width, height);
 
-        // 5. 確定した2次元平面座標に対して、高精度 K-Means++ クラスタリングを実行
-        const kClusters = Math.min(5, Math.max(2, Math.floor(Math.sqrt(V / 2.5))));
-        const clusters = this.runKMeans(this.points, kClusters);
-        this.points.forEach((p, idx) => {
-            p.cluster = clusters[idx];
-        });
-
-        // 6. クラスタ背景ハローおよび代表ラベルの算出
+        // 7. クラスタ背景ハローおよび代表ラベルの算出
         this.calculateClusterHulls();
     },
 
@@ -420,13 +422,12 @@ const UmapVisualizer = {
         });
 
         this.scaleCoordinatesToCanvas(width, height);
-        this.relaxPoints(width, height);
 
-        const kClusters = Math.min(5, Math.max(2, Math.floor(Math.sqrt(D / 2.5))));
-        const clusters = this.runKMeans(this.points, kClusters);
-        this.points.forEach((p, idx) => {
-            p.cluster = clusters[idx];
-        });
+        // UMAPの幾何・密度構造に基づくクラスタリングの実行 (HDBSCAN または K-Means++)
+        this.applyClustering();
+
+        // 表示上の重なり防止・リラクゼーション
+        this.relaxPoints(width, height);
 
         this.calculateClusterHulls();
     },
@@ -564,6 +565,358 @@ const UmapVisualizer = {
             }
         }
         return Y;
+    },
+
+    /**
+     * クラスタリングの実行 (HDBSCAN or K-Means++)
+     */
+    applyClustering() {
+        const N = this.points.length;
+        if (N === 0) return;
+
+        if (this.clusteringMethod === 'kmeans') {
+            const kClusters = Math.min(5, Math.max(2, Math.floor(Math.sqrt(N / 2.5))));
+            const clusters = this.runKMeans(this.points, kClusters);
+            this.points.forEach((p, idx) => {
+                p.cluster = clusters[idx];
+            });
+        } else {
+            // デフォルト: HDBSCAN (密度・形状適応型階層クラスタリング + EOM最適化)
+            const clusters = this.runHDBSCAN(this.points, this.minClusterSize);
+            this.points.forEach((p, idx) => {
+                p.cluster = clusters[idx];
+            });
+        }
+    },
+
+    /**
+     * HDBSCAN (Hierarchical Density-Based Spatial Clustering of Applications with Noise)
+     * 密度・幾何学的形状適応型階層クラスタリング + EOM (Excess of Mass) 最適化
+     * UMAP の非線形な島・三日月・帯状の分布を忠実に反映し、特異意見（外れ値）を自然に抽出
+     * @param {Array<object>} points 
+     * @param {string|number} minClusterSizeSetting 
+     * @returns {Array<number>} 各点のクラスタID (0, 1, 2... または -1: 特異・個別意見)
+     */
+    runHDBSCAN(points, minClusterSizeSetting = 'auto') {
+        const N = points.length;
+        if (N === 0) return [];
+        if (N <= 3) return points.map(() => 0);
+
+        // 最小クラスタサイズの動的決定
+        let minSize;
+        if (minClusterSizeSetting === 'auto' || !minClusterSizeSetting) {
+            if (N <= 15) minSize = 2;
+            else if (N <= 35) minSize = 3;
+            else if (N <= 90) minSize = 4;
+            else minSize = 5;
+        } else {
+            minSize = Math.max(2, parseInt(minClusterSizeSetting, 10) || 3);
+        }
+
+        const minSamples = Math.max(2, Math.min(minSize, Math.floor(minSize * 0.85) || 2));
+
+        // 2次元キャンバス座標
+        const X = points.map(p => [p.screenX, p.screenY]);
+
+        // 1. 全点間ユークリッド距離
+        const dist = Array.from({ length: N }, () => new Float64Array(N));
+        for (let i = 0; i < N; i++) {
+            for (let j = i + 1; j < N; j++) {
+                const dx = X[i][0] - X[j][0];
+                const dy = X[i][1] - X[j][1];
+                const d = Math.sqrt(dx * dx + dy * dy);
+                dist[i][j] = d;
+                dist[j][i] = d;
+            }
+        }
+
+        // 2. コア距離（各点の k-最近傍距離）
+        const k = Math.min(minSamples, N - 1);
+        const coreDist = new Float64Array(N);
+        for (let i = 0; i < N; i++) {
+            const sortedDists = [];
+            for (let j = 0; j < N; j++) {
+                if (i !== j) sortedDists.push(dist[i][j]);
+            }
+            sortedDists.sort((a, b) => a - b);
+            coreDist[i] = sortedDists[k - 1];
+        }
+
+        // 3. 相互到達可能距離 (Mutual Reachability Distance) グラフの最小全域木 (MST) - Prim法
+        const inMST = new Uint8Array(N);
+        const minDist = new Float64Array(N).fill(Infinity);
+        const parent = new Int32Array(N).fill(-1);
+
+        minDist[0] = 0;
+        const mstEdges = [];
+
+        for (let step = 0; step < N; step++) {
+            let u = -1;
+            let bestD = Infinity;
+            for (let i = 0; i < N; i++) {
+                if (!inMST[i] && minDist[i] < bestD) {
+                    bestD = minDist[i];
+                    u = i;
+                }
+            }
+            if (u === -1) break;
+            inMST[u] = 1;
+
+            if (parent[u] !== -1) {
+                mstEdges.push({ u: parent[u], v: u, weight: bestD });
+            }
+
+            for (let v = 0; v < N; v++) {
+                if (!inMST[v]) {
+                    const mreach = Math.max(coreDist[u], coreDist[v], dist[u][v]);
+                    if (mreach < minDist[v]) {
+                        minDist[v] = mreach;
+                        parent[v] = u;
+                    }
+                }
+            }
+        }
+
+        // 4. 重み順ソート
+        mstEdges.sort((a, b) => a.weight - b.weight);
+
+        // 5. 単一連結階層木 (Union-Find)
+        const uf = Array.from({ length: N * 2 }, (_, i) => i);
+        const find = (i) => {
+            let root = i;
+            while (root !== uf[root]) root = uf[root];
+            let curr = i;
+            while (curr !== root) {
+                const nxt = uf[curr];
+                uf[curr] = root;
+                curr = nxt;
+            }
+            return root;
+        };
+
+        const clusterSize = new Int32Array(N * 2);
+        for (let i = 0; i < N; i++) clusterSize[i] = 1;
+
+        const treeChildren = new Map();
+        const edgeWeight = new Float64Array(N * 2);
+
+        let nextClusterId = N;
+        for (const edge of mstEdges) {
+            const rootU = find(edge.u);
+            const rootV = find(edge.v);
+            if (rootU !== rootV) {
+                const newId = nextClusterId++;
+                uf[rootU] = newId;
+                uf[rootV] = newId;
+                clusterSize[newId] = clusterSize[rootU] + clusterSize[rootV];
+                edgeWeight[newId] = edge.weight;
+                treeChildren.set(newId, [rootU, rootV]);
+            }
+        }
+
+        const rootNode = nextClusterId - 1;
+
+        const getLeaves = (nodeId) => {
+            const leaves = [];
+            const stack = [nodeId];
+            while (stack.length > 0) {
+                const cur = stack.pop();
+                if (cur < N) {
+                    leaves.push(cur);
+                } else if (treeChildren.has(cur)) {
+                    const [left, right] = treeChildren.get(cur);
+                    stack.push(left, right);
+                }
+            }
+            return leaves;
+        };
+
+        // 6. 凝縮クラスタツリーの構築 (Condense Tree)
+        let cIdCounter = 1;
+        const condensedNodes = new Map();
+        const rootLeaves = getLeaves(rootNode);
+        condensedNodes.set(0, {
+            cId: 0,
+            parentCId: -1,
+            lambdaBirth: 0,
+            points: new Set(rootLeaves),
+            pointDeaths: new Map(),
+            children: []
+        });
+
+        const explore = (nodeId, currentCId) => {
+            if (nodeId < N) return;
+            const [left, right] = treeChildren.get(nodeId);
+            const sizeL = clusterSize[left];
+            const sizeR = clusterSize[right];
+            const w = edgeWeight[nodeId];
+            const lambda = w > 1e-9 ? 1.0 / w : 1e9;
+
+            const currCluster = condensedNodes.get(currentCId);
+
+            if (sizeL >= minSize && sizeR >= minSize) {
+                // 両方が minSize 以上 -> クラスタ分裂
+                const leftCId = cIdCounter++;
+                const rightCId = cIdCounter++;
+
+                const leftLeaves = getLeaves(left);
+                const rightLeaves = getLeaves(right);
+
+                condensedNodes.set(leftCId, {
+                    cId: leftCId,
+                    parentCId: currentCId,
+                    lambdaBirth: lambda,
+                    points: new Set(leftLeaves),
+                    pointDeaths: new Map(),
+                    children: []
+                });
+
+                condensedNodes.set(rightCId, {
+                    cId: rightCId,
+                    parentCId: currentCId,
+                    lambdaBirth: lambda,
+                    points: new Set(rightLeaves),
+                    pointDeaths: new Map(),
+                    children: []
+                });
+
+                currCluster.children.push(leftCId, rightCId);
+
+                explore(left, leftCId);
+                explore(right, rightCId);
+            } else if (sizeL >= minSize && sizeR < minSize) {
+                const rightLeaves = getLeaves(right);
+                rightLeaves.forEach(pIdx => {
+                    if (!currCluster.pointDeaths.has(pIdx)) {
+                        currCluster.pointDeaths.set(pIdx, lambda);
+                    }
+                });
+                explore(left, currentCId);
+            } else if (sizeL < minSize && sizeR >= minSize) {
+                const leftLeaves = getLeaves(left);
+                leftLeaves.forEach(pIdx => {
+                    if (!currCluster.pointDeaths.has(pIdx)) {
+                        currCluster.pointDeaths.set(pIdx, lambda);
+                    }
+                });
+                explore(right, currentCId);
+            } else {
+                const allLeaves = getLeaves(nodeId);
+                allLeaves.forEach(pIdx => {
+                    if (!currCluster.pointDeaths.has(pIdx)) {
+                        currCluster.pointDeaths.set(pIdx, lambda);
+                    }
+                });
+            }
+        };
+
+        explore(rootNode, 0);
+
+        if (cIdCounter === 1) {
+            // クラスタ分岐が起きなかった場合は全体でクラスタ0
+            return points.map(() => 0);
+        }
+
+        // 7. EOM (Excess of Mass) 最適クラスタ選択
+        const stabilities = new Map();
+        condensedNodes.forEach((node, cId) => {
+            let s = 0;
+            node.pointDeaths.forEach((lDeath) => {
+                s += Math.max(0, lDeath - node.lambdaBirth);
+            });
+            stabilities.set(cId, s);
+        });
+
+        const selectedCIds = new Set();
+        const treeStability = new Map();
+        const sortedCIds = Array.from(condensedNodes.keys()).sort((a, b) => b - a);
+
+        for (const cId of sortedCIds) {
+            const node = condensedNodes.get(cId);
+            const myStab = stabilities.get(cId);
+
+            if (node.children.length === 0) {
+                treeStability.set(cId, myStab);
+                selectedCIds.add(cId);
+            } else {
+                let childrenStabSum = 0;
+                node.children.forEach(chId => {
+                    childrenStabSum += treeStability.get(chId) || 0;
+                });
+
+                if (myStab > childrenStabSum) {
+                    treeStability.set(cId, myStab);
+                    selectedCIds.add(cId);
+                    const desStack = [...node.children];
+                    while (desStack.length > 0) {
+                        const cur = desStack.pop();
+                        selectedCIds.delete(cur);
+                        const chNode = condensedNodes.get(cur);
+                        if (chNode) desStack.push(...chNode.children);
+                    }
+                } else {
+                    treeStability.set(cId, childrenStabSum);
+                }
+            }
+        }
+
+        if (selectedCIds.has(0) && selectedCIds.size === 1) {
+            selectedCIds.delete(0);
+            const rNode = condensedNodes.get(0);
+            rNode.children.forEach(ch => selectedCIds.add(ch));
+        }
+
+        // 8. クラスタIDの割り当て
+        const assignments = new Int32Array(N).fill(-1);
+        const finalClusters = Array.from(selectedCIds).filter(cId => cId !== 0);
+
+        finalClusters.forEach((cId, labelIdx) => {
+            const node = condensedNodes.get(cId);
+            if (node) {
+                node.points.forEach(pIdx => {
+                    assignments[pIdx] = labelIdx;
+                });
+            }
+        });
+
+        // 救済処置: もし全てノイズになってしまった場合は、上位の分岐を適用
+        const assignedCount = assignments.filter(a => a >= 0).length;
+        if (assignedCount < minSize && cIdCounter > 1) {
+            const pts0 = condensedNodes.get(1);
+            const pts1 = condensedNodes.get(2);
+            if (pts0) pts0.points.forEach(pIdx => { assignments[pIdx] = 0; });
+            if (pts1) pts1.points.forEach(pIdx => { assignments[pIdx] = 1; });
+        }
+
+        // 9. クラスタIDの空間的並べ替え（重心のX+Y順にリナンバリング）
+        const validLabels = Array.from(new Set(assignments.filter(a => a >= 0)));
+        if (validLabels.length > 0) {
+            const centers = validLabels.map(l => {
+                let cx = 0, cy = 0, cnt = 0;
+                for (let i = 0; i < N; i++) {
+                    if (assignments[i] === l) {
+                        cx += X[i][0];
+                        cy += X[i][1];
+                        cnt++;
+                    }
+                }
+                return {
+                    orig: l,
+                    cx: cnt > 0 ? cx / cnt : 0,
+                    cy: cnt > 0 ? cy / cnt : 0
+                };
+            });
+            centers.sort((a, b) => (a.cx + a.cy * 0.4) - (b.cx + b.cy * 0.4));
+            const remap = new Map(centers.map((c, newIdx) => [c.orig, newIdx]));
+
+            for (let i = 0; i < N; i++) {
+                if (assignments[i] >= 0) {
+                    assignments[i] = remap.get(assignments[i]);
+                }
+            }
+        }
+
+        return Array.from(assignments);
     },
 
     /**
@@ -752,6 +1105,7 @@ const UmapVisualizer = {
     calculateClusterHulls() {
         const clusterMap = new Map();
         this.points.forEach(p => {
+            if (p.cluster < 0) return; // 特異意見・ノイズ (cluster = -1) はハロー背景を描画しない
             if (!clusterMap.has(p.cluster)) {
                 clusterMap.set(p.cluster, []);
             }
@@ -846,12 +1200,14 @@ const UmapVisualizer = {
         // 3. 各プロット（点）およびラベルの描画
         this.points.forEach(p => {
             const isHover = !isExport && this.hoverPoint && this.hoverPoint.id === p.id;
+            const isNoise = p.cluster < 0;
 
             // 基本色は必ず「クラスタ色（空間の同一色）」を適用してまとまりを表現！
-            const clusterColor = palette[p.cluster % palette.length];
+            // 特異意見・ノイズ (cluster = -1) は落ち着いたスレートグレーで上品に差別化
+            const clusterColor = isNoise ? '#94a3b8' : palette[p.cluster % palette.length];
             let fillColor = clusterColor;
-            let strokeColor = '#ffffff';
-            let strokeWidth = 2.0;
+            let strokeColor = isNoise ? '#f1f5f9' : '#ffffff';
+            let strokeWidth = isNoise ? 1.5 : 2.0;
 
             const isTarget = p.isTarget || (this.viewMode === 'docs' && p.hasTargetKeyword);
             const isRelated = p.isRelated && !isTarget;
@@ -906,7 +1262,7 @@ const UmapVisualizer = {
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'top';
 
-                const labelPrefix = isTarget ? '🎯 ' : (isRelated ? '◆ ' : '');
+                const labelPrefix = isTarget ? '🎯 ' : (isRelated ? '◆ ' : (isNoise ? '・' : ''));
                 const labelText = labelPrefix + p.text;
                 const metrics = ctx.measureText(labelText);
                 const textWidth = metrics.width;
@@ -920,6 +1276,7 @@ const UmapVisualizer = {
                 let pillBorder = clusterColor;
                 if (isTarget || isHover) pillBorder = '#e11d48';
                 else if (isRelated) pillBorder = '#0284c7';
+                else if (isNoise) pillBorder = '#cbd5e1';
 
                 ctx.save();
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
@@ -934,7 +1291,7 @@ const UmapVisualizer = {
                 ctx.restore();
 
                 // テキスト本体の色
-                ctx.fillStyle = isTarget ? '#9f1239' : (isRelated ? '#0369a1' : (isHover ? '#0f172a' : '#1e293b'));
+                ctx.fillStyle = isTarget ? '#9f1239' : (isRelated ? '#0369a1' : (isHover ? '#0f172a' : (isNoise ? '#64748b' : '#1e293b')));
                 ctx.fillText(labelText, p.screenX, boxY + 2.5);
             }
         });
@@ -942,9 +1299,10 @@ const UmapVisualizer = {
         // 4. ホバー時のツールチップ（画面表示時のみ）
         if (!isExport && this.hoverPoint) {
             const hp = this.hoverPoint;
+            const groupLabel = hp.cluster < 0 ? '特異な個別意見 (特定グループ非所属)' : `トピック ${hp.cluster + 1}`;
             const tooltipText = this.viewMode === 'docs'
-                ? `[意見] ${hp.fullText} ${hp.attribute ? `(${hp.attribute})` : ''}`
-                : `[単語] ${hp.text} (出現: ${hp.count}回 / クラスタ ${hp.cluster + 1})`;
+                ? `[意見] ${hp.fullText} ${hp.attribute ? `(${hp.attribute})` : ''} / ${groupLabel}`
+                : `[単語] ${hp.text} (出現: ${hp.count}回 / ${groupLabel})`;
 
             ctx.font = '12px sans-serif';
             const metrics = ctx.measureText(tooltipText);

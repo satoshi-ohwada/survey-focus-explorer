@@ -68,6 +68,8 @@ const AppState = {
     canvasSizeMode: 'standard', // 'compact' | 'standard' | 'large' | 'fullscreen'
     isFocusMode: false,         // 上部入力・設定パネルの折りたたみ集中表示状態
     umapMode: 'words',
+    umapClustering: 'hdbscan',
+    umapMinClusterSize: 'auto',
     umapSpread: 'wide',
     umapFontSize: 'large'
 };
@@ -540,6 +542,24 @@ function setupUIEvents() {
         AppState.umapMode = e.target.value;
         updateUmap();
     });
+    const selectUmapClustering = document.getElementById('selectUmapClustering');
+    const selectUmapMinClusterSize = document.getElementById('selectUmapMinClusterSize');
+    const labelUmapMinClusterSize = document.getElementById('labelUmapMinClusterSize');
+    if (selectUmapClustering) {
+        selectUmapClustering.addEventListener('change', (e) => {
+            AppState.umapClustering = e.target.value;
+            if (labelUmapMinClusterSize) {
+                labelUmapMinClusterSize.style.display = e.target.value === 'hdbscan' ? 'inline-block' : 'none';
+            }
+            updateUmap();
+        });
+    }
+    if (selectUmapMinClusterSize) {
+        selectUmapMinClusterSize.addEventListener('change', (e) => {
+            AppState.umapMinClusterSize = e.target.value;
+            updateUmap();
+        });
+    }
     const selectSpread = document.getElementById('selectUmapSpread');
     if (selectSpread) {
         selectSpread.addEventListener('change', (e) => {
@@ -2158,6 +2178,8 @@ function updateUmap() {
             maxWords: 50,
             spreadMode: AppState.umapSpread,
             fontSize: AppState.umapFontSize,
+            clusteringMethod: AppState.umapClustering,
+            minClusterSize: AppState.umapMinClusterSize,
             onPointClick: (point) => {
                 if (point.rawDoc) {
                     // 意見プロットクリック時
