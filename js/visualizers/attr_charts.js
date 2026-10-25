@@ -11,12 +11,15 @@ const AttrChartVisualizer = {
 
     /**
      * 属性別クロス集計を描画
-     * @param {Array<object>} allRows - 全回答
+     * @param {Array<object>} targetRows - 分析対象回答（絞り込み・ノイズ除外後）
      * @param {Array<object>} matchedDocs - 抽出された関連回答
      * @param {string} attrCol - 属性列名
      * @param {string} targetKeyword - 注目キーワード
+     * @param {object} [options]
+     * @param {boolean} [options.isFiltered=false] 絞り込みが行われているか
+     * @param {number} [options.totalRawCount] 元データ全件数
      */
-    render(allRows, matchedDocs, attrCol, targetKeyword) {
+    render(targetRows, matchedDocs, attrCol, targetKeyword, options = {}) {
         const container = document.getElementById(this.containerId);
         if (!container) return;
 
@@ -30,9 +33,11 @@ const AttrChartVisualizer = {
             return;
         }
 
-        // 1. 全回答における属性ごとの件数集計
+        const isFiltered = options.isFiltered || false;
+
+        // 1. 分析対象（絞り込み後）における属性ごとの件数集計
         const totalByAttr = {};
-        allRows.forEach(r => {
+        targetRows.forEach(r => {
             const val = r[attrCol] != null && String(r[attrCol]).trim() !== '' ? String(r[attrCol]).trim() : '（未回答・不明）';
             totalByAttr[val] = (totalByAttr[val] || 0) + 1;
         });
@@ -51,7 +56,7 @@ const AttrChartVisualizer = {
             return;
         }
 
-        // 割合（出現率%）の計算
+        // 割合（言及率%）の計算
         const dataRows = attrCategories.map(cat => {
             const tot = totalByAttr[cat] || 0;
             const mat = matchedByAttr[cat] || 0;
@@ -67,9 +72,10 @@ const AttrChartVisualizer = {
         // 出現率の降順にソート
         dataRows.sort((a, b) => b.rate - a.rate);
 
+        const denomLabel = isFiltered ? '対象' : '全';
         const yCats = dataRows.map(d => d.category).reverse();
         const xRates = dataRows.map(d => d.rate).reverse();
-        const textLabels = dataRows.map(d => `${d.rate}% (${d.matched}件 / 全${d.total}件)`).reverse();
+        const textLabels = dataRows.map(d => `${d.rate}% (${d.matched}件 / ${denomLabel}${d.total}件)`).reverse();
 
         const trace = {
             type: 'bar',
@@ -85,9 +91,13 @@ const AttrChartVisualizer = {
             hoverinfo: 'text'
         };
 
+        const titleSub = isFiltered
+            ? ` <span style="font-size: 12px; font-weight: normal; color: #64748b;">(絞り込み後の分析対象 ${targetRows.length.toLocaleString()}件 を基準に集計)</span>`
+            : '';
+
         const layout = {
             title: {
-                text: `<b>属性別「${targetKeyword}」関連意見の言及割合 (%)</b>`,
+                text: `<b>属性別「${targetKeyword}」関連意見の言及割合 (%)</b>${titleSub}`,
                 font: { size: 15, color: '#1e293b' }
             },
             margin: { l: 120, r: 40, t: 50, b: 50 },

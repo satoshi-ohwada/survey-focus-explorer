@@ -2224,11 +2224,17 @@ function updateUmap() {
  */
 function updateAttrChart() {
     if (!AppState.filterResult) return;
+    const targetRows = getFilteredRows();
+    const isFiltered = targetRows.length < AppState.rawRows.length;
     AttrChartVisualizer.render(
-        AppState.rawRows,
+        targetRows,
         AppState.filterResult.matchedDocs,
         AppState.attrCol,
-        AppState.targetKeyword
+        AppState.targetKeyword,
+        {
+            isFiltered: isFiltered,
+            totalRawCount: AppState.rawRows.length
+        }
     );
 }
 
