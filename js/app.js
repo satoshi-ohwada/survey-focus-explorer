@@ -2291,13 +2291,17 @@ function renderSummaryDashboard() {
     if (overviewEl && summary.opinionTypeSummary) {
         const ots = summary.opinionTypeSummary;
         const res = summary.filterResult;
+        const targetRows = getFilteredRows();
+        const isFiltered = targetRows.length < AppState.rawRows.length;
+        const denomLabel = isFiltered ? '対象' : '全';
+
         overviewEl.innerHTML = `
             <div class="summary-overview-header">
                 <div class="summary-overview-title">
                     <span>📊</span>
                     <span>「${escapeHtml(summary.targetKeyword)}」関連意見の集約概要</span>
                     <span style="font-size: 13px; font-weight: normal; color: var(--text-muted);">
-                        (${res.matchedCount.toLocaleString()} 件 / 全 ${res.totalDocs.toLocaleString()} 件中 ${res.matchRate.toFixed(1)}%)
+                        (${res.matchedCount.toLocaleString()} 件 / ${denomLabel} ${res.totalDocs.toLocaleString()} 件中 ${res.matchRate.toFixed(1)}%)
                     </span>
                 </div>
                 <div style="font-size: 12px; color: var(--text-muted);">
@@ -2642,21 +2646,46 @@ function exportMatchedOpinionsCsv() {
         return;
     }
 
-    const data = AppState.filterResult.matchedDocs.map((d, i) => ({
-        No: i + 1,
-        属性: d.attribute || '',
-        意見テキスト: d.text,
-        マッチ単語: d.matchedWords.join(', ')
-    }));
+    const typeLabels = {
+        issue: '困りごと・課題',
+        request: '要望・改善提案',
+        positive: '肯定・満足',
+        neutral: 'その他・事実'
+    };
+
+    const isSentenceUnit = AppState.extractUnit === 'sentence';
+    const data = AppState.filterResult.matchedDocs.map((d, i) => {
+        const row = {
+            No: i + 1,
+            属性: d.attribute || '（未設定）',
+            意見タイプ: typeLabels[d.opinionType] || 'その他',
+            適合度スコア: (d.relevanceScore !== undefined) ? `${d.relevanceScore}%` : '',
+            意見テキスト: d.text
+        };
+        if (isSentenceUnit) {
+            row['抽出文'] = (d.focusedSentences && d.focusedSentences.length > 0)
+                ? d.focusedSentences.join(' / ')
+                : d.text;
+        }
+        row['マッチ単語'] = (d.matchedWords || []).join(', ');
+        return row;
+    });
+
+    const kw = (AppState.targetKeyword || '抽出意見').replace(/[\\/:*?"<>|]/g, '_');
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const filename = `抽出生の声_${kw}_${dateStr}.csv`;
 
     const csvStr = Papa.unparse(data);
     const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), csvStr], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `matched_opinions_${AppState.targetKeyword}.csv`;
+    a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showToast(`💾「${filename}」(${data.length}件) をダウンロードしました`);
 }
 
 /**
