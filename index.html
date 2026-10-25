@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>アンケート・キーワード連想＆意見深掘りツール (Survey Focus Explorer)</title>
+    <title>アンケート・座談会 キーワード連想＆意見深掘りツール (Focus Explorer)</title>
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="stylesheet" href="css/style.css">
     <!-- ライブラリ群 -->
@@ -21,8 +21,8 @@
             <div class="logo-area">
                 <div class="logo-icon">🔍</div>
                 <div>
-                    <h1 class="logo-title">アンケート・キーワード連想＆意見深掘りツール</h1>
-                    <div class="logo-subtitle">Survey Focus Explorer ・ 指定キーワードとその関連語から意見をピンポイント深掘り</div>
+                    <h1 class="logo-title">アンケート・座談会発言 キーワード連想＆意見深掘りツール</h1>
+                    <div class="logo-subtitle">Focus Explorer ・ 自由記述や座談会・ヒアリング発言から指定キーワードとその関連意見をピンポイント深掘り</div>
                 </div>
             </div>
             <div class="header-actions">
@@ -51,7 +51,7 @@
                     <h2 style="font-size: 15px; font-weight: 700; margin: 0; color: var(--text-main);">データの読み込み ＆ 取捨選択</h2>
                 </div>
                 <span style="font-size: 12px; color: var(--text-muted);">
-                    Excel・CSV等の取り込み、分析列の選択、属性絞り込み・不要行削除
+                    Excel・CSV等の取り込み、分析列の選択、属性絞り込み・不要行削除（座長発言の除外等も可能）
                 </span>
             </div>
 
@@ -68,8 +68,8 @@
             <div id="dropZoneWrapper">
                 <div id="dropZone" class="drop-zone" onclick="document.getElementById('csvFileInput').click();">
                     <div class="drop-icon">📁</div>
-                    <div class="drop-text">ここにアンケートファイル (Excel .xlsx / CSV / TSV / TXT) をドラッグ＆ドロップ</div>
-                    <div class="drop-subtext">またはクリックして選択（Shift_JIS / UTF-8 自動判別・1行1回答テキストにも対応）</div>
+                    <div class="drop-text">ここにアンケートまたは座談会・ヒアリング発言ファイル (Excel .xlsx / CSV / TSV / TXT) をドラッグ＆ドロップ</div>
+                    <div class="drop-subtext">またはクリックして選択（Shift_JIS / UTF-8 自動判別・1行1発言テキストにも対応）</div>
                     <input type="file" id="csvFileInput" accept=".csv, .tsv, .txt, .xlsx, .xls" style="display: none;">
                 </div>
             </div>
@@ -83,7 +83,7 @@
                             <input type="checkbox" id="checkPasteHasHeader" checked> 1行目を列名（見出し）として扱う
                         </label>
                     </div>
-                    <textarea id="pasteTextarea" class="paste-textarea" rows="5" placeholder="Excelで分析したい自由記述や属性列をコピーし、ここに貼り付けてください"></textarea>
+                    <textarea id="pasteTextarea" class="paste-textarea" rows="5" placeholder="Excelで分析したい自由記述や座談会発言、属性列（発言者/立場等）をコピーし、ここに貼り付けてください"></textarea>
                     <div class="paste-zone-footer">
                         <span id="pasteStatsInfo" class="paste-stats-info">データが入力されていません</span>
                         <div>
@@ -109,20 +109,20 @@
                 <div class="config-fields-grid">
                     <div class="form-group">
                         <label class="form-label" for="selectTextCol">
-                            <span>自由記述の列（分析対象）</span>
+                            <span>分析対象テキスト列（自由記述・発言内容）</span>
                             <span class="badge-rec">自動判定</span>
                         </label>
                         <select id="selectTextCol" class="form-select"></select>
-                        <span class="form-hint">アンケートの自由記述テキストが入っている列</span>
+                        <span class="form-hint">アンケートの自由記述や、座談会・ヒアリングでの出席者発言内容が入っている列</span>
                     </div>
 
                     <div class="form-group">
                         <label class="form-label" for="selectAttrCol">
-                            <span>属性の列（クロス集計用）</span>
+                            <span>属性列（立場比較・クロス集計用）</span>
                             <span class="badge-opt">任意</span>
                         </label>
                         <select id="selectAttrCol" class="form-select"></select>
-                        <span class="form-hint">年代・性別・地域・満足度などの分類列</span>
+                        <span class="form-hint">出席者の立場・区分（若手/ベテラン、所属等）や、年代・性別などの分類列</span>
                     </div>
                 </div>
 
@@ -904,30 +904,31 @@
 
     <!-- 使い方モーダル -->
     <div id="helpModal" class="modal-overlay" style="display: none;">
-        <div class="modal-card">
+        <div class="modal-card" style="max-width: 600px;">
             <div class="modal-header">
-                <h3 class="modal-title">❓ 使い方ガイド</h3>
+                <h3 class="modal-title">❓ 使い方ガイド（アンケート ＆ 座談会・ヒアリング対応）</h3>
                 <button type="button" id="btnCloseHelpModal" class="btn btn-sm">✕</button>
             </div>
             <div class="modal-body" style="font-size: 13px; line-height: 1.7;">
-                <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 1. アンケートを投入 ＆ 取捨選択</h4>
-                <p style="margin-bottom: 12px;">Excel (.xlsx) や CSV ファイルをドラッグ＆ドロップするか、貼り付けます。自由記述列・属性列を確認し、列オートフィルターや不要行の削除で母集団を整えます。</p>
+                <p style="background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; font-size: 12.5px; color: #166534;">
+                    💡 <b>本ツールは、アンケートの自由記述だけでなく、座談会・ヒアリング会・対話集会等の発言録の深掘り分析にもそのままご活用いただけます。</b>
+                </p>
+
+                <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 1. データを取り込み ＆ 取捨選択</h4>
+                <p style="margin-bottom: 12px;">Excel (.xlsx) や CSV、コピー＆ペーストでデータを取り込みます。<br>
+                ・<b>分析対象列</b>: 自由記述テキスト、または出席者の発言内容列<br>
+                ・<b>属性列</b>: 出席者の立場・区分（若手/ベテラン、所属等）や、年代・性別などの分類列<br>
+                ※ プレビュー表の「列オートフィルター」を使えば、座談会の座長・司会発言を除外して出席者の意見のみに瞬時に絞り込めます。</p>
 
                 <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 2. 解析条件 ＆ カスタム辞書を設定</h4>
-                <p style="margin-bottom: 12px;">抽出品詞（名詞・動詞・形容詞など）の選択や、分割したくない複合語、除外したい語、表記ゆれ統一（同義語）をキーワード指定前にあらかじめ設定できます。</p>
+                <p style="margin-bottom: 12px;">抽出品詞（名詞・動詞・形容詞など）の選択や、分割したくない専門用語・複合語、座談会特有の口語フィラーなどの除外語、表記ゆれ統一（同義語）をあらかじめ設定できます。</p>
 
                 <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 3. 注目キーワードを指定して分析スタート</h4>
-                <p style="margin-bottom: 12px;">調べたいテーマ（例:「物価高」「値上げ」「サポート」など）を入力（または頻出候補をクリック）し、「🚀 関連語を探索 ＆ 分析スタート」を押します。</p>
+                <p style="margin-bottom: 12px;">調べたいテーマ（例:「物価高」「値上げ」「サポート」「予算」など）を入力（または頻出候補をクリック）し、「🚀 関連語を探索 ＆ 分析スタート」を押します。<br>
+                ※ 長文発言が多い座談会では、関連語ボックス内の「抽出単位: <b>［文単位］</b>」を活用すると要点だけを高精度に切り出せます。</p>
 
                 <h4 style="margin-bottom: 6px; color: var(--primary-color);">STEP 4. 探索結果の確認 ＆ 可視化ダッシュボード</h4>
-                <p style="margin-bottom: 0;">自動特定された関連語の選択切り替え、要約サマリー、共起ネットワーク、ワードクラウド、属性クロス集計などを総合的に活用してインサイトを発見します。</p>
-            </div>
-
-                <h4 style="margin-bottom: 6px; color: var(--primary-color);">3. 関連語の調整</h4>
-                <p style="margin-bottom: 12px;">文脈上近くで使われている関連語がスコア順に自動表示されます。チップをクリックして対象に含める/含めないを自由に切り替えられます。</p>
-
-                <h4 style="margin-bottom: 6px; color: var(--primary-color);">4. 多角的な可視化</h4>
-                <p>抽出された意見群を対象に、ワードクラウド・共起ネットワーク・UMAP散布図・属性別クロス集計・生の声一覧を閲覧できます。</p>
+                <p style="margin-bottom: 0;">自動特定された関連語の取捨選択、意見集約サマリー（困りごと・要望・肯定・事実の4分類）、共起ネットワーク、ワードクラウド、立場別クロス集計などを総合的に活用してインサイトを発見します。</p>
             </div>
             <div class="modal-footer">
                 <button type="button" id="btnCloseHelpOk" class="btn btn-sm btn-primary">閉じる</button>
