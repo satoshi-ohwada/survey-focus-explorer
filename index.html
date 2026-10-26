@@ -969,6 +969,32 @@
         </div>
     </div>
 
+    <!-- A4サマリーレポート プレビューモーダル -->
+    <div id="reportPreviewModal" class="report-modal-overlay" style="display: none;">
+        <div class="report-modal-bar no-print">
+            <div class="report-modal-bar-left">
+                <div class="report-modal-bar-title">
+                    <span>📄</span>
+                    <span>A4サマリーレポート プレビュー (全2枚)</span>
+                </div>
+                <div class="report-modal-bar-subtitle">
+                    ※「印刷 / PDF保存」からブラウザの印刷ダイアログで「PDFとして保存」を選択できます
+                </div>
+            </div>
+            <div class="report-modal-bar-actions">
+                <button type="button" id="btnExecutePrint" class="btn btn-sm btn-primary" style="font-weight: 700; padding: 6px 16px;">
+                    🖨️ 印刷 / PDF保存 (A4)
+                </button>
+                <button type="button" id="btnCloseReportModal" class="btn btn-sm btn-secondary" style="color: #cbd5e1; border-color: #475569;">
+                    ✕ 閉じる
+                </button>
+            </div>
+        </div>
+        <div class="report-modal-body">
+            <div id="reportPagesContainer"></div>
+        </div>
+    </div>
+
     <!-- スクリプト群 -->
     <script src="js/csv_parser.js"></script>
     <script src="js/stopwords_default.js"></script>
@@ -979,6 +1005,7 @@
     <script src="js/visualizers/network.js"></script>
     <script src="js/visualizers/umap_view.js"></script>
     <script src="js/visualizers/attr_charts.js"></script>
+    <script src="js/report_generator.js"></script>
     <script src="js/demo_data.js"></script>
     <script src="js/app.js"></script>
 </body>

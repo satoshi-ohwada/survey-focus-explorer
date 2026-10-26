@@ -743,9 +743,13 @@ function setupUIEvents() {
         });
     }
 
-    // レポート印刷
+    // レポート印刷（A4・2枚サマリーレポート プレビュー＆印刷）
     document.getElementById('btnPrintReport').addEventListener('click', () => {
-        window.print();
+        if (typeof ReportGenerator !== 'undefined' && typeof ReportGenerator.openPreview === 'function') {
+            ReportGenerator.openPreview();
+        } else {
+            window.print();
+        }
     });
 
     // ヘッダーの辞書設定ボタン（STEP 2 の辞書セクションへスクロール＆展開）
