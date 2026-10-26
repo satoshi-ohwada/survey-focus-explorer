@@ -303,7 +303,8 @@ const ReportGenerator = {
             generateSummaryData();
         }
         const rawTopicSummaries = (AppState.summaryData && AppState.summaryData.topicSummaries) ? AppState.summaryData.topicSummaries : [];
-        const topicSummaries = rawTopicSummaries.slice(0, 3).map((t, idx) => {
+        // 最大4件の論点グループをすべて取得
+        const topicSummaries = rawTopicSummaries.slice(0, 4).map((t, idx) => {
             const repOp = (t.representativeOpinions && t.representativeOpinions.length > 0)
                 ? t.representativeOpinions[0]
                 : null;
@@ -311,13 +312,13 @@ const ReportGenerator = {
             let repAttr = '';
             if (repOp) {
                 repText = repOp.text ? repOp.text.trim() : '';
-                if (repText.length > 70) repText = repText.substring(0, 70) + '…';
+                if (repText.length > 130) repText = repText.substring(0, 130) + '…';
                 repAttr = repOp.attribute ? repOp.attribute.trim() : '';
             }
             return {
                 rank: idx + 1,
                 name: t.name || `論点 ${idx + 1}`,
-                keywords: (t.keywords || []).slice(0, 4),
+                keywords: (t.keywords || []).slice(0, 5),
                 docCount: t.docCount || 0,
                 shareRate: t.shareRate || 0,
                 primaryType: t.primaryType || '',
@@ -413,19 +414,23 @@ const ReportGenerator = {
         // 主要論点グループHTML
         let topicsHtml = '';
         if (data.topicSummaries && data.topicSummaries.length > 0) {
+            const count = data.topicSummaries.length;
+            const gridClass = count === 4 ? 'cols-2' : (count === 3 ? 'cols-3' : 'cols-2');
             topicsHtml = `
-                <div class="report-topics-grid">
+                <div class="report-topics-grid ${gridClass}">
                     ${data.topicSummaries.map(t => {
                         const cleanName = t.name.replace(/^論点 \d+:\s*/, '');
                         return `
                             <div class="report-topic-card">
-                                <div class="report-topic-head">
-                                    <span class="report-topic-badge">論点 ${t.rank}</span>
-                                    <span class="report-topic-count">${t.docCount}件 (${t.shareRate}%)</span>
-                                </div>
-                                <div class="report-topic-name">${this.escape(cleanName)}</div>
-                                <div class="report-topic-kw">
-                                    ${t.keywords.map(k => `<span class="report-topic-tag">#${this.escape(k)}</span>`).join('')}
+                                <div>
+                                    <div class="report-topic-head">
+                                        <span class="report-topic-badge">論点 ${t.rank}</span>
+                                        <span class="report-topic-count">${t.docCount}件 (${t.shareRate}%)</span>
+                                    </div>
+                                    <div class="report-topic-name">${this.escape(cleanName)}</div>
+                                    <div class="report-topic-kw">
+                                        ${t.keywords.map(k => `<span class="report-topic-tag">#${this.escape(k)}</span>`).join('')}
+                                    </div>
                                 </div>
                                 ${t.repText ? `
                                     <div class="report-topic-quote">
@@ -592,7 +597,7 @@ const ReportGenerator = {
                         <!-- 左: UMAP散布図 -->
                         <div class="report-card">
                             <div class="report-card-title">意見の文脈クラスタリング散布図（UMAP）</div>
-                            <div class="report-chart-box" style="height: 65mm;">
+                            <div class="report-chart-box" style="height: 52mm;">
                                 ${images.umapImg ? `<img src="${images.umapImg}" class="report-chart-img" alt="UMAP散布図" />` : `<div class="report-no-chart">画像がありません</div>`}
                             </div>
                             <div class="report-hint-box" style="margin-top: 4px;">
@@ -603,7 +608,7 @@ const ReportGenerator = {
                         <!-- 右: 属性クロス集計 -->
                         <div class="report-card">
                             <div class="report-card-title">属性別 言及傾向（グラフ ＆ 詳細表）</div>
-                            <div class="report-chart-box" style="height: 33mm;">
+                            <div class="report-chart-box" style="height: 26mm;">
                                 ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
                             </div>
                             <table class="report-table" style="margin-top: 4px;">
