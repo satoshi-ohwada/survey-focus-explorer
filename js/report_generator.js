@@ -298,7 +298,35 @@ const ReportGenerator = {
             attrCrossTable.sort((a, b) => parseFloat(b.rate) - parseFloat(a.rate));
         }
 
-        // 5. UMAPクラスタ傾向
+        // 5. 主要な論点グループ（トピックサマリー）
+        if ((!AppState.summaryData || !AppState.summaryData.topicSummaries) && typeof generateSummaryData === 'function') {
+            generateSummaryData();
+        }
+        const rawTopicSummaries = (AppState.summaryData && AppState.summaryData.topicSummaries) ? AppState.summaryData.topicSummaries : [];
+        const topicSummaries = rawTopicSummaries.slice(0, 3).map((t, idx) => {
+            const repOp = (t.representativeOpinions && t.representativeOpinions.length > 0)
+                ? t.representativeOpinions[0]
+                : null;
+            let repText = '';
+            let repAttr = '';
+            if (repOp) {
+                repText = repOp.text ? repOp.text.trim() : '';
+                if (repText.length > 70) repText = repText.substring(0, 70) + '…';
+                repAttr = repOp.attribute ? repOp.attribute.trim() : '';
+            }
+            return {
+                rank: idx + 1,
+                name: t.name || `論点 ${idx + 1}`,
+                keywords: (t.keywords || []).slice(0, 4),
+                docCount: t.docCount || 0,
+                shareRate: t.shareRate || 0,
+                primaryType: t.primaryType || '',
+                repText: repText,
+                repAttr: repAttr
+            };
+        });
+
+        // 6. UMAPクラスタ傾向
         const clustersSummary = [];
         if (UmapVisualizer && UmapVisualizer.clusters && UmapVisualizer.clusters.length > 0) {
             UmapVisualizer.clusters.slice(0, 4).forEach((c, idx) => {
@@ -330,6 +358,7 @@ const ReportGenerator = {
             topWords,
             topCoocPairs,
             attrCrossTable: attrCrossTable.slice(0, 6),
+            topicSummaries,
             clustersSummary
         };
     },
@@ -381,25 +410,41 @@ const ReportGenerator = {
             </tr>
         `).join('') : `<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding: 12px;">属性列が未選択です</td></tr>`;
 
-        // クラスタ要約リスト
-        const clustersHtml = data.clustersSummary.length > 0 ? `
-            <div class="report-cluster-list">
-                ${data.clustersSummary.map(c => `
-                    <div class="report-cluster-item">
-                        <div class="report-cluster-header">
-                            <span class="report-cluster-badge">Group ${c.id}</span>
-                            <span class="report-cluster-label">${this.escape(c.label)}</span>
-                            <span class="report-cluster-size">(${c.size}件)</span>
-                        </div>
-                        <div class="report-cluster-kw">主要語: ${this.escape(c.topKw)}</div>
-                    </div>
-                `).join('')}
-            </div>
-        ` : `
-            <div style="font-size: 11px; color: #64748b; padding: 8px; background: #f8fafc; border-radius: 4px;">
-                💡 意味的・文脈的に類似した発言が近くに集まり、色のまとまり（クラスタ）を形成しています。
-            </div>
-        `;
+        // 主要論点グループHTML
+        let topicsHtml = '';
+        if (data.topicSummaries && data.topicSummaries.length > 0) {
+            topicsHtml = `
+                <div class="report-topics-grid">
+                    ${data.topicSummaries.map(t => {
+                        const cleanName = t.name.replace(/^論点 \d+:\s*/, '');
+                        return `
+                            <div class="report-topic-card">
+                                <div class="report-topic-head">
+                                    <span class="report-topic-badge">論点 ${t.rank}</span>
+                                    <span class="report-topic-count">${t.docCount}件 (${t.shareRate}%)</span>
+                                </div>
+                                <div class="report-topic-name">${this.escape(cleanName)}</div>
+                                <div class="report-topic-kw">
+                                    ${t.keywords.map(k => `<span class="report-topic-tag">#${this.escape(k)}</span>`).join('')}
+                                </div>
+                                ${t.repText ? `
+                                    <div class="report-topic-quote">
+                                        「${this.escape(t.repText)}」
+                                        ${t.repAttr ? `<span class="report-topic-attr">[${this.escape(t.repAttr)}]</span>` : ''}
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `;
+        } else {
+            topicsHtml = `
+                <div class="report-hint-box" style="padding: 8px; text-align: center;">
+                    論点グループを分類するのに十分な意見数がありません（意見数2件以上で自動抽出されます）
+                </div>
+            `;
+        }
 
         // ページ1 HTML
         const page1 = `
@@ -534,59 +579,60 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- 3. UMAP散布図 -->
+                <!-- 3. 主要な論点グループ -->
                 <div class="report-section">
-                    <div class="report-sec-title">🌌 3. 意見の類似度・文脈クラスタリング（UMAP散布図）</div>
-                    <div class="report-umap-container">
-                        <div class="report-umap-chart-box">
-                            ${images.umapImg ? `<img src="${images.umapImg}" class="report-chart-img" alt="UMAP散布図" />` : `<div class="report-no-chart">画像がありません</div>`}
-                        </div>
-                        <div class="report-umap-desc-box">
-                            <div class="report-sub-title">主要クラスタの傾向・要約</div>
-                            ${clustersHtml}
-                        </div>
-                    </div>
+                    <div class="report-sec-title">📑 3. 主要な論点グループ（トピック分類 ＆ 代表意見）</div>
+                    ${topicsHtml}
                 </div>
 
-                <!-- 4. 属性クロス集計 -->
-                <div class="report-section" style="margin-top: 10px;">
-                    <div class="report-sec-title">📊 4. 属性セグメント別クロス集計（言及傾向）</div>
+                <!-- 4. 意見分布（UMAP）＆ 属性セグメント分析（左右2カラム） -->
+                <div class="report-section" style="margin-top: 8px;">
+                    <div class="report-sec-title">🌌 4. 意見分布構造（UMAP散布図）＆ 属性セグメント分析</div>
                     <div class="report-dual-grid">
+                        <!-- 左: UMAP散布図 -->
                         <div class="report-card">
-                            <div class="report-card-title">属性別 言及率 / 構成比グラフ</div>
-                            <div class="report-chart-box" style="height: 190px;">
-                                ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
+                            <div class="report-card-title">意見の文脈クラスタリング散布図（UMAP）</div>
+                            <div class="report-chart-box" style="height: 65mm;">
+                                ${images.umapImg ? `<img src="${images.umapImg}" class="report-chart-img" alt="UMAP散布図" />` : `<div class="report-no-chart">画像がありません</div>`}
+                            </div>
+                            <div class="report-hint-box" style="margin-top: 4px;">
+                                💡 近接する点は意味・文脈が似ている発言を表します。
                             </div>
                         </div>
+
+                        <!-- 右: 属性クロス集計 -->
                         <div class="report-card">
-                            <div class="report-card-title">属性別 集計データ詳細表</div>
-                            <table class="report-table">
+                            <div class="report-card-title">属性別 言及傾向（グラフ ＆ 詳細表）</div>
+                            <div class="report-chart-box" style="height: 33mm;">
+                                ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
+                            </div>
+                            <table class="report-table" style="margin-top: 4px;">
                                 <thead>
                                     <tr>
                                         <th>属性区分</th>
-                                        <th style="width: 50px; text-align: right;">母集団</th>
-                                        <th style="width: 50px; text-align: right;">言及数</th>
-                                        <th style="width: 60px; text-align: right;">言及率%</th>
-                                        <th style="width: 55px; text-align: right;">構成比%</th>
+                                        <th style="width: 44px; text-align: right;">母数</th>
+                                        <th style="width: 44px; text-align: right;">言及数</th>
+                                        <th style="width: 52px; text-align: right;">言及率%</th>
+                                        <th style="width: 48px; text-align: right;">構成比%</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${attrCrossRows}
                                 </tbody>
                             </table>
-                            <div class="report-hint-box" style="margin-top: 6px;">
-                                ※「言及率」は各属性内での該当割合、「構成比」は該当意見全体における属性シェアです。
+                            <div class="report-hint-box" style="margin-top: 4px;">
+                                ※ 言及率は各属性内での割合、構成比は意見全体でのシェアです。
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <!-- 5. 分析所見・考察メモ欄 -->
-                <div class="report-section" style="margin-top: 10px;">
+                <div class="report-section" style="margin-top: 8px;">
                     <div class="report-sec-title">📝 5. 分析所見・考察メモ（報告用）</div>
-                    <div class="report-memo-wrapper">
+                    <div class="report-memo-wrapper" style="min-height: 22mm;">
                         <!-- 画面プレビュー時は入力可能 -->
-                        <textarea id="reportInputMemo" class="report-memo-input no-print" placeholder="ここに分析結果の要約や所見、考察、ネクストアクションなどを自由に入力できます（印刷時にそのまま反映されます）。">${this.escape(this.memoText)}</textarea>
+                        <textarea id="reportInputMemo" class="report-memo-input no-print" style="min-height: 20mm;" placeholder="ここに分析結果の要約や所見、考察、ネクストアクションなどを自由に入力できます（印刷時にそのまま反映されます）。">${this.escape(this.memoText)}</textarea>
                         <!-- 印刷時は静的テキストとして印字 -->
                         <div id="reportPrintMemo" class="report-memo-print print-only">${this.escape(this.memoText || '（特記事項なし）')}</div>
                     </div>
