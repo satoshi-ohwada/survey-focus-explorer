@@ -408,7 +408,7 @@ const ReportGenerator = {
                 <div class="report-header">
                     <div class="report-header-main">
                         <div class="report-title-badge">FOCUS EXPLORER REPORT</div>
-                        <h2 class="report-title">アンケート自由記述 分析サマリーレポート</h2>
+                        <h2 class="report-title">キーワード連想＆意見深掘り 分析サマリーレポート</h2>
                     </div>
                     <div class="report-header-meta">
                         <div><b>出力日時:</b> ${data.dateStr}</div>
@@ -513,7 +513,7 @@ const ReportGenerator = {
 
                 <!-- ページ1 フッター -->
                 <div class="report-footer">
-                    <span>Survey Focus Explorer - 意見深掘り＆連想分析レポート</span>
+                    <span>キーワード連想＆意見深掘りツール (Focus Explorer)</span>
                     <span>1 / 2</span>
                 </div>
             </div>
@@ -594,7 +594,7 @@ const ReportGenerator = {
 
                 <!-- ページ2 フッター -->
                 <div class="report-footer">
-                    <span>Survey Focus Explorer - 意見深掘り＆連想分析レポート</span>
+                    <span>キーワード連想＆意見深掘りツール (Focus Explorer)</span>
                     <span>2 / 2</span>
                 </div>
             </div>
