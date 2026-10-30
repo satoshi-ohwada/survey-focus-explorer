@@ -437,6 +437,94 @@ const OpinionSummarizer = {
     },
 
     /**
+     * 関連意見として抽出に含まれた単語の集計・例示データを作成
+     * @param {object} filterResult - 抽出結果
+     * @param {string} targetKeyword - 指定キーワード
+     * @param {string} resolvedTargetWord - 代表中心語
+     * @param {Array<object|string>} relatedWordsList - 関連語配列
+     * @param {object} subcorpusStats - 抽出意見コーパス統計
+     * @param {string} matchMode - 'or' | 'and'
+     * @param {string} extractUnit - 'doc' | 'sentence'
+     * @returns {object} 集計・例示データ
+     */
+    buildIncludedWordsSummary(filterResult, targetKeyword, resolvedTargetWord, relatedWordsList = [], subcorpusStats = null, matchMode = 'or', extractUnit = 'doc') {
+        const target = targetKeyword || '';
+        const resolved = resolvedTargetWord || '';
+        
+        // チェックされている関連語
+        const activeRelated = (relatedWordsList || [])
+            .filter(r => (typeof r === 'string' ? true : r && r.checked))
+            .map(r => (typeof r === 'string' ? r : r.word))
+            .filter(Boolean);
+
+        // マッチした文書群での単語別ヒット件数
+        const hitDocCounts = {};
+        const matchedDocs = (filterResult && filterResult.matchedDocs) ? filterResult.matchedDocs : [];
+        
+        matchedDocs.forEach(d => {
+            const seenInDoc = new Set();
+            (d.matchedWords || []).forEach(w => {
+                if (w && !seenInDoc.has(w)) {
+                    seenInDoc.add(w);
+                    hitDocCounts[w] = (hitDocCounts[w] || 0) + 1;
+                }
+            });
+        });
+
+        // 関連意見として含めた単語のリスト（件数付き）
+        let wordItems = [];
+        if (activeRelated.length > 0) {
+            wordItems = activeRelated.map(w => {
+                const count = hitDocCounts[w] || 0;
+                return {
+                    word: w,
+                    type: 'related',
+                    count: count,
+                    label: count > 0 ? `${w} (${count}件)` : w
+                };
+            });
+            wordItems.sort((a, b) => b.count - a.count);
+        } else {
+            // 関連語が未選択（キーワード単体抽出）の場合：意見群で共起する上位単語を例示
+            const topWords = (subcorpusStats && subcorpusStats.wordList) ? subcorpusStats.wordList : [];
+            const targetLower = target.toLowerCase();
+            const resolvedLower = resolved.toLowerCase();
+            
+            topWords.forEach(wItem => {
+                const w = wItem.text;
+                const wLower = w.toLowerCase();
+                if (wLower !== targetLower && wLower !== resolvedLower && !targetLower.includes(wLower)) {
+                    wordItems.push({
+                        word: w,
+                        type: 'cooc',
+                        count: wItem.count,
+                        label: `${w} (${wItem.count}件)`
+                    });
+                }
+            });
+            wordItems = wordItems.slice(0, 12);
+        }
+
+        const targetCount = hitDocCounts[target] || matchedDocs.filter(d => d.hasTargetKeyword).length;
+        const resolvedCount = (resolved && resolved !== target) ? (hitDocCounts[resolved] || 0) : 0;
+
+        return {
+            targetKeyword: target,
+            targetCount: targetCount,
+            resolvedWord: resolved,
+            resolvedCount: resolvedCount,
+            activeRelatedCount: activeRelated.length,
+            hasActiveRelated: activeRelated.length > 0,
+            wordItems: wordItems,
+            totalIncludedWordsCount: 1 + (resolved && resolved !== target ? 1 : 0) + activeRelated.length,
+            matchMode: matchMode || 'or',
+            extractUnit: extractUnit || 'doc',
+            matchModeLabel: matchMode === 'and' ? 'AND (キーワード必須＋関連語)' : 'OR (キーワード または 関連語)',
+            extractUnitLabel: extractUnit === 'sentence' ? '文単位' : '回答全体'
+        };
+    },
+
+    /**
      * Markdown形式の要約レポートを生成する
      * @param {object} summaryData - 集約データ一式
      * @returns {string} Markdown文字列
@@ -449,7 +537,8 @@ const OpinionSummarizer = {
             repOpinions,
             topicSummaries,
             oddsRatioKeywords,
-            opinionTypeSummary
+            opinionTypeSummary,
+            includedWordsSummary
         } = summaryData;
 
         const lines = [];
@@ -457,13 +546,40 @@ const OpinionSummarizer = {
 
         lines.push(`# キーワード連想＆意見深掘り 要約レポート`);
         lines.push(`- **作成日**: ${today}`);
-        lines.push(`- **分析キーワード**: ${targetKeyword}${resolvedTargetWord && resolvedTargetWord !== targetKeyword ? `（中心代表語: ${resolvedTargetWord}）` : ''}`);
+        lines.push(`- **注目キーワード**: ${targetKeyword}${resolvedTargetWord && resolvedTargetWord !== targetKeyword ? `（中心代表語: ${resolvedTargetWord}）` : ''}`);
         lines.push(`- **該当意見数**: ${filterResult.matchedCount.toLocaleString()} 件 / 全 ${filterResult.totalDocs.toLocaleString()} 件（該当率: ${filterResult.matchRate.toFixed(1)}%）`);
+        
+        if (includedWordsSummary) {
+            lines.push(`- **抽出条件**: ${includedWordsSummary.matchModeLabel} / 抽出単位: ${includedWordsSummary.extractUnitLabel}`);
+        } else {
+            lines.push(`- **抽出条件**: ${filterResult.matchMode === 'and' ? 'AND条件' : 'OR条件'} / 抽出単位: ${filterResult.extractUnit === 'sentence' ? '文単位' : '回答全体'}`);
+        }
         lines.push(``);
+
+        // 関連意見の集約概要 ＆ 含まれた単語の例示
+        lines.push(`## 1. 関連意見の集約概要 ＆ 抽出対象単語`);
+        if (includedWordsSummary) {
+            const inc = includedWordsSummary;
+            const targetHit = inc.targetCount > 0 ? ` (${inc.targetCount}件)` : '';
+            const resHit = (inc.resolvedWord && inc.resolvedWord !== inc.targetKeyword)
+                ? `- **中心代表語**: \`${inc.resolvedWord}\`${inc.resolvedCount > 0 ? ` (${inc.resolvedCount}件)` : ''}\n`
+                : '';
+            const wordsList = inc.wordItems && inc.wordItems.length > 0
+                ? inc.wordItems.map(w => `\`${w.word}\`${w.count > 0 ? `(${w.count}件)` : ''}`).join(', ')
+                : '（関連語指定なし）';
+            const wordsHeader = inc.hasActiveRelated
+                ? `関連意見として含めた単語例（採用関連語 計${inc.activeRelatedCount}語中）:`
+                : `関連意見として共起・頻出する上位単語例:`;
+
+            lines.push(`- **注目キーワード**: \`${inc.targetKeyword}\`${targetHit}`);
+            if (resHit) lines.push(resHit.trimEnd());
+            lines.push(`- **${wordsHeader}**\n  ${wordsList}`);
+            lines.push(``);
+        }
 
         // 意見タイプ構成
         if (opinionTypeSummary) {
-            lines.push(`## 1. 意見タイプ構成`);
+            lines.push(`### 意見タイプ構成比（自動分類）:`);
             lines.push(`- 🔴 **困りごと・課題**: ${opinionTypeSummary.issueCount} 件 (${opinionTypeSummary.issueRate}%)`);
             lines.push(`- 🔵 **要望・改善提案**: ${opinionTypeSummary.requestCount} 件 (${opinionTypeSummary.requestRate}%)`);
             lines.push(`- 🟢 **肯定・満足**: ${opinionTypeSummary.positiveCount} 件 (${opinionTypeSummary.positiveRate}%)`);

@@ -2010,6 +2010,19 @@ function generateSummaryData() {
     // 4. 全体比オッズ比上位キーワードの算出
     const oddsRatioKeywords = OpinionSummarizer.computeOddsRatioKeywords(AppState.totalCorpusStats, AppState.subcorpusStats, 8);
 
+    // 5. 関連意見として含めた単語（キーワード・代表語・関連語）の集約・例示データ
+    const includedWordsSummary = OpinionSummarizer.buildIncludedWordsSummary
+        ? OpinionSummarizer.buildIncludedWordsSummary(
+            AppState.filterResult,
+            AppState.targetKeyword,
+            AppState.resolvedTargetWord,
+            AppState.relatedWords,
+            AppState.subcorpusStats,
+            AppState.matchMode,
+            AppState.extractUnit
+        )
+        : null;
+
     AppState.summaryData = {
         targetKeyword: AppState.targetKeyword,
         resolvedTargetWord: AppState.resolvedTargetWord,
@@ -2017,7 +2030,8 @@ function generateSummaryData() {
         repOpinions: repOpinions,
         topicSummaries: topicSummaries,
         oddsRatioKeywords: oddsRatioKeywords,
-        opinionTypeSummary: opinionTypeSummary
+        opinionTypeSummary: opinionTypeSummary,
+        includedWordsSummary: includedWordsSummary
     };
 }
 
@@ -2299,6 +2313,65 @@ function renderSummaryDashboard() {
         const isFiltered = targetRows.length < AppState.rawRows.length;
         const denomLabel = isFiltered ? '対象' : '全';
 
+        const inc = summary.includedWordsSummary || (OpinionSummarizer && OpinionSummarizer.buildIncludedWordsSummary
+            ? OpinionSummarizer.buildIncludedWordsSummary(
+                AppState.filterResult,
+                AppState.targetKeyword,
+                AppState.resolvedTargetWord,
+                AppState.relatedWords,
+                AppState.subcorpusStats,
+                AppState.matchMode,
+                AppState.extractUnit
+            )
+            : null);
+
+        let includedWordsHtml = '';
+        if (inc) {
+            const targetBadge = `
+                <span class="included-word-pill target" title="指定注目キーワード（該当意見: ${inc.targetCount}件）">
+                    🎯 <strong>${escapeHtml(inc.targetKeyword)}</strong>
+                    ${inc.targetCount > 0 ? `<span class="pill-cnt">${inc.targetCount}件</span>` : ''}
+                </span>
+            `;
+            const resolvedBadge = (inc.resolvedWord && inc.resolvedWord !== inc.targetKeyword) ? `
+                <span class="included-word-pill resolved" title="中心代表語（複合語自動判定 / 該当意見: ${inc.resolvedCount}件）">
+                    🔹 <strong>${escapeHtml(inc.resolvedWord)}</strong>
+                    ${inc.resolvedCount > 0 ? `<span class="pill-cnt">${inc.resolvedCount}件</span>` : ''}
+                </span>
+            ` : '';
+            const wordsList = inc.wordItems && inc.wordItems.length > 0 ? inc.wordItems.slice(0, 14).map(item => `
+                <span class="included-word-pill ${item.type}" title="${item.type === 'related' ? '採用関連語' : '意見群内の共起語'}（該当意見: ${item.count}件）">
+                    ${escapeHtml(item.word)}
+                    ${item.count > 0 ? `<span class="pill-cnt">${item.count}件</span>` : ''}
+                </span>
+            `).join('') : '<span style="color: var(--text-muted); font-size: 11px;">（関連語指定なし）</span>';
+            const moreBadge = inc.wordItems && inc.wordItems.length > 14
+                ? `<span class="included-word-more">他 ${inc.wordItems.length - 14} 語</span>`
+                : '';
+
+            const subLabel = inc.hasActiveRelated
+                ? `キーワード ＋ 採用関連語（計 ${inc.activeRelatedCount} 語から上位を例示）`
+                : `キーワード単体抽出（意見群内で頻出・共起する上位関連語の例示）`;
+
+            includedWordsHtml = `
+                <div class="summary-included-words-section">
+                    <div class="summary-included-words-header">
+                        <span class="summary-included-words-title">
+                            <span>🏷️</span>
+                            <span>関連意見として含めた単語（例示）:</span>
+                        </span>
+                        <span class="summary-included-words-sub">${subLabel}</span>
+                    </div>
+                    <div class="summary-included-words-tags">
+                        ${targetBadge}
+                        ${resolvedBadge}
+                        ${wordsList}
+                        ${moreBadge}
+                    </div>
+                </div>
+            `;
+        }
+
         overviewEl.innerHTML = `
             <div class="summary-overview-header">
                 <div class="summary-overview-title">
@@ -2313,6 +2386,7 @@ function renderSummaryDashboard() {
                     単位: <strong>${AppState.extractUnit === 'sentence' ? '文単位' : '回答全体'}</strong>
                 </div>
             </div>
+            ${includedWordsHtml}
             <div class="summary-type-progress-wrap">
                 <div style="font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">
                     意見タイプ構成比（ルールベース自動分類）:

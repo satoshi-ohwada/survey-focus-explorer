@@ -341,6 +341,32 @@ const ReportGenerator = {
             });
         }
 
+        // 7. 関連意見の集約概要（意見タイプ構成比 ＆ 含めた単語の集計例示）
+        let opinionTypeSummary = (AppState.summaryData && AppState.summaryData.opinionTypeSummary)
+            ? AppState.summaryData.opinionTypeSummary
+            : null;
+        if (!opinionTypeSummary && typeof generateSummaryData === 'function') {
+            generateSummaryData();
+            opinionTypeSummary = (AppState.summaryData && AppState.summaryData.opinionTypeSummary)
+                ? AppState.summaryData.opinionTypeSummary
+                : null;
+        }
+
+        let includedWords = (AppState.summaryData && AppState.summaryData.includedWordsSummary)
+            ? AppState.summaryData.includedWordsSummary
+            : null;
+        if (!includedWords && typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.buildIncludedWordsSummary) {
+            includedWords = OpinionSummarizer.buildIncludedWordsSummary(
+                AppState.filterResult,
+                AppState.targetKeyword,
+                AppState.resolvedTargetWord,
+                AppState.relatedWords,
+                AppState.subcorpusStats,
+                AppState.matchMode,
+                AppState.extractUnit
+            );
+        }
+
         const now = new Date();
         const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -360,7 +386,9 @@ const ReportGenerator = {
             topCoocPairs,
             attrCrossTable: attrCrossTable.slice(0, 6),
             topicSummaries,
-            clustersSummary
+            clustersSummary,
+            opinionTypeSummary,
+            includedWords
         };
     },
 
@@ -451,6 +479,60 @@ const ReportGenerator = {
             `;
         }
 
+        // 関連意見の集約サマリーHTML（意見タイプ構成比 ＆ 含めた単語の例示）
+        let summaryBoxHtml = '';
+        if (data.opinionTypeSummary && data.includedWords) {
+            const ots = data.opinionTypeSummary;
+            const inc = data.includedWords;
+
+            const targetTag = `<span class="report-word-pill target" title="注目キーワード">🎯 ${this.escape(inc.targetKeyword)}${inc.targetCount > 0 ? ` (${inc.targetCount}件)` : ''}</span>`;
+            const resolvedTag = (inc.resolvedWord && inc.resolvedWord !== inc.targetKeyword)
+                ? `<span class="report-word-pill resolved" title="中心代表語">🔹 ${this.escape(inc.resolvedWord)}${inc.resolvedCount > 0 ? ` (${inc.resolvedCount}件)` : ''}</span>`
+                : '';
+            const relatedTags = (inc.wordItems && inc.wordItems.length > 0)
+                ? inc.wordItems.slice(0, 8).map(w => `<span class="report-word-pill ${w.type}">${this.escape(w.word)}${w.count > 0 ? ` (${w.count}件)` : ''}</span>`).join('')
+                : '<span style="color:#94a3b8; font-size:8px;">（関連語指定なし）</span>';
+            const moreTag = (inc.wordItems && inc.wordItems.length > 8)
+                ? `<span class="report-word-pill-more">他 ${inc.wordItems.length - 8} 語</span>`
+                : '';
+
+            const subInfoLabel = inc.hasActiveRelated
+                ? `条件: <b>${inc.matchModeLabel}</b> / 単位: <b>${inc.extractUnitLabel}</b> / 採用関連語: <b>計${inc.activeRelatedCount}語</b>`
+                : `条件: <b>${inc.matchModeLabel}</b> / 単位: <b>${inc.extractUnitLabel}</b> / キーワード単体`;
+
+            summaryBoxHtml = `
+                <div class="report-summary-box">
+                    <div class="report-summary-type-row">
+                        <div class="report-summary-type-header">
+                            <span class="report-summary-sub-title">意見タイプ構成比（自動分類）:</span>
+                            <span class="report-summary-sub-desc">${subInfoLabel}</span>
+                        </div>
+                        <div class="report-type-bar-wrap">
+                            <div class="report-type-bar issue" style="width: ${ots.issueRate}%;" title="困りごと・課題: ${ots.issueCount}件 (${ots.issueRate}%)"></div>
+                            <div class="report-type-bar request" style="width: ${ots.requestRate}%;" title="要望・改善提案: ${ots.requestCount}件 (${ots.requestRate}%)"></div>
+                            <div class="report-type-bar positive" style="width: ${ots.positiveRate}%;" title="肯定・満足: ${ots.positiveCount}件 (${ots.positiveRate}%)"></div>
+                            <div class="report-type-bar neutral" style="width: ${ots.neutralRate}%;" title="その他・事実: ${ots.neutralCount}件 (${ots.neutralRate}%)"></div>
+                        </div>
+                        <div class="report-type-legend-row">
+                            <span class="report-legend-tag issue">🔴 困りごと: <b>${ots.issueCount}件</b> (${ots.issueRate}%)</span>
+                            <span class="report-legend-tag request">🔵 要望: <b>${ots.requestCount}件</b> (${ots.requestRate}%)</span>
+                            <span class="report-legend-tag positive">🟢 肯定: <b>${ots.positiveCount}件</b> (${ots.positiveRate}%)</span>
+                            <span class="report-legend-tag neutral">⚪ その他: <b>${ots.neutralCount}件</b> (${ots.neutralRate}%)</span>
+                        </div>
+                    </div>
+                    <div class="report-included-words-row">
+                        <span class="report-included-title">関連意見として含めた単語（例示）:</span>
+                        <div class="report-included-tags">
+                            ${targetTag}
+                            ${resolvedTag}
+                            ${relatedTags}
+                            ${moreTag}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         // ページ1 HTML
         const page1 = `
             <div class="report-page" id="reportPage1">
@@ -483,9 +565,9 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- 1. 母集団サマリーカード -->
+                <!-- 1. 母集団 ＆ 関連意見の集約概要 -->
                 <div class="report-section">
-                    <div class="report-sec-title">📌 1. 母集団・分析規模サマリー</div>
+                    <div class="report-sec-title">📌 1. 母集団 ＆ 関連意見の集約概要</div>
                     <div class="report-kpi-grid">
                         <div class="report-kpi-card">
                             <div class="report-kpi-lbl">全体回答数</div>
@@ -508,11 +590,12 @@ const ReportGenerator = {
                             <div class="report-kpi-sub">言及者の全体比率</div>
                         </div>
                     </div>
+                    ${summaryBoxHtml}
                     ${attrSummaryHtml}
                 </div>
 
                 <!-- 2. ワードクラウド ＆ 共起ネットワーク -->
-                <div class="report-section" style="margin-top: 10px;">
+                <div class="report-section" style="margin-top: 6px;">
                     <div class="report-sec-title">🔍 2. 頻出単語 ＆ 話題共起構造（テキスト全体観）</div>
                     <div class="report-dual-grid">
                         <!-- 左: ワードクラウド -->
