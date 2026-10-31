@@ -367,6 +367,15 @@ const ReportGenerator = {
             );
         }
 
+        // 8. 意見タイプ別代表意見（その他以外の区分: 困りごと・要望・肯定 各最大3選）
+        let repOpinionsByType = (AppState.summaryData && AppState.summaryData.repOpinionsByType)
+            ? AppState.summaryData.repOpinionsByType
+            : null;
+        if (!repOpinionsByType && typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.extractRepresentativeOpinionsByType) {
+            const mDocs = (AppState.filterResult && AppState.filterResult.matchedDocs) ? AppState.filterResult.matchedDocs : [];
+            repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType(mDocs, AppState.subcorpusStats, 3);
+        }
+
         const now = new Date();
         const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -388,7 +397,8 @@ const ReportGenerator = {
             topicSummaries,
             clustersSummary,
             opinionTypeSummary,
-            includedWords
+            includedWords,
+            repOpinionsByType
         };
     },
 
@@ -477,6 +487,96 @@ const ReportGenerator = {
                     論点グループを分類するのに十分な意見数がありません（意見数2件以上で自動抽出されます）
                 </div>
             `;
+        }
+
+        // 意見タイプ別 代表的な生の声HTML（その他以外の区分: 困りごと・課題、要望・改善提案、肯定・満足 各3選）
+        let typeRepHtml = '';
+        if (data.repOpinionsByType) {
+            const rbt = data.repOpinionsByType;
+            const ots = data.opinionTypeSummary || { issueCount: 0, requestCount: 0, positiveCount: 0 };
+            
+            const cols = [
+                {
+                    type: 'issue',
+                    label: '困りごと・課題',
+                    icon: '🔴',
+                    color: '#e11d48',
+                    list: rbt.issue || [],
+                    total: ots.issueCount || 0
+                },
+                {
+                    type: 'request',
+                    label: '要望・改善提案',
+                    icon: '🔵',
+                    color: '#0284c7',
+                    list: rbt.request || [],
+                    total: ots.requestCount || 0
+                },
+                {
+                    type: 'positive',
+                    label: '肯定・満足',
+                    icon: '🟢',
+                    color: '#10b981',
+                    list: rbt.positive || [],
+                    total: ots.positiveCount || 0
+                }
+            ];
+
+            const colsHtml = cols.map(c => {
+                let itemsHtml = '';
+                if (c.list.length === 0) {
+                    itemsHtml = `<div class="report-type-rep-empty">該当意見なし</div>`;
+                } else {
+                    itemsHtml = c.list.map(rep => {
+                        let text = rep.doc.text ? rep.doc.text.trim() : '';
+                        if (text.length > 68) text = text.substring(0, 68) + '…';
+                        const attrText = rep.doc.attribute ? `<span class="report-type-rep-attr">[${this.escape(rep.doc.attribute)}]</span>` : '';
+                        return `
+                            <div class="report-type-rep-item">
+                                <div class="report-type-rep-meta">
+                                    <span class="report-type-rep-rank ${c.type}">#${rep.rank}</span>
+                                    ${attrText}
+                                </div>
+                                <div class="report-type-rep-quote">「${this.escape(text)}」</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                return `
+                    <div class="report-type-rep-col ${c.type}">
+                        <div class="report-type-rep-head" style="border-left: 3px solid ${c.color};">
+                            <span class="report-type-rep-title">${c.icon} ${c.label}</span>
+                            <span class="report-type-rep-count">${c.list.length}選 / 全${c.total}件</span>
+                        </div>
+                        <div class="report-type-rep-body">
+                            ${itemsHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // トピックタグ行（もしトピックデータがあればコンパクトに付記）
+            let topicsInlineHtml = '';
+            if (data.topicSummaries && data.topicSummaries.length > 0) {
+                topicsInlineHtml = `
+                    <div class="report-topic-inline-row">
+                        <span class="report-topic-inline-lbl">🏷️ 主要論点:</span>
+                        ${data.topicSummaries.slice(0, 3).map(t => `
+                            <span class="report-topic-inline-tag"><b>${this.escape(t.name.replace(/^論点 \d+:\s*/, ''))}</b> (${t.docCount}件)</span>
+                        `).join('')}
+                    </div>
+                `;
+            }
+
+            typeRepHtml = `
+                <div class="report-type-rep-grid">
+                    ${colsHtml}
+                </div>
+                ${topicsInlineHtml}
+            `;
+        } else {
+            typeRepHtml = topicsHtml;
         }
 
         // 関連意見の集約サマリーHTML（意見タイプ構成比 ＆ 含めた単語の例示）
@@ -667,10 +767,10 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- 3. 主要な論点グループ -->
+                <!-- 3. 意見タイプ別 代表的な生の声 -->
                 <div class="report-section">
-                    <div class="report-sec-title">📑 3. 主要な論点グループ（トピック分類 ＆ 代表意見）</div>
-                    ${topicsHtml}
+                    <div class="report-sec-title">📑 3. 意見タイプ別 代表的な生の声（その他以外の区分別・各3選）</div>
+                    ${typeRepHtml}
                 </div>
 
                 <!-- 4. 意見分布（UMAP）＆ 属性セグメント分析（左右2カラム） -->

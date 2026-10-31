@@ -289,6 +289,38 @@ const OpinionSummarizer = {
     },
 
     /**
+     * 意見タイプ別（その他以外: 困りごと・課題、要望・改善提案、肯定・満足）の代表意見を選出する
+     * @param {Array<object>} matchedDocs - 抽出された回答文配列
+     * @param {object} subcorpusStats - コーパス統計
+     * @param {number} topN - タイプごとの選出件数（デフォルト: 3）
+     * @returns {object} { issue: [...], request: [...], positive: [...] }
+     */
+    extractRepresentativeOpinionsByType(matchedDocs, subcorpusStats, topN = 3) {
+        if (!matchedDocs || matchedDocs.length === 0) {
+            return { issue: [], request: [], positive: [] };
+        }
+
+        const byType = {
+            issue: [],
+            request: [],
+            positive: []
+        };
+
+        matchedDocs.forEach(doc => {
+            const t = (doc.opinionType && doc.opinionType.type) ? doc.opinionType.type : 'neutral';
+            if (byType[t]) {
+                byType[t].push(doc);
+            }
+        });
+
+        return {
+            issue: this.extractRepresentativeOpinions(byType.issue, subcorpusStats, topN),
+            request: this.extractRepresentativeOpinions(byType.request, subcorpusStats, topN),
+            positive: this.extractRepresentativeOpinions(byType.positive, subcorpusStats, topN)
+        };
+    },
+
+    /**
      * クラスタリング結果に基づいて各論点（トピック）のサマリーカードデータを生成する
      * @param {Array<object>} matchedDocs - 抽出された回答文配列
      * @param {object} subcorpusStats - computeSubcorpusStats の結果
@@ -535,6 +567,7 @@ const OpinionSummarizer = {
             resolvedTargetWord,
             filterResult,
             repOpinions,
+            repOpinionsByType,
             topicSummaries,
             oddsRatioKeywords,
             opinionTypeSummary,
@@ -587,8 +620,59 @@ const OpinionSummarizer = {
             lines.push(``);
         }
 
-        // 代表意見（抽出型要約）
-        if (repOpinions && repOpinions.length > 0) {
+        // 代表意見（その他以外の区分別: 困りごと・要望・肯定 各3選）
+        const repsByType = repOpinionsByType || (this.extractRepresentativeOpinionsByType && filterResult && filterResult.matchedDocs
+            ? this.extractRepresentativeOpinionsByType(filterResult.matchedDocs, null, 3)
+            : null);
+
+        if (repsByType && (repsByType.issue.length > 0 || repsByType.request.length > 0 || repsByType.positive.length > 0)) {
+            lines.push(`## 2. 意見タイプ別 代表意見（その他以外の区分別・各3選）`);
+            
+            // 1. 困りごと・課題
+            const issueTotal = opinionTypeSummary ? ` / 全 ${opinionTypeSummary.issueCount} 件` : '';
+            lines.push(`### 🔴 困りごと・課題（代表 ${repsByType.issue.length} 選${issueTotal}）`);
+            if (repsByType.issue.length === 0) {
+                lines.push(`- （該当する困りごと・課題の意見はありませんでした）`);
+            } else {
+                repsByType.issue.forEach((rep, idx) => {
+                    const attrText = rep.doc.attribute ? ` [${rep.doc.attribute}]` : '';
+                    const scoreText = rep.doc.relevanceScore ? ` (適合度: ${rep.doc.relevanceScore}%)` : '';
+                    lines.push(`${idx + 1}. **困りごと・課題 #${rep.rank}**${attrText}${scoreText}`);
+                    lines.push(`   > 「${rep.doc.text.trim()}」`);
+                });
+            }
+            lines.push(``);
+
+            // 2. 要望・改善提案
+            const reqTotal = opinionTypeSummary ? ` / 全 ${opinionTypeSummary.requestCount} 件` : '';
+            lines.push(`### 🔵 要望・改善提案（代表 ${repsByType.request.length} 選${reqTotal}）`);
+            if (repsByType.request.length === 0) {
+                lines.push(`- （該当する要望・改善提案の意見はありませんでした）`);
+            } else {
+                repsByType.request.forEach((rep, idx) => {
+                    const attrText = rep.doc.attribute ? ` [${rep.doc.attribute}]` : '';
+                    const scoreText = rep.doc.relevanceScore ? ` (適合度: ${rep.doc.relevanceScore}%)` : '';
+                    lines.push(`${idx + 1}. **要望・改善提案 #${rep.rank}**${attrText}${scoreText}`);
+                    lines.push(`   > 「${rep.doc.text.trim()}」`);
+                });
+            }
+            lines.push(``);
+
+            // 3. 肯定・満足
+            const posTotal = opinionTypeSummary ? ` / 全 ${opinionTypeSummary.positiveCount} 件` : '';
+            lines.push(`### 🟢 肯定・満足（代表 ${repsByType.positive.length} 選${posTotal}）`);
+            if (repsByType.positive.length === 0) {
+                lines.push(`- （該当する肯定・満足の意見はありませんでした）`);
+            } else {
+                repsByType.positive.forEach((rep, idx) => {
+                    const attrText = rep.doc.attribute ? ` [${rep.doc.attribute}]` : '';
+                    const scoreText = rep.doc.relevanceScore ? ` (適合度: ${rep.doc.relevanceScore}%)` : '';
+                    lines.push(`${idx + 1}. **肯定・満足 #${rep.rank}**${attrText}${scoreText}`);
+                    lines.push(`   > 「${rep.doc.text.trim()}」`);
+                });
+            }
+            lines.push(``);
+        } else if (repOpinions && repOpinions.length > 0) {
             lines.push(`## 2. 全体代表意見（抽出型要約 トップ${repOpinions.length}）`);
             repOpinions.forEach((rep, idx) => {
                 const attrText = rep.doc.attribute ? ` [${rep.doc.attribute}]` : '';

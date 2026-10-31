@@ -2163,6 +2163,132 @@ body {
     margin-top: 1px;
 }
 
+/* 意見タイプ別 代表的な生の声（レポート用 3カラム） */
+.report-type-rep-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-bottom: 3px;
+}
+
+.report-type-rep-col {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-type-rep-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-left: 4px;
+    margin-bottom: 3px;
+    padding-bottom: 2px;
+    border-bottom: 1px solid #F1F5F9;
+}
+
+.report-type-rep-title {
+    font-size: 8.5px;
+    font-weight: 700;
+    color: #0F172A;
+}
+
+.report-type-rep-count {
+    font-size: 7.5px;
+    color: #64748B;
+    font-weight: 600;
+}
+
+.report-type-rep-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2.5px;
+}
+
+.report-type-rep-empty {
+    font-size: 8px;
+    color: #94A3B8;
+    text-align: center;
+    padding: 10px 4px;
+}
+
+.report-type-rep-item {
+    background: #F8FAFC;
+    border-radius: 3px;
+    padding: 2.5px 5px;
+    border: 1px solid #F1F5F9;
+}
+
+.report-type-rep-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 1px;
+}
+
+.report-type-rep-rank {
+    font-size: 7px;
+    font-weight: 700;
+    padding: 0.5px 3px;
+    border-radius: 2px;
+}
+
+.report-type-rep-rank.issue {
+    background: #FFE4E6;
+    color: #BE123C;
+}
+
+.report-type-rep-rank.request {
+    background: #E0F2FE;
+    color: #0369A1;
+}
+
+.report-type-rep-rank.positive {
+    background: #DCFCE7;
+    color: #15803D;
+}
+
+.report-type-rep-attr {
+    font-size: 7px;
+    color: #64748B;
+}
+
+.report-type-rep-quote {
+    font-size: 7.5px;
+    line-height: 1.35;
+    color: #334155;
+    word-break: break-all;
+}
+
+/* トピックインライン行（レポート用） */
+.report-topic-inline-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    font-size: 7.5px;
+    background: #FFFFFF;
+    border: 1px dashed #CBD5E1;
+    border-radius: 3px;
+    padding: 2px 6px;
+    margin-top: 2px;
+}
+
+.report-topic-inline-lbl {
+    font-weight: 700;
+    color: #475569;
+}
+
+.report-topic-inline-tag {
+    background: #F1F5F9;
+    padding: 0.5px 4px;
+    border-radius: 2px;
+    color: #334155;
+}
+
 /* 主要な論点グループ（トピックサマリー）スタイル */
 .report-topics-grid {
     display: grid;
@@ -2903,6 +3029,112 @@ body {
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+/* 意見タイプ別 代表意見グリッド（画面） */
+.rep-opinions-type-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+@media (max-width: 1080px) {
+    .rep-opinions-type-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.rep-type-column {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+}
+
+.rep-type-header {
+    padding: 10px 14px;
+    background: #F8FAFC;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.rep-type-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.rep-type-name {
+    font-size: 13.5px;
+    color: #0F172A;
+}
+
+.rep-type-badge {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #64748B;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    padding: 2px 7px;
+    border-radius: 4px;
+}
+
+.rep-type-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex: 1;
+}
+
+.rep-type-empty {
+    color: #94A3B8;
+    font-size: 12.5px;
+    text-align: center;
+    padding: 24px 12px;
+}
+
+.rep-opinion-card.mini {
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-left: 3.5px solid #94A3B8;
+}
+
+.rep-type-issue .rep-opinion-card.mini {
+    border-left-color: #E11D48;
+}
+
+.rep-type-request .rep-opinion-card.mini {
+    border-left-color: #0284C7;
+}
+
+.rep-type-positive .rep-opinion-card.mini {
+    border-left-color: #10B981;
+}
+
+.rep-opinion-card.mini .rep-opinion-text {
+    font-size: 12.5px;
+    line-height: 1.55;
+    color: #334155;
+}
+
+.rep-rank-badge.issue {
+    background: #FFF1F2;
+    color: #BE123C;
+}
+
+.rep-rank-badge.request {
+    background: #F0F9FF;
+    color: #0369A1;
+}
+
+.rep-rank-badge.positive {
+    background: #F0FDF4;
+    color: #15803D;
 }
 
 .rep-opinion-card {

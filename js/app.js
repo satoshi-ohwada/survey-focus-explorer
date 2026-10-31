@@ -1974,8 +1974,11 @@ function generateSummaryData() {
         neutralRate: neutralRate
     };
 
-    // 2. 全体代表意見（抽出型要約）の選出
+    // 2. 代表意見（抽出型要約）の選出（全体代表 ＆ 意見タイプ別代表）
     const repOpinions = OpinionSummarizer.extractRepresentativeOpinions(docs, AppState.subcorpusStats, 4);
+    const repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType
+        ? OpinionSummarizer.extractRepresentativeOpinionsByType(docs, AppState.subcorpusStats, 3)
+        : { issue: [], request: [], positive: [] };
 
     // 3. 論点（トピッククラスタ）サマリーの生成
     let topicSummaries = [];
@@ -2028,6 +2031,7 @@ function generateSummaryData() {
         resolvedTargetWord: AppState.resolvedTargetWord,
         filterResult: AppState.filterResult,
         repOpinions: repOpinions,
+        repOpinionsByType: repOpinionsByType,
         topicSummaries: topicSummaries,
         oddsRatioKeywords: oddsRatioKeywords,
         opinionTypeSummary: opinionTypeSummary,
@@ -2419,37 +2423,86 @@ function renderSummaryDashboard() {
         `;
     }
 
-    // 2. 代表意見（抽出型要約）カード一覧
+    // 2. 意見タイプ別 代表意見（その他以外の区分ごと・各3選）
     const repListEl = document.getElementById('summaryRepOpinionsList');
     if (repListEl) {
         repListEl.innerHTML = '';
-        if (!summary.repOpinions || summary.repOpinions.length === 0) {
-            repListEl.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">代表意見が見つかりませんでした</div>`;
+        const repsByType = summary.repOpinionsByType || (OpinionSummarizer && OpinionSummarizer.extractRepresentativeOpinionsByType
+            ? OpinionSummarizer.extractRepresentativeOpinionsByType(AppState.filterResult.matchedDocs, AppState.subcorpusStats, 3)
+            : null);
+
+        const typeConfigs = [
+            {
+                type: 'issue',
+                label: '困りごと・課題',
+                icon: '🔴',
+                color: '#e11d48',
+                totalCount: summary.opinionTypeSummary ? summary.opinionTypeSummary.issueCount : 0
+            },
+            {
+                type: 'request',
+                label: '要望・改善提案',
+                icon: '🔵',
+                color: '#0284c7',
+                totalCount: summary.opinionTypeSummary ? summary.opinionTypeSummary.requestCount : 0
+            },
+            {
+                type: 'positive',
+                label: '肯定・満足',
+                icon: '🟢',
+                color: '#10b981',
+                totalCount: summary.opinionTypeSummary ? summary.opinionTypeSummary.positiveCount : 0
+            }
+        ];
+
+        if (!repsByType || (!repsByType.issue.length && !repsByType.request.length && !repsByType.positive.length)) {
+            repListEl.innerHTML = `<div style="color: var(--text-muted); font-size: 13px; padding: 12px;">区分ごとの代表意見が見つかりませんでした</div>`;
         } else {
-            summary.repOpinions.forEach(rep => {
-                const doc = rep.doc;
-                const card = document.createElement('div');
-                card.className = 'rep-opinion-card';
+            const gridContainer = document.createElement('div');
+            gridContainer.className = 'rep-opinions-type-grid';
 
-                const typeObj = doc.opinionType || { label: '意見', icon: '💬', color: '#64748b' };
-                const attrBadge = doc.attribute ? `<span class="opinion-badge-attr">${escapeHtml(doc.attribute)}</span>` : '';
-                const scoreBadge = `<span class="opinion-score-badge">適合度: ${doc.relevanceScore || 50}%</span>`;
+            typeConfigs.forEach(cfg => {
+                const list = repsByType[cfg.type] || [];
+                const colEl = document.createElement('div');
+                colEl.className = `rep-type-column rep-type-${cfg.type}`;
 
-                card.innerHTML = `
-                    <div class="rep-opinion-header">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span class="rep-rank-badge">★ 代表意見 #${rep.rank}</span>
-                            <span class="opinion-type-badge type-${doc.opinionType ? doc.opinionType.type : 'neutral'}">
-                                ${typeObj.icon} ${typeObj.label}
-                            </span>
-                            ${attrBadge}
+                let cardsHtml = '';
+                if (list.length === 0) {
+                    cardsHtml = `<div class="rep-type-empty">この区分の該当意見はありません</div>`;
+                } else {
+                    cardsHtml = list.map(rep => {
+                        const doc = rep.doc;
+                        const attrBadge = doc.attribute ? `<span class="opinion-badge-attr">${escapeHtml(doc.attribute)}</span>` : '';
+                        const scoreBadge = `<span class="opinion-score-badge">適合度: ${doc.relevanceScore || 50}%</span>`;
+                        return `
+                            <div class="rep-opinion-card mini">
+                                <div class="rep-opinion-header">
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        <span class="rep-rank-badge ${cfg.type}">★ 代表 #${rep.rank}</span>
+                                        ${attrBadge}
+                                    </div>
+                                    ${scoreBadge}
+                                </div>
+                                <div class="rep-opinion-text">${formatHighlightedText(doc.text)}</div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+
+                colEl.innerHTML = `
+                    <div class="rep-type-header" style="border-left: 3.5px solid ${cfg.color};">
+                        <div class="rep-type-title-row">
+                            <span class="rep-type-name">${cfg.icon} <strong>${cfg.label}</strong></span>
+                            <span class="rep-type-badge">${list.length}選 / 全${cfg.totalCount}件</span>
                         </div>
-                        ${scoreBadge}
                     </div>
-                    <div class="rep-opinion-text">${formatHighlightedText(doc.text)}</div>
+                    <div class="rep-type-body">${cardsHtml}</div>
                 `;
-                repListEl.appendChild(card);
+
+                gridContainer.appendChild(colEl);
             });
+
+            repListEl.appendChild(gridContainer);
         }
     }
 
