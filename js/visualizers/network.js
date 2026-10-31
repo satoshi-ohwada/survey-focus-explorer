@@ -20,6 +20,20 @@ const NetworkVisualizer = {
     targetKeyword: '',
     activeRelatedWords: [],
     onWordClick: null,
+    onAttrClick: null,
+    networkMode: 'word', // 'word' (単語共起) | 'attr' (属性×単語)
+
+    // 属性ノード用カラーパレット
+    ATTR_PALETTE: [
+        { fill: '#2563eb', stroke: '#1d4ed8', border: '#bfdbfe', text: '#ffffff', light: '#eff6ff' }, // ブルー
+        { fill: '#059669', stroke: '#047857', border: '#a7f3d0', text: '#ffffff', light: '#ecfdf5' }, // グリーン
+        { fill: '#d97706', stroke: '#b45309', border: '#fde68a', text: '#ffffff', light: '#fffbeb' }, // アンバー
+        { fill: '#7c3aed', stroke: '#6d28d9', border: '#ddd6fe', text: '#ffffff', light: '#f5f3ff' }, // パープル
+        { fill: '#db2777', stroke: '#be185d', border: '#fbcfe8', text: '#ffffff', light: '#fdf2f8' }, // ピンク
+        { fill: '#0891b2', stroke: '#0e7490', border: '#a5f3fc', text: '#ffffff', light: '#ecfeff' }, // シアン
+        { fill: '#ea580c', stroke: '#c2410c', border: '#fed7aa', text: '#ffffff', light: '#fff7ed' }, // オレンジ
+        { fill: '#475569', stroke: '#334155', border: '#cbd5e1', text: '#ffffff', light: '#f8fafc' }  // スレート
+    ],
 
     init(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -92,8 +106,12 @@ const NetworkVisualizer = {
             const mouseX = (e.clientX - rect.left - this.panX) / this.scale;
             const mouseY = (e.clientY - rect.top - this.panY) / this.scale;
             const hit = this.findNodeAt(mouseX, mouseY);
-            if (hit && typeof this.onWordClick === 'function') {
-                this.onWordClick(hit.id);
+            if (hit) {
+                if (hit.isAttrNode && typeof this.onAttrClick === 'function') {
+                    this.onAttrClick(hit.attrCategory);
+                } else if (!hit.isAttrNode && typeof this.onWordClick === 'function') {
+                    this.onWordClick(hit.id);
+                }
             }
         });
 
@@ -149,10 +167,18 @@ const NetworkVisualizer = {
     findNodeAt(x, y) {
         for (let i = this.nodes.length - 1; i >= 0; i--) {
             const n = this.nodes[i];
-            const dx = n.x - x;
-            const dy = n.y - y;
-            if (dx * dx + dy * dy <= (n.radius + 4) * (n.radius + 4)) {
-                return n;
+            if (n.isAttrNode) {
+                const w = n.boxWidth || 80;
+                const h = n.boxHeight || 34;
+                if (x >= n.x - w / 2 && x <= n.x + w / 2 && y >= n.y - h / 2 && y <= n.y + h / 2) {
+                    return n;
+                }
+            } else {
+                const dx = n.x - x;
+                const dy = n.y - y;
+                if (dx * dx + dy * dy <= (n.radius + 4) * (n.radius + 4)) {
+                    return n;
+                }
             }
         }
         return null;
@@ -187,6 +213,7 @@ const NetworkVisualizer = {
         if (!this.canvas) return;
         if (this.animId) cancelAnimationFrame(this.animId);
 
+        this.networkMode = 'word';
         this.targetKeyword = targetKeyword;
         this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
         this.activeRelatedWords = activeRelatedWords || [];
@@ -312,6 +339,292 @@ const NetworkVisualizer = {
 
         // 4. 初回描画
         this.renderFrame();
+    },
+
+    /**
+     * 属性 × 単語 ネットワーク（2部グラフ）を描画する
+     * @param {Array<object>} matchedDocs - 抽出された回答文配列
+     * @param {string} attrCol - 属性列名
+     * @param {Array<object>} targetRows - 対象回答全件
+     * @param {string} targetKeyword - 注目キーワード
+     * @param {object} options
+     */
+    renderAttrNetwork(matchedDocs, attrCol, targetRows, targetKeyword, options = {}) {
+        if (!this.canvas) return;
+        if (this.animId) cancelAnimationFrame(this.animId);
+
+        this.networkMode = 'attr';
+        this.targetKeyword = targetKeyword;
+        this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        this.onWordClick = options.onWordClick;
+        this.onAttrClick = options.onAttrClick;
+        this.spacingMode = options.spacingMode || 'wide';
+        this.fontSize = options.fontSize || 'large';
+        this.attrColName = attrCol || '属性';
+
+        const rectW = this.canvas.clientWidth || (this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0);
+        const rectH = this.canvas.clientHeight || (this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0);
+        let width = rectW > 50 ? rectW : 680;
+        let height = rectH > 50 ? rectH : 510;
+
+        if (width / height > 4 / 3) {
+            width = Math.round(height * 4 / 3);
+        } else {
+            height = Math.round(width * 3 / 4);
+        }
+
+        this.canvas.width = width;
+        this.canvas.height = height;
+
+        const baseScale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        this.scale = baseScale;
+        this.panX = (width * (1 - this.scale)) / 2;
+        this.panY = (height * (1 - this.scale)) / 2;
+
+        if (!attrCol || !matchedDocs || matchedDocs.length === 0) {
+            this.nodes = [];
+            this.edges = [];
+            this.renderFrame();
+            return;
+        }
+
+        // 1. 各属性ごとの意見をグループ化
+        const docsByAttr = {};
+        matchedDocs.forEach(d => {
+            const cat = d.attribute && d.attribute.trim() !== '' ? d.attribute.trim() : '（未回答・不明）';
+            if (!docsByAttr[cat]) docsByAttr[cat] = [];
+            docsByAttr[cat].push(d);
+        });
+
+        const attrCategories = Object.keys(docsByAttr).sort((a, b) => docsByAttr[b].length - docsByAttr[a].length);
+        if (attrCategories.length === 0) {
+            this.nodes = [];
+            this.edges = [];
+            this.renderFrame();
+            return;
+        }
+
+        // 上位最大8属性
+        const topAttrs = attrCategories.slice(0, 8);
+
+        // 2. 各属性で使われている単語を集計し、上位特徴語を選出
+        const targetLower = (targetKeyword || '').toLowerCase();
+        const resolvedLower = (this.resolvedTargetWord || '').toLowerCase();
+        const wordsPerAttr = 4; // 各属性の上位語数
+
+        const attrTopWords = new Map();
+        const allCandidateWords = new Set();
+        const wordGlobalAttrCount = new Map();
+
+        topAttrs.forEach(cat => {
+            const docs = docsByAttr[cat];
+            const wordCounts = {};
+
+            docs.forEach(d => {
+                const seen = new Set();
+                (d.tokens || []).forEach(tok => {
+                    const clean = tok.trim();
+                    const cleanLower = clean.toLowerCase();
+                    if (clean.length < 2) return;
+                    if (cleanLower === targetLower || cleanLower === resolvedLower) return;
+                    if (options.customStopWords && options.customStopWords.has(clean)) return;
+                    if (!seen.has(clean)) {
+                        seen.add(clean);
+                        wordCounts[clean] = (wordCounts[clean] || 0) + 1;
+                    }
+                });
+            });
+
+            const sorted = Object.entries(wordCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, wordsPerAttr)
+                .map(([w, c]) => ({ word: w, count: c }));
+
+            attrTopWords.set(cat, sorted);
+
+            sorted.forEach(item => {
+                allCandidateWords.add(item.word);
+                if (!wordGlobalAttrCount.has(item.word)) {
+                    wordGlobalAttrCount.set(item.word, new Set());
+                }
+                wordGlobalAttrCount.get(item.word).add(cat);
+            });
+        });
+
+        // 3. ノード生成
+        const nodes = [];
+        const nodeMap = new Map();
+        const centerX = width / 2;
+        const centerY = height / 2;
+        const radiusRing = Math.min(width, height) * 0.38;
+
+        // (1) 属性ノードの生成（外周円上に均等配置）
+        topAttrs.forEach((cat, idx) => {
+            const angle = (idx / topAttrs.length) * (Math.PI * 2) - Math.PI / 2;
+            const px = centerX + radiusRing * Math.cos(angle);
+            const py = centerY + radiusRing * Math.sin(angle);
+            const colorObj = this.ATTR_PALETTE[idx % this.ATTR_PALETTE.length];
+
+            const attrNode = {
+                id: `attr_${cat}`,
+                label: cat,
+                attrCategory: cat,
+                isAttrNode: true,
+                docCount: docsByAttr[cat].length,
+                x: px,
+                y: py,
+                vx: 0,
+                vy: 0,
+                fx: px,
+                fy: py,
+                radius: 28,
+                boxWidth: Math.max(90, Math.min(145, cat.length * 13 + 40)),
+                boxHeight: 34,
+                color: colorObj.fill,
+                strokeColor: colorObj.stroke,
+                textColor: colorObj.text,
+                lightColor: colorObj.light
+            };
+
+            nodes.push(attrNode);
+            nodeMap.set(attrNode.id, attrNode);
+        });
+
+        // (2) 単語ノードの生成
+        allCandidateWords.forEach(word => {
+            const connectedCats = Array.from(wordGlobalAttrCount.get(word) || []);
+            const isShared = connectedCats.length >= 2;
+
+            let sumX = 0, sumY = 0;
+            connectedCats.forEach(cat => {
+                const an = nodeMap.get(`attr_${cat}`);
+                if (an) {
+                    sumX += an.x;
+                    sumY += an.y;
+                }
+            });
+            const initX = connectedCats.length > 0 ? (sumX / connectedCats.length) : centerX;
+            const initY = connectedCats.length > 0 ? (sumY / connectedCats.length) : centerY;
+            const jitterX = (Math.random() - 0.5) * 30;
+            const jitterY = (Math.random() - 0.5) * 30;
+
+            const primaryCat = connectedCats[0];
+            const catIdx = topAttrs.indexOf(primaryCat);
+            const primaryColor = catIdx >= 0 ? this.ATTR_PALETTE[catIdx % this.ATTR_PALETTE.length].fill : '#2563EB';
+
+            const wordNode = {
+                id: word,
+                label: word,
+                isAttrNode: false,
+                isShared: isShared,
+                connectedCats: connectedCats,
+                x: initX + jitterX,
+                y: initY + jitterY,
+                vx: 0,
+                vy: 0,
+                fx: null,
+                fy: null,
+                radius: isShared ? 18 : 14,
+                color: isShared ? '#4F46E5' : primaryColor,
+                strokeColor: '#FFFFFF',
+                textColor: isShared ? '#312E81' : '#1E293B'
+            };
+
+            nodes.push(wordNode);
+            nodeMap.set(wordNode.id, wordNode);
+        });
+
+        // 4. エッジ生成
+        const edges = [];
+        topAttrs.forEach(cat => {
+            const attrNode = nodeMap.get(`attr_${cat}`);
+            const topWords = attrTopWords.get(cat) || [];
+
+            topWords.forEach(item => {
+                const wordNode = nodeMap.get(item.word);
+                if (attrNode && wordNode) {
+                    edges.push({
+                        source: attrNode,
+                        target: wordNode,
+                        weight: item.count,
+                        color: attrNode.color
+                    });
+                }
+            });
+        });
+
+        this.nodes = nodes;
+        this.edges = edges;
+
+        // 5. 属性ネットワーク用レイアウト物理シミュレーション
+        this.simulateAttrLayout(180);
+
+        // 6. 初回描画
+        this.renderFrame();
+    },
+
+    /**
+     * 属性×単語ネットワーク用物理シミュレーション
+     */
+    simulateAttrLayout(iterations = 180) {
+        if (!this.nodes || this.nodes.length === 0) return;
+        const width = this.canvas.width;
+        const height = this.canvas.height;
+
+        for (let iter = 0; iter < iterations; iter++) {
+            const alpha = 1.0 - (iter / iterations);
+
+            // 1. ノード間の反発力
+            for (let i = 0; i < this.nodes.length; i++) {
+                const n1 = this.nodes[i];
+                for (let j = i + 1; j < this.nodes.length; j++) {
+                    const n2 = this.nodes[j];
+                    const dx = n2.x - n1.x;
+                    const dy = n2.y - n1.y;
+                    const distSq = dx * dx + dy * dy || 1;
+                    const dist = Math.sqrt(distSq);
+
+                    const minDist = (n1.radius + n2.radius) * 2.2;
+                    if (dist < minDist) {
+                        const repForce = ((minDist - dist) / minDist) * 12 * alpha;
+                        const fx = (dx / dist) * repForce;
+                        const fy = (dy / dist) * repForce;
+                        if (!n1.isAttrNode) { n1.vx -= fx; n1.vy -= fy; }
+                        if (!n2.isAttrNode) { n2.vx += fx; n2.vy += fy; }
+                    }
+                }
+            }
+
+            // 2. エッジ（バネ）引力
+            for (const edge of this.edges) {
+                const s = edge.source;
+                const t = edge.target;
+                const dx = t.x - s.x;
+                const dy = t.y - s.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+
+                const targetLen = t.isShared ? 110 : 85;
+                const springForce = (dist - targetLen) * 0.08 * alpha;
+                const fx = (dx / dist) * springForce;
+                const fy = (dy / dist) * springForce;
+
+                if (!s.isAttrNode) { s.vx += fx; s.vy += fy; }
+                if (!t.isAttrNode) { t.vx -= fx; t.vy -= fy; }
+            }
+
+            // 3. 位置更新（減衰）
+            for (const n of this.nodes) {
+                if (n.isAttrNode) continue;
+                n.vx *= 0.65;
+                n.vy *= 0.65;
+                n.x += n.vx;
+                n.y += n.vy;
+
+                const pad = 30;
+                n.x = Math.max(pad, Math.min(width - pad, n.x));
+                n.y = Math.max(pad, Math.min(height - pad, n.y));
+            }
+        }
     },
 
     /**
@@ -562,6 +875,12 @@ const NetworkVisualizer = {
             ctx.fillRect(0, 0, w, h);
         }
 
+        // 属性×単語ネットワークモードの場合の描画分岐
+        if (this.networkMode === 'attr') {
+            this.renderAttrToContext(ctx, w, h, scale, panX, panY, isExport);
+            return;
+        }
+
         if (this.nodes.length === 0) {
             ctx.fillStyle = '#64748b';
             ctx.font = '14px "Noto Sans JP", sans-serif';
@@ -804,6 +1123,277 @@ const NetworkVisualizer = {
     },
 
     /**
+     * 属性 × 単語 ネットワーク（2部グラフ）の描画処理
+     */
+    renderAttrToContext(ctx, w, h, scale, panX, panY, isExport = false) {
+        if (!isExport) {
+            ctx.clearRect(0, 0, w, h);
+        } else {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, w, h);
+        }
+
+        if (this.nodes.length === 0) {
+            ctx.fillStyle = '#64748b';
+            ctx.font = '14px "Noto Sans JP", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('📊 属性列が設定されていないか、集計可能な意見データがありません', w / 2, h / 2);
+            return;
+        }
+
+        ctx.save();
+        ctx.translate(panX, panY);
+        ctx.scale(scale, scale);
+
+        // 1. エッジ描画
+        const maxWeight = Math.max(...this.edges.map(e => e.weight), 1);
+
+        this.edges.forEach(e => {
+            const isConnectedToHover = !isExport && this.hoverNode &&
+                (e.source.id === this.hoverNode.id || e.target.id === this.hoverNode.id);
+
+            const alpha = (!isExport && this.hoverNode)
+                ? (isConnectedToHover ? 0.95 : 0.05)
+                : 0.35 + (e.weight / maxWeight) * 0.40;
+
+            const lineWidth = (!isExport && this.hoverNode && isConnectedToHover)
+                ? Math.min(5.0, 2.0 + (e.weight / maxWeight) * 3.5)
+                : Math.min(3.2, 1.2 + (e.weight / maxWeight) * 2.0);
+
+            ctx.globalAlpha = alpha;
+            ctx.lineWidth = lineWidth;
+            ctx.strokeStyle = isConnectedToHover ? '#2563EB' : (e.color || '#3B82F6');
+            ctx.beginPath();
+            ctx.moveTo(e.source.x, e.source.y);
+            ctx.lineTo(e.target.x, e.target.y);
+            ctx.stroke();
+            ctx.globalAlpha = 1.0;
+        });
+
+        // 2. 単語ノード（第1層: テキストラベル）
+        this.nodes.filter(n => !n.isAttrNode).forEach(node => {
+            const isConnectedToHover = !isExport && this.hoverNode &&
+                (this.hoverNode.id === node.id || this.edges.some(e =>
+                    (e.source.id === this.hoverNode.id && e.target.id === node.id) ||
+                    (e.target.id === this.hoverNode.id && e.source.id === node.id)
+                ));
+
+            const fSize = node.isShared ? 14 : 12.5;
+            ctx.font = `bold ${fSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            const textY = node.y + node.radius + 6;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeText(node.label, node.x, textY);
+            ctx.fillStyle = node.isShared ? '#312E81' : (isConnectedToHover ? '#1D4ED8' : '#1E293B');
+            ctx.fillText(node.label, node.x, textY);
+        });
+
+        // 3. 単語ノード（第2層: 円・リング本体）
+        this.nodes.filter(n => !n.isAttrNode).forEach(node => {
+            const isConnectedToHover = !isExport && this.hoverNode &&
+                (this.hoverNode.id === node.id || this.edges.some(e =>
+                    (e.source.id === this.hoverNode.id && e.target.id === node.id) ||
+                    (e.target.id === this.hoverNode.id && e.source.id === node.id)
+                ));
+
+            // 円本体
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+            ctx.fillStyle = isConnectedToHover ? '#2563EB' : node.color;
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            // 共通語（複数属性に接続）の場合はアクセント外周リング
+            if (node.isShared) {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, node.radius + 3.8, 0, Math.PI * 2);
+                ctx.strokeStyle = isConnectedToHover ? '#1D4ED8' : '#F59E0B'; // ゴールドリング
+                ctx.lineWidth = 2.2;
+                ctx.stroke();
+            }
+        });
+
+        // 4. 属性ノード（第3層: 最前面の角丸長方形バッジ）
+        this.nodes.filter(n => n.isAttrNode).forEach(node => {
+            const isHover = !isExport && this.hoverNode && this.hoverNode.id === node.id;
+            const wBox = node.boxWidth || 95;
+            const hBox = node.boxHeight || 34;
+            const xBox = node.x - wBox / 2;
+            const yBox = node.y - hBox / 2;
+            const rCorner = 7;
+
+            // ドロップシャドウ
+            ctx.save();
+            ctx.shadowColor = isHover ? 'rgba(37, 99, 235, 0.4)' : 'rgba(15, 23, 42, 0.12)';
+            ctx.shadowBlur = isHover ? 10 : 4;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = isHover ? 3 : 2;
+
+            // 角丸四角形
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(xBox, yBox, wBox, hBox, rCorner);
+            } else {
+                ctx.rect(xBox, yBox, wBox, hBox);
+            }
+            ctx.fillStyle = isHover ? '#1D4ED8' : node.color;
+            ctx.fill();
+            ctx.restore();
+
+            // 枠線
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(xBox, yBox, wBox, hBox, rCorner);
+            } else {
+                ctx.rect(xBox, yBox, wBox, hBox);
+            }
+            ctx.strokeStyle = isHover ? '#FFFFFF' : (node.strokeColor || '#FFFFFF');
+            ctx.lineWidth = isHover ? 2.5 : 1.8;
+            ctx.stroke();
+
+            // テキストラベル「👥 {label} ({count})」
+            ctx.font = 'bold 12px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(`👥 ${node.label} (${node.docCount})`, node.x, node.y);
+        });
+
+        // 5. ホバー時の詳細ツールチップ
+        if (!isExport && this.hoverNode) {
+            const hn = this.hoverNode;
+            let tipText = '';
+            if (hn.isAttrNode) {
+                tipText = `【属性】${hn.label}: 関連意見 ${hn.docCount}件 (クリックで意見概要を表示)`;
+            } else if (hn.isShared) {
+                tipText = `【共通語】${hn.label} (${hn.connectedCats.join('・')}で共通言及)`;
+            } else {
+                const cat = (hn.connectedCats && hn.connectedCats[0]) || '';
+                tipText = `【特徴語】${hn.label} (${cat}で多用)`;
+            }
+
+            ctx.font = 'bold 12px sans-serif';
+            const metrics = ctx.measureText(tipText);
+            const tipW = metrics.width + 20;
+            const tipH = 26;
+            const tipX = Math.max(10, Math.min(w - tipW - 10, hn.x - tipW / 2));
+            const tipY = hn.y - (hn.isAttrNode ? (hn.boxHeight / 2 + 30) : (hn.radius + 32));
+
+            ctx.save();
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(tipX, tipY, tipW, tipH, 5);
+            } else {
+                ctx.rect(tipX, tipY, tipW, tipH);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(tipText, tipX + tipW / 2, tipY + tipH / 2);
+            ctx.restore();
+        }
+
+        ctx.restore();
+
+        // 6. 属性ネットワーク用ヘッダー・凡例・ガイドの描画（画面固定座標）
+        this.drawAttrLegend(ctx, w, h);
+    },
+
+    /**
+     * 属性ネットワーク用の凡例・ガイド描画
+     */
+    drawAttrLegend(ctx, w, h) {
+        ctx.save();
+
+        // (1) 左上タイトルバッジ
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.strokeStyle = '#CBD5E1';
+        ctx.lineWidth = 1;
+        const badgeW = 290;
+        const badgeH = 46;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(14, 14, badgeW, badgeH, 6);
+        } else {
+            ctx.rect(14, 14, badgeW, badgeH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#1E293B';
+        ctx.font = 'bold 12.5px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`👥 属性別 結びつきネットワーク (${this.attrColName || '属性'})`, 22, 20);
+
+        ctx.fillStyle = '#64748B';
+        ctx.font = '10.5px sans-serif';
+        ctx.fillText('※ 中央は複数属性の共通話題、外側は属性固有の特徴語', 22, 38);
+
+        // (2) 右上凡例
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.strokeStyle = '#CBD5E1';
+        ctx.lineWidth = 1;
+        const legW = 210;
+        const legH = 46;
+        const legX = w - legW - 14;
+        ctx.beginPath();
+        if (ctx.roundRect) {
+            ctx.roundRect(legX, 14, legW, legH, 6);
+        } else {
+            ctx.rect(legX, 14, legW, legH);
+        }
+        ctx.fill();
+        ctx.stroke();
+
+        // 凡例アイコン1: 属性ノード
+        ctx.fillStyle = '#2563EB';
+        if (ctx.roundRect) {
+            ctx.beginPath();
+            ctx.roundRect(legX + 10, 20, 18, 12, 3);
+            ctx.fill();
+        } else {
+            ctx.fillRect(legX + 10, 20, 18, 12);
+        }
+        ctx.fillStyle = '#334155';
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('属性グループ', legX + 34, 26);
+
+        // 凡例アイコン2: 共通語（ゴールド二重丸）
+        ctx.beginPath();
+        ctx.arc(legX + 120, 26, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#4F46E5';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(legX + 120, 26, 8.5, 0, Math.PI * 2);
+        ctx.strokeStyle = '#F59E0B';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = '#334155';
+        ctx.fillText('共通語', legX + 135, 26);
+
+        ctx.fillStyle = '#64748B';
+        ctx.font = '10px sans-serif';
+        ctx.fillText('💡 ノードクリックで詳細を表示', legX + 10, 44);
+
+        ctx.restore();
+    },
+
+    /**
      * 資料向け高解像度・オートフィット（最大化＆中央配置）キャンバスを取得
      * PowerPoint/Wordでの利用を想定した4:3比率 (1200x900)
      * @param {number} [targetW=1200]
@@ -818,8 +1408,8 @@ const NetworkVisualizer = {
         let minY = Infinity, maxY = -Infinity;
 
         this.nodes.forEach(n => {
-            const padX = n.radius + Math.max(24, (n.id || '').length * 8.5);
-            const padY = n.radius + 32;
+            const padX = n.isAttrNode ? ((n.boxWidth || 95) / 2 + 10) : (n.radius + Math.max(24, (n.id || '').length * 8.5));
+            const padY = n.isAttrNode ? ((n.boxHeight || 34) / 2 + 10) : (n.radius + 32);
             if (n.x - padX < minX) minX = n.x - padX;
             if (n.x + padX > maxX) maxX = n.x + padX;
             if (n.y - padY < minY) minY = n.y - padY;

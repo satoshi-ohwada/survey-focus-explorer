@@ -63,6 +63,7 @@ const AppState = {
     cloudRanking: 'count',
     cloudMaxWords: 60,
     cloudShape: 'circle',
+    networkTargetMode: 'word',  // 'word' (全体共起) | 'attr' (属性結びつき)
     networkMaxWords: 40,
     networkSpacing: 'wide',
     networkFontSize: 'large',
@@ -533,6 +534,22 @@ function setupUIEvents() {
             updateWordCloud();
         });
     }
+
+    // ネットワーク表示モード（全体共起 ⇄ 属性結びつき）切り替え
+    const netModeBtns = document.querySelectorAll('#networkModeBtnGroup .seg-btn');
+    netModeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const mode = btn.getAttribute('data-network-mode');
+            if (mode === AppState.networkTargetMode) return;
+            if (mode === 'attr' && !AppState.attrCol) {
+                showToast('⚠️ 属性列が設定されていません。上部の設定パネルで属性列を選択してください');
+            }
+            netModeBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            AppState.networkTargetMode = mode;
+            updateNetwork();
+        });
+    });
 
     // ネットワーク設定
     document.getElementById('selectNetworkMaxWords').addEventListener('change', (e) => {
@@ -2294,28 +2311,50 @@ function updateWordCloud() {
 }
 
 /**
- * 共起ネットワーク描画
+ * 共起ネットワーク描画（表示モード: 全体話題構造 ⇄ 属性結びつき）
  */
 function updateNetwork() {
-    if (!AppState.subcorpusStats) return;
+    if (!AppState.subcorpusStats || !AppState.filterResult) return;
     const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
 
-    NetworkVisualizer.render(
-        AppState.subcorpusStats.wordList,
-        AppState.subcorpusStats.coocCounts,
-        AppState.targetKeyword,
-        activeRelated,
-        {
-            resolvedTargetWord: AppState.resolvedTargetWord,
-            maxWords: AppState.networkMaxWords,
-            spacingMode: AppState.networkSpacing,
-            fontSize: AppState.networkFontSize,
-            colorMode: AppState.networkColorMode,
-            onWordClick: (word) => {
-                jumpToOpinions(word);
+    if (AppState.networkTargetMode === 'attr') {
+        const targetRows = getFilteredRows();
+        NetworkVisualizer.renderAttrNetwork(
+            AppState.filterResult.matchedDocs,
+            AppState.attrCol,
+            targetRows,
+            AppState.targetKeyword,
+            {
+                resolvedTargetWord: AppState.resolvedTargetWord,
+                spacingMode: AppState.networkSpacing,
+                fontSize: AppState.networkFontSize,
+                customStopWords: AppState.customStopWords,
+                onWordClick: (word) => {
+                    jumpToOpinions(word);
+                },
+                onAttrClick: (category) => {
+                    showAttrDetailModal(category);
+                }
             }
-        }
-    );
+        );
+    } else {
+        NetworkVisualizer.render(
+            AppState.subcorpusStats.wordList,
+            AppState.subcorpusStats.coocCounts,
+            AppState.targetKeyword,
+            activeRelated,
+            {
+                resolvedTargetWord: AppState.resolvedTargetWord,
+                maxWords: AppState.networkMaxWords,
+                spacingMode: AppState.networkSpacing,
+                fontSize: AppState.networkFontSize,
+                colorMode: AppState.networkColorMode,
+                onWordClick: (word) => {
+                    jumpToOpinions(word);
+                }
+            }
+        );
+    }
 }
 
 /**
@@ -3149,7 +3188,7 @@ async function exportChart(type, action = 'download') {
 
     const titles = {
         cloud: `ワードクラウド_${kw}_${dateStr}`,
-        network: `共起ネットワーク_${kw}_${dateStr}`,
+        network: (AppState.networkTargetMode === 'attr') ? `属性ネットワーク_${kw}_${dateStr}` : `共起ネットワーク_${kw}_${dateStr}`,
         umap: `UMAP散布図_${kw}_${dateStr}`,
         attr: `属性別クロス集計_${kw}_${dateStr}`
     };

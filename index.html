@@ -708,6 +708,18 @@
 
                     <!-- 共起ネットワーク用 -->
                     <div id="toolbarNetworkCtrl" style="display: none; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <div class="network-mode-switch-group">
+                            <span style="color: #475569; font-size: 11.5px; font-weight: 700;">表示対象:</span>
+                            <div class="seg-btn-group" id="networkModeBtnGroup">
+                                <button type="button" class="seg-btn active" data-network-mode="word" title="単語同士の共起関係（意見全体のトピック・話題構造）を表示">
+                                    🌐 全体の話題構造
+                                </button>
+                                <button type="button" class="seg-btn" data-network-mode="attr" title="指定した属性（年代・性別等）と特徴単語の結びつき（2部グラフ）を表示">
+                                    👥 属性との結びつき
+                                </button>
+                            </div>
+                        </div>
+                        <div class="filter-group-divider"></div>
                         <label class="toolbar-label">表示語数:
                             <select id="selectNetworkMaxWords" class="form-select btn-sm">
                                 <option value="30">30語</option>
