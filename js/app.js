@@ -3124,9 +3124,16 @@ function toggleFocusMode(forceState) {
 
     const btnText = document.getElementById('focusModeText');
     const btnIcon = document.getElementById('focusModeIcon');
+    const btnFocus = document.getElementById('btnToggleFocusMode');
     if (btnText && btnIcon) {
-        btnText.textContent = AppState.isFocusMode ? '入力・設定パネルを表示' : '上部を折りたたむ (画面を広く使う)';
+        btnText.textContent = AppState.isFocusMode ? '入力パネルを表示' : '画面を広く使う';
         btnIcon.textContent = AppState.isFocusMode ? '🔽' : '🔼';
+    }
+    if (btnFocus) {
+        btnFocus.classList.toggle('is-focus-mode', AppState.isFocusMode);
+        btnFocus.title = AppState.isFocusMode
+            ? '上部の条件設定・入力パネルを再表示します'
+            : 'ノートパソコンなどの狭い画面で図を見やすくするために、上部の設定・入力パネルを折りたたみます';
     }
 
     // 折りたたみによる画面スペース変化に合わせて再描画

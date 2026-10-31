@@ -596,6 +596,17 @@
 
         <!-- 3. 可視化ダッシュボード ＆ 生の声セクション -->
         <section id="dashboardSection" class="dashboard-section" style="display: none;">
+            <!-- 集中分析モード時の復帰案内バナー（折りたたみ時のみダッシュボード最上部に表示） -->
+            <div id="focusModeBanner" class="focus-mode-banner" style="display: none;">
+                <div class="focus-mode-banner-text">
+                    <span class="focus-mode-banner-icon">📐</span>
+                    <span><strong>集中表示モード</strong>: 上部の設定・入力パネルを折りたたんで、図と分析を画面いっぱいに広く表示しています</span>
+                </div>
+                <button type="button" id="btnExitFocusMode" class="btn btn-xs btn-primary focus-mode-exit-btn">
+                    🔽 入力・設定パネルを再表示
+                </button>
+            </div>
+
             <!-- ナビゲーションタブ ＆ 集中モード切り替えヘッダー -->
             <div class="dashboard-nav-header">
                 <div class="dashboard-nav-tabs-wrapper">
@@ -653,16 +664,6 @@
                         <span id="focusModeIcon">🔼</span> <span id="focusModeText">画面を広く使う</span>
                     </button>
                 </div>
-            </div>
-
-            <!-- 集中分析モード時の復帰案内バナー（折りたたみ時のみ表示） -->
-            <div id="focusModeBanner" class="focus-mode-banner" style="display: none;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span>📐 <strong>集中表示モード</strong>: 上部の設定・入力パネルを折りたたんで、図と分析を画面いっぱいに広く表示しています</span>
-                </div>
-                <button type="button" id="btnExitFocusMode" class="btn btn-sm btn-primary" style="font-size: 11.5px; padding: 4px 10px;">
-                    🔽 入力・設定パネルを再表示
-                </button>
             </div>
 
             <!-- ツールバー -->

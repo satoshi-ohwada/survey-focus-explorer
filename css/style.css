@@ -1236,17 +1236,19 @@ body {
     align-items: center;
     background: linear-gradient(180deg, #F8FAFC 0%, #F1F5F9 100%);
     border-bottom: 2px solid #E2E8F0;
-    padding: 10px 16px;
+    padding: 8px 16px;
     gap: 12px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     box-shadow: 0 2px 4px rgba(15, 23, 42, 0.03);
+    position: relative;
+    z-index: 5;
 }
 
 .dashboard-nav-tabs-wrapper {
     display: flex;
     align-items: center;
-    gap: 12px;
-    flex-wrap: wrap;
+    gap: 10px;
+    flex-wrap: nowrap;
     flex: 1;
     min-width: 0;
 }
@@ -1264,6 +1266,7 @@ body {
     color: #334155;
     white-space: nowrap;
     letter-spacing: -0.2px;
+    flex-shrink: 0;
 }
 
 .nav-guide-icon {
@@ -1277,6 +1280,8 @@ body {
     overflow-x: auto;
     padding: 2px 2px 4px 2px;
     scrollbar-width: thin;
+    flex: 1;
+    min-width: 0;
 }
 
 .dashboard-nav-tabs::-webkit-scrollbar {
@@ -1422,6 +1427,7 @@ body {
     display: inline-flex;
     align-items: center;
     flex-shrink: 0;
+    margin-left: 8px;
 }
 
 .btn-focus-toggle {
@@ -1429,18 +1435,29 @@ body {
     font-size: 11.5px;
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     background: #FFFFFF;
     border: 1px solid #CBD5E1;
-    padding: 4px 10px;
+    padding: 6px 12px;
     border-radius: 6px;
     color: #475569;
-    font-weight: 500;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .btn-focus-toggle:hover {
     background: #F1F5F9;
     color: #0F172A;
+    border-color: #94A3B8;
+}
+
+.btn-focus-toggle.is-focus-mode {
+    background: #EFF6FF;
+    border-color: #3B82F6;
+    color: #1D4ED8;
+    box-shadow: 0 1px 3px rgba(59, 130, 246, 0.15);
 }
 
 .dashboard-toolbar {
@@ -3504,13 +3521,59 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background: #EFF6FF;
-    border: 1px solid #BFDBFE;
-    border-radius: var(--radius-md);
-    padding: 8px 14px;
-    margin-bottom: 12px;
-    font-size: 13px;
+    background: linear-gradient(90deg, #EFF6FF 0%, #DBEAFE 100%);
+    border-bottom: 1.5px solid #BFDBFE;
+    padding: 8px 16px;
+    margin-bottom: 0;
+    font-size: 12.5px;
     color: #1E40AF;
+    gap: 12px;
+    position: relative;
+    z-index: 6;
+}
+
+.focus-mode-banner-text {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    font-weight: 500;
+}
+
+.focus-mode-banner-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.focus-mode-exit-btn {
+    white-space: nowrap;
+    flex-shrink: 0;
+    font-size: 11.5px;
+    font-weight: 700;
+    padding: 5px 12px;
+    box-shadow: 0 1px 3px rgba(37, 99, 235, 0.25);
+}
+
+/* 画面幅がやや狭い環境でのタブナビゲーション最適化 */
+@media screen and (max-width: 1200px) {
+    .dashboard-nav-guide .nav-guide-text {
+        display: none;
+    }
+    .dashboard-nav-guide {
+        padding: 6px 8px;
+    }
+}
+
+@media screen and (max-width: 860px) {
+    .dashboard-nav-guide {
+        display: none;
+    }
+    .btn-focus-toggle span:last-child {
+        display: none;
+    }
+    .btn-focus-toggle {
+        padding: 6px 8px;
+    }
 }
 
 /* 表示サイズ切り替えボタングループ */
