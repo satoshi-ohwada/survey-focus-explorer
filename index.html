@@ -804,6 +804,9 @@
                                 <span><b>構成比</b> (意見全体の内訳 %)</span>
                             </label>
                         </div>
+                        <span class="toolbar-hint-pill" title="グラフの各バーをクリックすると、該当属性の意見概要や代表意見（生の声）をポップアップ確認できます">
+                            💡 各バーをクリックして代表意見を確認
+                        </span>
                     </div>
 
                     <!-- 生の声一覧用 -->
@@ -949,6 +952,75 @@
             </div>
         </section>
     </main>
+
+    <!-- 属性別 代表意見 ＆ 概要モーダル（グラフクリック時に表示） -->
+    <div id="attrDetailModal" class="modal-overlay" style="display: none;">
+        <div class="modal-card attr-detail-modal-card">
+            <div class="modal-header attr-modal-header">
+                <div class="attr-modal-header-left">
+                    <div class="attr-modal-badge">📊 属性クロス集計 詳細分析</div>
+                    <h3 id="attrModalTitle" class="modal-title">【年代: 30代】の意見概要 ＆ 代表的な声</h3>
+                    <div id="attrModalSubtitle" class="attr-modal-subtitle">
+                        注目キーワードに関連する意見の内訳と代表的な生の声
+                    </div>
+                </div>
+                <button type="button" id="btnAttrModalClose" class="modal-close-btn" title="閉じる">✕</button>
+            </div>
+            <div class="modal-body attr-modal-body">
+                <!-- 1. メトリクス ＆ 構成比サマリー -->
+                <div class="attr-modal-summary-box">
+                    <div class="attr-modal-metrics-grid">
+                        <div class="attr-metric-card">
+                            <span class="attr-metric-label">💬 該当意見件数</span>
+                            <div class="attr-metric-val">
+                                <span id="attrModalMatchedCount">0</span> <small style="font-size: 14px; font-weight: bold; color: #1e293b;">件</small>
+                                <span id="attrModalShareText" class="attr-metric-sub">（全体シェア 0%）</span>
+                            </div>
+                        </div>
+                        <div class="attr-metric-card">
+                            <span class="attr-metric-label">📈 属性内言及割合</span>
+                            <div class="attr-metric-val">
+                                <span id="attrModalRateText">0.0%</span>
+                                <span id="attrModalDenomText" class="attr-metric-sub">（全0件中）</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 意見タイプ構成比 -->
+                    <div class="attr-modal-type-distribution">
+                        <div class="attr-type-dist-header">
+                            <span class="attr-dist-label">🎭 意見タイプ構成比:</span>
+                            <div id="attrModalTypeLegend" class="attr-type-dist-legend"></div>
+                        </div>
+                        <div id="attrModalTypeBar" class="attr-type-dist-bar"></div>
+                    </div>
+
+                    <!-- 特徴的な頻出語 -->
+                    <div class="attr-modal-keywords-box">
+                        <span class="attr-keywords-label">🏷️ この属性で特によく使われている語:</span>
+                        <div id="attrModalKeywordsList" class="attr-keywords-list"></div>
+                    </div>
+                </div>
+
+                <!-- 2. 区分別代表意見（困りごと、要望、肯定 各最大3選） -->
+                <div class="attr-modal-reps-section">
+                    <div class="attr-modal-reps-header">
+                        <h4>💬 意見タイプ別 代表意見（抜粋）</h4>
+                        <span class="attr-modal-reps-hint">※適合度・重要度スコアが高い代表文を選出しています</span>
+                    </div>
+                    <div id="attrModalRepsContainer" class="attr-modal-reps-grid">
+                        <!-- JSで動的に3カラムカードを生成 -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer attr-modal-footer">
+                <button type="button" id="btnAttrModalViewAll" class="btn btn-sm btn-primary">
+                    💬 この属性の生の声（<span id="attrModalViewAllCount">0</span>件）を一覧で確認 ▶
+                </button>
+                <button type="button" id="btnAttrModalCloseFooter" class="btn btn-sm">閉じる</button>
+            </div>
+        </div>
+    </div>
 
     <!-- 辞書・ルール設定インポート確認モーダル -->
     <div id="rulesImportModal" class="modal-overlay" style="display: none;">

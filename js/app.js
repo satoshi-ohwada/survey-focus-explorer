@@ -58,6 +58,7 @@ const AppState = {
     activeTab: 'summary', // 初期タブを要約サマリーに
     opinionsSort: 'relevance', // 'relevance' | 'original' | 'lengthDesc'
     opinionsTypeFilter: 'all', // 'all' | 'issue' | 'request' | 'positive' | 'neutral'
+    opinionsAttrFilter: '',    // 属性値での生の声一覧絞り込み（クロス集計からの遷移等）
     attrCalcMode: 'rate',      // 'rate' (属性内言及率 %) | 'share' (意見全体構成比 %)
     cloudRanking: 'count',
     cloudMaxWords: 60,
@@ -669,6 +670,26 @@ function setupUIEvents() {
     if (btnExitFocus) {
         btnExitFocus.addEventListener('click', () => toggleFocusMode(false));
     }
+
+    // 属性詳細モーダルの閉じるイベント
+    const attrModal = document.getElementById('attrDetailModal');
+    const btnAttrClose = document.getElementById('btnAttrModalClose');
+    const btnAttrCloseFooter = document.getElementById('btnAttrModalCloseFooter');
+    const closeAttrModal = () => {
+        if (attrModal) attrModal.style.display = 'none';
+    };
+    if (btnAttrClose) btnAttrClose.addEventListener('click', closeAttrModal);
+    if (btnAttrCloseFooter) btnAttrCloseFooter.addEventListener('click', closeAttrModal);
+    if (attrModal) {
+        attrModal.addEventListener('click', (e) => {
+            if (e.target === attrModal) closeAttrModal();
+        });
+    }
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && attrModal && attrModal.style.display === 'flex') {
+            closeAttrModal();
+        }
+    });
 
     // ウィンドウリサイズ時の自動フィット再描画（デバウンス）
     let resizeTimeout;
@@ -2237,8 +2258,11 @@ function switchTab(tabName) {
 
 /**
  * 単語または意見のキーワードでフィルタして「生の声一覧」タブに遷移する
+ * @param {string} [filterWord=''] テキスト絞り込みワード
+ * @param {string} [attrFilter=''] 属性絞り込み値
  */
-function jumpToOpinions(filterWord = '') {
+function jumpToOpinions(filterWord = '', attrFilter = '') {
+    AppState.opinionsAttrFilter = attrFilter || '';
     const tabBtn = document.querySelector('.nav-tab-btn[data-tab="opinions"]');
     if (tabBtn) tabBtn.click();
     const filterInput = document.getElementById('inputFilterOpinionText');
@@ -2343,9 +2367,226 @@ function updateAttrChart() {
         {
             isFiltered: isFiltered,
             totalRawCount: AppState.rawRows.length,
-            calcMode: AppState.attrCalcMode
+            calcMode: AppState.attrCalcMode,
+            onCategoryClick: (category) => {
+                showAttrDetailModal(category);
+            }
         }
     );
+}
+
+/**
+ * 属性クロス集計グラフのクリック時に、該当属性の意見概要 ＆ 代表意見モーダルを表示する
+ * @param {string} category - クリックされた属性カテゴリ値（例: "30代", "女性", "（未回答・不明）" など）
+ */
+function showAttrDetailModal(category) {
+    if (!AppState.filterResult || !AppState.filterResult.matchedDocs) return;
+    const catName = String(category || '').trim() || '（未回答・不明）';
+    const attrColName = AppState.attrCol || '属性';
+    const targetKeyword = AppState.targetKeyword || '全体';
+
+    // 1. 該当属性の意見（matchedDocs）を抽出
+    const attrDocs = AppState.filterResult.matchedDocs.filter(d => {
+        const val = d.attribute && d.attribute.trim() !== '' ? d.attribute.trim() : '（未回答・不明）';
+        return val === catName;
+    });
+
+    // 2. 該当属性の全回答（targetRows）を抽出
+    const targetRows = getFilteredRows();
+    const isFiltered = targetRows.length < AppState.rawRows.length;
+    const denomLabel = isFiltered ? '対象' : '全';
+    const catTotalRows = targetRows.filter(r => {
+        const val = r[AppState.attrCol] != null && String(r[AppState.attrCol]).trim() !== ''
+            ? String(r[AppState.attrCol]).trim()
+            : '（未回答・不明）';
+        return val === catName;
+    });
+
+    const totalMatched = AppState.filterResult.matchedDocs.length;
+    const shareRate = totalMatched > 0 ? ((attrDocs.length / totalMatched) * 100).toFixed(1) : '0.0';
+    const denomCount = catTotalRows.length;
+    const mentionRate = denomCount > 0 ? ((attrDocs.length / denomCount) * 100).toFixed(1) : '0.0';
+
+    // 3. タイトル・サブタイトル・メトリクスの設定
+    const modalTitle = document.getElementById('attrModalTitle');
+    const modalSubtitle = document.getElementById('attrModalSubtitle');
+    if (modalTitle) {
+        modalTitle.textContent = `【${attrColName}: ${catName}】の意見概要 ＆ 代表的な声`;
+    }
+    if (modalSubtitle) {
+        modalSubtitle.textContent = `注目キーワード「${targetKeyword}」に関連する意見の内訳と代表的な生の声`;
+    }
+
+    const elMatchedCount = document.getElementById('attrModalMatchedCount');
+    const elShareText = document.getElementById('attrModalShareText');
+    const elRateText = document.getElementById('attrModalRateText');
+    const elDenomText = document.getElementById('attrModalDenomText');
+    const elViewAllCount = document.getElementById('attrModalViewAllCount');
+
+    if (elMatchedCount) elMatchedCount.textContent = attrDocs.length.toLocaleString();
+    if (elShareText) elShareText.textContent = `（意見全体シェア ${shareRate}% / 全${totalMatched.toLocaleString()}件中）`;
+    if (elRateText) elRateText.textContent = `${mentionRate}%`;
+    if (elDenomText) elDenomText.textContent = `（${denomLabel} ${denomCount.toLocaleString()}件中）`;
+    if (elViewAllCount) elViewAllCount.textContent = attrDocs.length.toLocaleString();
+
+    // 4. 意見タイプ構成比の集計
+    let issueCount = 0, requestCount = 0, positiveCount = 0, neutralCount = 0;
+    attrDocs.forEach(d => {
+        const t = (d.opinionType && d.opinionType.type) ? d.opinionType.type : 'neutral';
+        if (t === 'issue') issueCount++;
+        else if (t === 'request') requestCount++;
+        else if (t === 'positive') positiveCount++;
+        else neutralCount++;
+    });
+
+    const totalAttr = attrDocs.length;
+    const issueRate = totalAttr > 0 ? ((issueCount / totalAttr) * 100).toFixed(1) : '0.0';
+    const requestRate = totalAttr > 0 ? ((requestCount / totalAttr) * 100).toFixed(1) : '0.0';
+    const positiveRate = totalAttr > 0 ? ((positiveCount / totalAttr) * 100).toFixed(1) : '0.0';
+    const neutralRate = totalAttr > 0 ? ((neutralCount / totalAttr) * 100).toFixed(1) : '0.0';
+
+    const legendEl = document.getElementById('attrModalTypeLegend');
+    const barEl = document.getElementById('attrModalTypeBar');
+    if (legendEl) {
+        legendEl.innerHTML = `
+            <span style="color: #BE123C; font-weight: 600;">🔴 困りごと: ${issueCount}件 (${issueRate}%)</span>
+            <span style="color: #0369A1; font-weight: 600;">🔵 要望: ${requestCount}件 (${requestRate}%)</span>
+            <span style="color: #15803D; font-weight: 600;">🟢 肯定: ${positiveCount}件 (${positiveRate}%)</span>
+            <span style="color: #64748B; font-weight: 600;">⚪ その他: ${neutralCount}件 (${neutralRate}%)</span>
+        `;
+    }
+    if (barEl) {
+        barEl.innerHTML = `
+            <div class="attr-type-bar-seg seg-issue" style="width: ${issueRate}%;" title="困りごと・課題: ${issueCount}件 (${issueRate}%)"></div>
+            <div class="attr-type-bar-seg seg-request" style="width: ${requestRate}%;" title="要望・改善提案: ${requestCount}件 (${requestRate}%)"></div>
+            <div class="attr-type-bar-seg seg-positive" style="width: ${positiveRate}%;" title="肯定・満足: ${positiveCount}件 (${positiveRate}%)"></div>
+            <div class="attr-type-bar-seg seg-neutral" style="width: ${neutralRate}%;" title="その他・事実: ${neutralCount}件 (${neutralRate}%)"></div>
+        `;
+    }
+
+    // 5. 特徴的な頻出語の集計
+    const kwListEl = document.getElementById('attrModalKeywordsList');
+    if (kwListEl) {
+        kwListEl.innerHTML = '';
+        const wordCounts = {};
+        const targetLower = (AppState.targetKeyword || '').toLowerCase();
+        const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
+
+        attrDocs.forEach(d => {
+            const seen = new Set();
+            (d.tokens || []).forEach(tok => {
+                const tokClean = tok.trim();
+                const tokLower = tokClean.toLowerCase();
+                if (tokClean.length < 2) return;
+                if (tokLower === targetLower || tokLower === resolvedLower) return;
+                if (AppState.customStopWords && AppState.customStopWords.has(tokClean)) return;
+                if (!seen.has(tokClean)) {
+                    seen.add(tokClean);
+                    wordCounts[tokClean] = (wordCounts[tokClean] || 0) + 1;
+                }
+            });
+        });
+
+        const sortedKws = Object.entries(wordCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10);
+
+        if (sortedKws.length > 0) {
+            sortedKws.forEach(([word, cnt]) => {
+                const tag = document.createElement('span');
+                tag.className = 'attr-kw-tag';
+                tag.innerHTML = `<span>${escapeHtml(word)}</span><span class="attr-kw-tag-count">${cnt}</span>`;
+                kwListEl.appendChild(tag);
+            });
+        } else {
+            kwListEl.innerHTML = `<span style="color: #94A3B8; font-size: 11.5px;">（十分な単語データがありません）</span>`;
+        }
+    }
+
+    // 6. 区分別代表意見（困りごと、要望、肯定 各最大3選）の抽出
+    const repsContainer = document.getElementById('attrModalRepsContainer');
+    if (repsContainer) {
+        repsContainer.innerHTML = '';
+
+        const repsByType = (OpinionSummarizer && OpinionSummarizer.extractRepresentativeOpinionsByType)
+            ? OpinionSummarizer.extractRepresentativeOpinionsByType(attrDocs, null, 3)
+            : { issue: [], request: [], positive: [] };
+
+        const typeColumns = [
+            { key: 'issue', title: '🔴 困りごと・課題', icon: '🔴', headerClass: 'header-issue', opinions: repsByType.issue },
+            { key: 'request', title: '🔵 要望・改善提案', icon: '🔵', headerClass: 'header-request', opinions: repsByType.request },
+            { key: 'positive', title: '🟢 肯定・満足', icon: '🟢', headerClass: 'header-positive', opinions: repsByType.positive }
+        ];
+
+        typeColumns.forEach(col => {
+            const colEl = document.createElement('div');
+            colEl.className = 'attr-rep-col';
+
+            const header = document.createElement('div');
+            header.className = `attr-rep-col-header ${col.headerClass}`;
+            header.innerHTML = `
+                <span>${col.title}</span>
+                <span style="font-size: 11px; opacity: 0.85;">${col.opinions.length}選</span>
+            `;
+            colEl.appendChild(header);
+
+            const body = document.createElement('div');
+            body.className = 'attr-rep-col-body';
+
+            if (col.opinions.length > 0) {
+                col.opinions.forEach((rep, idx) => {
+                    const doc = rep.doc;
+                    const card = document.createElement('div');
+                    card.className = 'attr-rep-card';
+
+                    const tagsHtml = (doc.matchedWords || []).slice(0, 3).map(w => {
+                        return `<span class="tag-related" style="font-size: 10px; padding: 1px 5px;">${escapeHtml(w)}</span>`;
+                    }).join('');
+
+                    const scoreText = (doc.relevanceScore !== undefined) ? `適合度: ${doc.relevanceScore}%` : '';
+
+                    card.innerHTML = `
+                        <div class="attr-rep-card-meta">
+                            <span style="font-weight: 700; color: #64748B;">#${idx + 1}</span>
+                            <div style="display: flex; gap: 4px; align-items: center;">
+                                ${tagsHtml}
+                                ${scoreText ? `<span style="font-size: 10px; background: #EEF2F6; padding: 1px 4px; border-radius: 4px; font-weight: 600;">${scoreText}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="attr-rep-card-text">“${formatHighlightedText(doc.text)}”</div>
+                    `;
+                    body.appendChild(card);
+                });
+            } else {
+                body.innerHTML = `
+                    <div style="text-align: center; padding: 24px 10px; color: #94A3B8; font-size: 11.5px;">
+                        （この区分の意見はありません）
+                    </div>
+                `;
+            }
+
+            colEl.appendChild(body);
+            repsContainer.appendChild(colEl);
+        });
+    }
+
+    // 7. 「生の声一覧で確認」ボタンのイベントハンドラ
+    const btnViewAll = document.getElementById('btnAttrModalViewAll');
+    if (btnViewAll) {
+        const newBtn = btnViewAll.cloneNode(true);
+        btnViewAll.parentNode.replaceChild(newBtn, btnViewAll);
+        newBtn.addEventListener('click', () => {
+            const modal = document.getElementById('attrDetailModal');
+            if (modal) modal.style.display = 'none';
+            jumpToOpinions('', catName);
+        });
+    }
+
+    // モーダルを表示
+    const modal = document.getElementById('attrDetailModal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
 }
 
 /**
@@ -2686,6 +2927,36 @@ function renderOpinionsList(filterKeyword = '') {
             const t = (d.opinionType && d.opinionType.type) ? d.opinionType.type : 'neutral';
             return t === AppState.opinionsTypeFilter;
         });
+    }
+
+    // 2-2. 属性フィルター（属性クロス集計グラフからの遷移時）
+    if (AppState.opinionsAttrFilter) {
+        docs = docs.filter(d => {
+            const val = d.attribute && d.attribute.trim() !== '' ? d.attribute.trim() : '（未回答・不明）';
+            return val === AppState.opinionsAttrFilter;
+        });
+
+        // 絞り込み中案内バーを上部に表示
+        const banner = document.createElement('div');
+        banner.className = 'opinions-attr-filter-banner';
+        banner.style.cssText = 'background: #EFF6FF; border: 1.5px solid #BFDBFE; border-radius: 8px; padding: 8px 14px; margin-bottom: 12px; font-size: 12.5px; color: #1E40AF; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);';
+        banner.innerHTML = `
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 15px;">📊</span>
+                <span>属性「<strong>${escapeHtml(AppState.opinionsAttrFilter)}</strong>」で絞り込み中 <strong style="color: #2563EB;">(${docs.length} 件)</strong></span>
+            </div>
+            <button type="button" id="btnClearOpinionsAttrFilter" class="btn btn-xs" style="padding: 3px 10px; font-weight: 600; background: #FFFFFF; border: 1px solid #93C5FD; color: #1D4ED8;">✕ 全属性に戻す</button>
+        `;
+        container.appendChild(banner);
+        setTimeout(() => {
+            const btnClear = document.getElementById('btnClearOpinionsAttrFilter');
+            if (btnClear) {
+                btnClear.addEventListener('click', () => {
+                    AppState.opinionsAttrFilter = '';
+                    renderOpinionsList(filterKeyword);
+                });
+            }
+        }, 0);
     }
 
     // 3. ソート順の適用

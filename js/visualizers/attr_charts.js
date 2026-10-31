@@ -80,6 +80,13 @@ const AttrChartVisualizer = {
             }
         }).reverse();
 
+        const hoverLabels = dataRows.map(d => {
+            const main = calcMode === 'share'
+                ? `<b>【${d.category}】</b><br>構成比: <b>${d.share}%</b> (${d.matched}件 / 意見全体${totalMatched.toLocaleString()}件)`
+                : `<b>【${d.category}】</b><br>言及率: <b>${d.rate}%</b> (${d.matched}件 / ${denomLabel}${d.total.toLocaleString()}件)`;
+            return `${main}<br><span style="font-size:11px;color:#93c5fd;">👆 クリックで概要 ＆ 代表意見を表示</span>`;
+        }).reverse();
+
         const barColor = calcMode === 'share' ? '#0284c7' : '#2563eb';
 
         const trace = {
@@ -88,6 +95,7 @@ const AttrChartVisualizer = {
             x: xValues,
             y: yCats,
             text: textLabels,
+            hovertext: hoverLabels,
             textposition: 'auto',
             marker: {
                 color: barColor,
@@ -158,7 +166,22 @@ const AttrChartVisualizer = {
         };
 
         if (typeof Plotly !== 'undefined') {
-            Plotly.newPlot(container, [plotData.trace], plotData.layout, config);
+            Plotly.newPlot(container, [plotData.trace], plotData.layout, config).then(() => {
+                // クリックイベントの登録（二重登録を防ぐためリスナーを整理）
+                if (typeof options.onCategoryClick === 'function') {
+                    if (container.removeAllListeners) {
+                        container.removeAllListeners('plotly_click');
+                    }
+                    container.on('plotly_click', (data) => {
+                        if (!data || !data.points || data.points.length === 0) return;
+                        const pt = data.points[0];
+                        const category = pt.y; // 横棒グラフのため y がカテゴリ名
+                        if (category) {
+                            options.onCategoryClick(category);
+                        }
+                    });
+                }
+            });
         }
     },
 
