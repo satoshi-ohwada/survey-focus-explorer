@@ -64,6 +64,7 @@ const AppState = {
     cloudMaxWords: 60,
     cloudShape: 'circle',
     networkTargetMode: 'word',  // 'word' (全体共起) | 'attr' (属性結びつき)
+    networkAttrMetric: 'distinct', // 'distinct' (特徴度・特有語重視) | 'freq' (出現頻度重視)
     networkMaxWords: 40,
     networkSpacing: 'wide',
     networkFontSize: 'large',
@@ -547,6 +548,19 @@ function setupUIEvents() {
             netModeBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             AppState.networkTargetMode = mode;
+            updateNetwork();
+        });
+    });
+
+    // 属性ネットワークの単語選出基準（特徴度 ⇄ 頻度）切り替え
+    const netMetricBtns = document.querySelectorAll('#networkAttrMetricBtnGroup .seg-btn');
+    netMetricBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const metric = btn.getAttribute('data-attr-metric');
+            if (metric === AppState.networkAttrMetric) return;
+            netMetricBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            AppState.networkAttrMetric = metric;
             updateNetwork();
         });
     });
@@ -2317,7 +2331,14 @@ function updateNetwork() {
     if (!AppState.subcorpusStats || !AppState.filterResult) return;
     const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
 
+    // ツールバーの属性モード固有コントロールの表示切り替え
+    const attrMetricSwitchGroup = document.getElementById('networkAttrMetricSwitchGroup');
+    const colorModeLabel = document.getElementById('selectNetworkColorMode')?.closest('.toolbar-label');
+
     if (AppState.networkTargetMode === 'attr') {
+        if (attrMetricSwitchGroup) attrMetricSwitchGroup.style.display = 'inline-flex';
+        if (colorModeLabel) colorModeLabel.style.display = 'none';
+
         const targetRows = getFilteredRows();
         NetworkVisualizer.renderAttrNetwork(
             AppState.filterResult.matchedDocs,
@@ -2329,6 +2350,7 @@ function updateNetwork() {
                 maxWords: AppState.networkMaxWords,
                 spacingMode: AppState.networkSpacing,
                 fontSize: AppState.networkFontSize,
+                attrMetric: AppState.networkAttrMetric,
                 customStopWords: AppState.customStopWords,
                 onWordClick: (word) => {
                     jumpToOpinions(word);
@@ -2339,6 +2361,9 @@ function updateNetwork() {
             }
         );
     } else {
+        if (attrMetricSwitchGroup) attrMetricSwitchGroup.style.display = 'none';
+        if (colorModeLabel) colorModeLabel.style.display = 'inline-flex';
+
         NetworkVisualizer.render(
             AppState.subcorpusStats.wordList,
             AppState.subcorpusStats.coocCounts,
@@ -3189,7 +3214,9 @@ async function exportChart(type, action = 'download') {
 
     const titles = {
         cloud: `ワードクラウド_${kw}_${dateStr}`,
-        network: (AppState.networkTargetMode === 'attr') ? `属性ネットワーク_${kw}_${dateStr}` : `共起ネットワーク_${kw}_${dateStr}`,
+        network: (AppState.networkTargetMode === 'attr')
+            ? `属性ネットワーク_${AppState.networkAttrMetric === 'distinct' ? '特徴語' : '頻度語'}_${kw}_${dateStr}`
+            : `共起ネットワーク_${kw}_${dateStr}`,
         umap: `UMAP散布図_${kw}_${dateStr}`,
         attr: `属性別クロス集計_${kw}_${dateStr}`
     };

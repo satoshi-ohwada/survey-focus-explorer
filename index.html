@@ -719,6 +719,18 @@
                                 </button>
                             </div>
                         </div>
+                        <!-- 👥 属性結びつきモード時のみ表示される単語選出基準スイッチ -->
+                        <div id="networkAttrMetricSwitchGroup" class="network-mode-switch-group" style="display: none;">
+                            <span style="color: #475569; font-size: 11.5px; font-weight: 700;">単語の選出:</span>
+                            <div class="seg-btn-group" id="networkAttrMetricBtnGroup">
+                                <button type="button" class="seg-btn active" data-attr-metric="distinct" title="他の属性と比べてその属性で突出して使われている言葉（セグメント特有の違いや独自関心をあぶり出す）">
+                                    🎯 特徴度重視
+                                </button>
+                                <button type="button" class="seg-btn" data-attr-metric="freq" title="各属性での出現回数が多い言葉（共通語やボリューム感を把握）">
+                                    📊 頻度重視
+                                </button>
+                            </div>
+                        </div>
                         <div class="filter-group-divider"></div>
                         <label class="toolbar-label">表示語数:
                             <select id="selectNetworkMaxWords" class="form-select btn-sm">

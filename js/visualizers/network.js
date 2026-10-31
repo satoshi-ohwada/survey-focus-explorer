@@ -361,6 +361,7 @@ const NetworkVisualizer = {
         this.spacingMode = options.spacingMode || 'wide';
         this.fontSize = options.fontSize || 'large';
         this.attrColName = attrCol || '属性';
+        this.attrMetric = options.attrMetric || 'distinct'; // 'distinct' (特徴度・特有語重視) | 'freq' (出現頻度重視)
 
         const rectW = this.canvas.clientWidth || (this.canvas.parentElement ? this.canvas.parentElement.clientWidth : 0);
         const rectH = this.canvas.clientHeight || (this.canvas.parentElement ? this.canvas.parentElement.clientHeight : 0);
@@ -407,20 +408,22 @@ const NetworkVisualizer = {
         // 上位最大8属性
         const topAttrs = attrCategories.slice(0, 8);
 
-        // 2. 各属性で使われている単語を集計し、上位特徴語を選出
+        // 2. 単語集計と上位特徴語／頻度語の選出
         const targetLower = (targetKeyword || '').toLowerCase();
         const resolvedLower = (this.resolvedTargetWord || '').toLowerCase();
-        // 各属性から選出する上位語数（デフォルト6語、ツールバー設定に応じて5〜8語へ動的連動）
         const maxWordsSetting = options.maxWords || 40;
         const wordsPerAttr = Math.max(5, Math.min(8, Math.round(maxWordsSetting / 6)));
 
-        const attrTopWords = new Map();
-        const allCandidateWords = new Set();
-        const wordGlobalAttrCount = new Map();
+        // 各属性および全体での単語出現文書数を集計
+        const wordCountsByAttr = new Map();
+        const totalWordDocCounts = new Map();
+        let totalDocsInAttrs = 0;
 
         topAttrs.forEach(cat => {
             const docs = docsByAttr[cat];
-            const wordCounts = {};
+            totalDocsInAttrs += docs.length;
+            const wMap = new Map();
+            wordCountsByAttr.set(cat, wMap);
 
             docs.forEach(d => {
                 const seen = new Set();
@@ -432,15 +435,72 @@ const NetworkVisualizer = {
                     if (options.customStopWords && options.customStopWords.has(clean)) return;
                     if (!seen.has(clean)) {
                         seen.add(clean);
-                        wordCounts[clean] = (wordCounts[clean] || 0) + 1;
+                        wMap.set(clean, (wMap.get(clean) || 0) + 1);
+                        totalWordDocCounts.set(clean, (totalWordDocCounts.get(clean) || 0) + 1);
                     }
                 });
             });
+        });
 
-            const sorted = Object.entries(wordCounts)
-                .sort((a, b) => b[1] - a[1])
-                .slice(0, wordsPerAttr)
-                .map(([w, c]) => ({ word: w, count: c }));
+        // 各属性における単語の統計量計算と選出
+        const attrTopWords = new Map();
+        const allCandidateWords = new Set();
+        const wordGlobalAttrCount = new Map();
+        const wordBestScoreMap = new Map();
+
+        topAttrs.forEach(cat => {
+            const wMap = wordCountsByAttr.get(cat) || new Map();
+            const nCat = docsByAttr[cat].length;
+
+            const wordList = Array.from(wMap.entries()).map(([w, count]) => {
+                const totalCount = totalWordDocCounts.get(w) || count;
+                const expected = (totalDocsInAttrs > 0) ? (nCat * (totalCount / totalDocsInAttrs)) : 0;
+                const lift = expected > 0 ? (count / expected) : 1.0;
+
+                // 調整済み残差 (Adjusted Standardized Residual: Zスコア)
+                let zScore = 0;
+                if (totalDocsInAttrs > 1 && expected > 0) {
+                    const factorCat = Math.max(0.001, 1 - (nCat / totalDocsInAttrs));
+                    const factorWord = Math.max(0.001, 1 - (totalCount / totalDocsInAttrs));
+                    const se = Math.sqrt(Math.max(0.0001, expected * factorCat * factorWord));
+                    zScore = (count - expected) / se;
+                }
+
+                return {
+                    word: w,
+                    count: count,
+                    totalCount: totalCount,
+                    expected: expected,
+                    lift: lift,
+                    zScore: zScore,
+                    cat: cat
+                };
+            });
+
+            let sorted = [];
+            if (this.attrMetric === 'distinct') {
+                // 【特徴度重視】統計的に過剰出現している単語（その属性特有の語）
+                // 足切り: 属性内で2件以上出現かつ有意に過剰出現 (zScore > 0)
+                let candidates = wordList.filter(item => item.count >= 2 && item.zScore > 0);
+                if (candidates.length < wordsPerAttr) {
+                    // 足切り緩和: 1件以上かつ偏りがある (zScore > 0 または lift > 1.0)
+                    candidates = wordList.filter(item => item.count >= 1 && (item.zScore > 0 || item.lift > 1.0));
+                }
+                if (candidates.length === 0) {
+                    candidates = wordList;
+                }
+
+                // ソート: 調整済み残差 zScore 降順（同点は出現件数降順）
+                sorted = candidates.sort((a, b) => {
+                    if (Math.abs(b.zScore - a.zScore) > 0.001) {
+                        return b.zScore - a.zScore;
+                    }
+                    return b.count - a.count;
+                }).slice(0, wordsPerAttr);
+            } else {
+                // 【頻度重視】単純出現文書数順
+                sorted = wordList.sort((a, b) => b.count - a.count).slice(0, wordsPerAttr);
+            }
 
             attrTopWords.set(cat, sorted);
 
@@ -450,6 +510,12 @@ const NetworkVisualizer = {
                     wordGlobalAttrCount.set(item.word, new Set());
                 }
                 wordGlobalAttrCount.get(item.word).add(cat);
+
+                // 単語の代表スコア（最も高いZ値または件数）を保持
+                const existing = wordBestScoreMap.get(item.word);
+                if (!existing || item.zScore > existing.zScore) {
+                    wordBestScoreMap.set(item.word, item);
+                }
             });
         });
 
@@ -508,6 +574,7 @@ const NetworkVisualizer = {
         allCandidateWords.forEach(word => {
             const connectedCats = Array.from(wordGlobalAttrCount.get(word) || []);
             const isShared = connectedCats.length >= 2;
+            const bestScore = wordBestScoreMap.get(word) || {};
 
             let sumX = 0, sumY = 0;
             connectedCats.forEach(cat => {
@@ -532,6 +599,10 @@ const NetworkVisualizer = {
                 isAttrNode: false,
                 isShared: isShared,
                 connectedCats: connectedCats,
+                primaryCat: primaryCat,
+                scoreInfo: bestScore,
+                count: bestScore.count || 1,
+                zScore: bestScore.zScore || 0,
                 x: initX + jitterX,
                 y: initY + jitterY,
                 vx: 0,
@@ -557,10 +628,17 @@ const NetworkVisualizer = {
             topWords.forEach(item => {
                 const wordNode = nodeMap.get(item.word);
                 if (attrNode && wordNode) {
+                    // 特徴度重視の場合はZスコアに応じた線の強さ、頻度重視の場合は出現数に応じた強さ
+                    const edgeWeight = (this.attrMetric === 'distinct')
+                        ? Math.max(1, Math.min(10, Math.round(Math.max(1, item.zScore * 2))))
+                        : item.count;
+
                     edges.push({
                         source: attrNode,
                         target: wordNode,
-                        weight: item.count,
+                        weight: edgeWeight,
+                        rawCount: item.count,
+                        zScore: item.zScore,
                         color: attrNode.color
                     });
                 }
@@ -1294,10 +1372,20 @@ const NetworkVisualizer = {
             if (hn.isAttrNode) {
                 tipText = `【属性】${hn.label}: 関連意見 ${hn.docCount}件 (クリックで意見概要を表示)`;
             } else if (hn.isShared) {
-                tipText = `【共通語】${hn.label} (${hn.connectedCats.join('・')}で共通言及)`;
+                if (this.attrMetric === 'distinct') {
+                    tipText = `【共通特徴語】${hn.label} (${hn.connectedCats.join('・')}で共通して突出)`;
+                } else {
+                    tipText = `【共通高頻度語】${hn.label} (${hn.connectedCats.join('・')}で共通言及)`;
+                }
             } else {
                 const cat = (hn.connectedCats && hn.connectedCats[0]) || '';
-                tipText = `【特徴語】${hn.label} (${cat}で多用)`;
+                if (this.attrMetric === 'distinct' && hn.scoreInfo) {
+                    const zStr = (hn.scoreInfo.zScore !== undefined) ? ` (特異度 Z:+${Math.max(0, hn.scoreInfo.zScore).toFixed(1)})` : '';
+                    tipText = `【${cat} 特有語】${hn.label}${zStr}: 該当${hn.scoreInfo.count || hn.count}件 / 全体${hn.scoreInfo.totalCount || hn.count}件`;
+                } else {
+                    const cntStr = hn.count ? ` (${hn.count}件)` : '';
+                    tipText = `【${cat} 高頻度語】${hn.label}${cntStr}`;
+                }
             }
 
             ctx.font = 'bold 12px sans-serif';
@@ -1340,11 +1428,11 @@ const NetworkVisualizer = {
         ctx.save();
 
         // (1) 左上タイトルバッジ
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
         ctx.strokeStyle = '#CBD5E1';
         ctx.lineWidth = 1;
-        const badgeW = 290;
-        const badgeH = 46;
+        const badgeW = 320;
+        const badgeH = 54;
         ctx.beginPath();
         if (ctx.roundRect) {
             ctx.roundRect(14, 14, badgeW, badgeH, 6);
@@ -1358,14 +1446,22 @@ const NetworkVisualizer = {
         ctx.font = 'bold 12.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText(`👥 属性別 結びつきネットワーク (${this.attrColName || '属性'})`, 22, 20);
+        ctx.fillText(`👥 属性別 結びつきネットワーク (${this.attrColName || '属性'})`, 22, 19);
+
+        const metricBadge = this.attrMetric === 'distinct' ? '🎯 特徴度重視（特有語）' : '📊 頻度重視（高頻度語）';
+        ctx.fillStyle = this.attrMetric === 'distinct' ? '#2563EB' : '#475569';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.fillText(`選出基準: ${metricBadge}`, 22, 34);
 
         ctx.fillStyle = '#64748B';
-        ctx.font = '10.5px sans-serif';
-        ctx.fillText('※ 中央は複数属性の共通話題、外側は属性固有の特徴語', 22, 38);
+        ctx.font = '9.5px sans-serif';
+        const subGuide = this.attrMetric === 'distinct'
+            ? '※ 外側は他属性と比べて突出して使われた特有語、中央は複数属性共通の特有語'
+            : '※ 中央は複数属性の共通話題、外側は属性ごとの高頻度語';
+        ctx.fillText(subGuide, 22, 48);
 
         // (2) 右上凡例
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
         ctx.strokeStyle = '#CBD5E1';
         ctx.lineWidth = 1;
         const legW = 210;
@@ -1406,7 +1502,8 @@ const NetworkVisualizer = {
         ctx.lineWidth = 1.5;
         ctx.stroke();
         ctx.fillStyle = '#334155';
-        ctx.fillText('共通語', legX + 135, 26);
+        const sharedLabel = this.attrMetric === 'distinct' ? '共通特徴語' : '共通語';
+        ctx.fillText(sharedLabel, legX + 135, 26);
 
         ctx.fillStyle = '#64748B';
         ctx.font = '10px sans-serif';
