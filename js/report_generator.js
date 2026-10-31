@@ -376,6 +376,12 @@ const ReportGenerator = {
             repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType(mDocs, AppState.subcorpusStats, 3);
         }
 
+        // 抽出条件ラベル
+        const matchMode = AppState.matchMode || 'or';
+        const extractUnit = AppState.extractUnit || 'doc';
+        const matchModeLabel = matchMode === 'and' ? 'AND条件 (キーワード必須＋関連語)' : 'OR条件 (キーワード または 関連語)';
+        const extractUnitLabel = extractUnit === 'sentence' ? '文単位抽出' : '回答全体抽出';
+
         const now = new Date();
         const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -386,6 +392,10 @@ const ReportGenerator = {
             resolvedWord: AppState.resolvedTargetWord || '',
             textCol: AppState.textCol || '（テキスト列）',
             attrCol: AppState.attrCol || '（属性列未設定）',
+            matchMode,
+            extractUnit,
+            matchModeLabel,
+            extractUnitLabel,
             totalRaw,
             totalFiltered,
             totalMatched,
@@ -529,13 +539,15 @@ const ReportGenerator = {
                 } else {
                     itemsHtml = c.list.map(rep => {
                         let text = rep.doc.text ? rep.doc.text.trim() : '';
-                        if (text.length > 68) text = text.substring(0, 68) + '…';
+                        if (text.length > 72) text = text.substring(0, 72) + '…';
                         const attrText = rep.doc.attribute ? `<span class="report-type-rep-attr">[${this.escape(rep.doc.attribute)}]</span>` : '';
+                        const scoreBadge = rep.doc.relevanceScore ? `<span class="report-type-rep-score">適合度 ${rep.doc.relevanceScore}%</span>` : '';
                         return `
                             <div class="report-type-rep-item">
                                 <div class="report-type-rep-meta">
                                     <span class="report-type-rep-rank ${c.type}">#${rep.rank}</span>
                                     ${attrText}
+                                    ${scoreBadge}
                                 </div>
                                 <div class="report-type-rep-quote">「${this.escape(text)}」</div>
                             </div>
@@ -590,15 +602,15 @@ const ReportGenerator = {
                 ? `<span class="report-word-pill resolved" title="中心代表語">🔹 ${this.escape(inc.resolvedWord)}${inc.resolvedCount > 0 ? ` (${inc.resolvedCount}件)` : ''}</span>`
                 : '';
             const relatedTags = (inc.wordItems && inc.wordItems.length > 0)
-                ? inc.wordItems.slice(0, 8).map(w => `<span class="report-word-pill ${w.type}">${this.escape(w.word)}${w.count > 0 ? ` (${w.count}件)` : ''}</span>`).join('')
+                ? inc.wordItems.slice(0, 10).map(w => `<span class="report-word-pill ${w.type}">${this.escape(w.word)}${w.count > 0 ? ` (${w.count}件)` : ''}</span>`).join('')
                 : '<span style="color:#94a3b8; font-size:8px;">（関連語指定なし）</span>';
-            const moreTag = (inc.wordItems && inc.wordItems.length > 8)
-                ? `<span class="report-word-pill-more">他 ${inc.wordItems.length - 8} 語</span>`
+            const moreTag = (inc.wordItems && inc.wordItems.length > 10)
+                ? `<span class="report-word-pill-more">他 ${inc.wordItems.length - 10} 語</span>`
                 : '';
 
             const subInfoLabel = inc.hasActiveRelated
-                ? `条件: <b>${inc.matchModeLabel}</b> / 単位: <b>${inc.extractUnitLabel}</b> / 採用関連語: <b>計${inc.activeRelatedCount}語</b>`
-                : `条件: <b>${inc.matchModeLabel}</b> / 単位: <b>${inc.extractUnitLabel}</b> / キーワード単体`;
+                ? `抽出条件: <b>${data.matchMode === 'and' ? 'AND条件' : 'OR条件'}</b> (${data.extractUnit === 'sentence' ? '文単位' : '回答全体'}) / 採用関連語: <b>計${inc.activeRelatedCount}語</b>`
+                : `抽出条件: <b>${data.matchMode === 'and' ? 'AND条件' : 'OR条件'}</b> (${data.extractUnit === 'sentence' ? '文単位' : '回答全体'}) / キーワード単体`;
 
             summaryBoxHtml = `
                 <div class="report-summary-box">
@@ -653,15 +665,16 @@ const ReportGenerator = {
                     <div class="report-condition-item">
                         <span class="report-condition-lbl">注目キーワード:</span>
                         <span class="report-condition-val-accent">🎯 ${this.escape(data.targetKeyword)}</span>
-                        ${data.resolvedWord && data.resolvedWord !== data.targetKeyword ? `<span style="font-size: 11px; color: #64748b;">(代表形: ${this.escape(data.resolvedWord)})</span>` : ''}
+                        ${data.resolvedWord && data.resolvedWord !== data.targetKeyword ? `<span style="font-size: 10px; color: #64748b;">(代表形: ${this.escape(data.resolvedWord)})</span>` : ''}
                     </div>
                     <div class="report-condition-item">
-                        <span class="report-condition-lbl">分析テキスト列:</span>
+                        <span class="report-condition-lbl">抽出条件:</span>
+                        <span class="report-condition-val">${data.matchMode === 'and' ? 'AND (必須＋関連語)' : 'OR (いずれか)'} / ${data.extractUnit === 'sentence' ? '文単位' : '回答全体'}</span>
+                    </div>
+                    <div class="report-condition-item">
+                        <span class="report-condition-lbl">分析列:</span>
                         <span class="report-condition-val">📄 ${this.escape(data.textCol)}</span>
-                    </div>
-                    <div class="report-condition-item">
-                        <span class="report-condition-lbl">属性分類列:</span>
-                        <span class="report-condition-val">📊 ${this.escape(data.attrCol)}</span>
+                        ${data.attrCol && data.attrCol !== '（属性列未設定）' ? `<span style="color: #64748b; font-size: 9.5px; margin-left: 4px;">/ 📊 ${this.escape(data.attrCol)}</span>` : ''}
                     </div>
                 </div>
 
@@ -759,7 +772,7 @@ const ReportGenerator = {
                 <div class="report-header">
                     <div class="report-header-main">
                         <div class="report-title-badge">FOCUS EXPLORER REPORT (2/2)</div>
-                        <h2 class="report-title">意見構造クラスタ ＆ 属性セグメント別分析</h2>
+                        <h2 class="report-title">意見タイプ別 代表意見（生の声） ＆ セグメント構造分析</h2>
                     </div>
                     <div class="report-header-meta">
                         <div><b>キーワード:</b> ${this.escape(data.targetKeyword)}</div>

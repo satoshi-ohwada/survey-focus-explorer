@@ -2256,6 +2256,16 @@ body {
     color: #64748B;
 }
 
+.report-type-rep-score {
+    font-size: 6.5px;
+    font-weight: 600;
+    color: #475569;
+    background: #EEF2F6;
+    padding: 0.5px 3px;
+    border-radius: 2px;
+    margin-left: auto;
+}
+
 .report-type-rep-quote {
     font-size: 7.5px;
     line-height: 1.35;
@@ -3925,6 +3935,120 @@ body {
     font-weight: 500;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+/* 分析実行中ローディング表示（フローティングバナー） */
+.analysis-loading-bar {
+    position: fixed;
+    top: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9999;
+    background: rgba(15, 23, 42, 0.94);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    padding: 14px 22px;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(99, 102, 241, 0.35);
+    min-width: 360px;
+    max-width: 520px;
+    width: 90%;
+    color: #FFFFFF;
+    animation: slideDownFade 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideDownFade {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -18px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+.analysis-loading-inner {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.loading-spinner-ring {
+    width: 34px;
+    height: 34px;
+    border: 3.5px solid rgba(255, 255, 255, 0.2);
+    border-top-color: #6366F1;
+    border-right-color: #A855F7;
+    border-radius: 50%;
+    animation: ringSpin 0.75s linear infinite;
+    flex-shrink: 0;
+}
+
+@keyframes ringSpin {
+    to { transform: rotate(360deg); }
+}
+
+.analysis-loading-text-wrap {
+    flex: 1;
+    min-width: 0;
+}
+
+.analysis-loading-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.analysis-loading-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #FFFFFF;
+    letter-spacing: 0.2px;
+}
+
+.analysis-loading-step {
+    font-size: 11px;
+    font-weight: 700;
+    color: #A5B4FC;
+    background: rgba(99, 102, 241, 0.25);
+    border: 1px solid rgba(165, 180, 252, 0.3);
+    padding: 1.5px 7px;
+    border-radius: 4px;
+}
+
+.analysis-loading-status {
+    font-size: 12px;
+    color: #E2E8F0;
+    margin-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.analysis-loading-progress-track {
+    height: 5px;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.analysis-loading-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #6366F1, #A855F7, #EC4899);
+    border-radius: 3px;
+    transition: width 0.35s ease;
+}
+
+/* ボタン実行中のパルスアニメーション */
+.btn-focus-run.is-loading {
+    background: linear-gradient(135deg, #4338CA, #6D28D9) !important;
+    cursor: wait !important;
+    position: relative;
+    opacity: 0.92;
+    box-shadow: 0 0 16px rgba(99, 102, 241, 0.6) !important;
 }
 
 

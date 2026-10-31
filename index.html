@@ -420,6 +420,24 @@
                     🚀 関連語を探索 ＆ 分析スタート
                 </button>
             </div>
+
+            <!-- 分析実行中ローディング表示（フローティングバナー） -->
+            <div id="analysisLoadingBar" class="analysis-loading-bar" style="display: none;">
+                <div class="analysis-loading-inner">
+                    <div class="loading-spinner-ring"></div>
+                    <div class="analysis-loading-text-wrap">
+                        <div class="analysis-loading-title-row">
+                            <span id="analysisLoadingTitle" class="analysis-loading-title">🚀 注目キーワードを分析中...</span>
+                            <span id="analysisLoadingStep" class="analysis-loading-step">準備中</span>
+                        </div>
+                        <div id="analysisLoadingStatus" class="analysis-loading-status">テキストの解析処理を開始しています...</div>
+                        <div class="analysis-loading-progress-track">
+                            <div id="analysisLoadingProgressFill" class="analysis-loading-progress-fill" style="width: 15%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- 頻出単語サジェストバー -->
             <div id="frequentKeywordsBar" class="frequent-keywords-bar" style="display: none;">
                 <span class="frequent-keywords-label">💡 頻出キーワード候補（クリックで入力）:</span>

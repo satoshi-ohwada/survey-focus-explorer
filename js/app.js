@@ -106,7 +106,7 @@ function setupUIEvents() {
         radio.addEventListener('change', (e) => {
             AppState.matchMode = e.target.value;
             if (AppState.rawRows.length > 0 && AppState.targetKeyword) {
-                executeFilteringAndRender();
+                executeFilteringAndRender(true);
             }
         });
     });
@@ -116,7 +116,7 @@ function setupUIEvents() {
         radio.addEventListener('change', (e) => {
             AppState.extractUnit = e.target.value;
             if (AppState.rawRows.length > 0 && AppState.targetKeyword) {
-                executeFilteringAndRender();
+                executeFilteringAndRender(true);
             }
         });
     });
@@ -480,13 +480,13 @@ function setupUIEvents() {
     document.getElementById('btnSelectAllRelated').addEventListener('click', () => {
         AppState.relatedWords.forEach(r => { r.checked = true; });
         renderRelatedChips();
-        executeFilteringAndRender();
+        executeFilteringAndRender(true);
     });
 
     document.getElementById('btnDeselectAllRelated').addEventListener('click', () => {
         AppState.relatedWords.forEach(r => { r.checked = false; });
         renderRelatedChips();
-        executeFilteringAndRender();
+        executeFilteringAndRender(true);
     });
 
     // ダッシュボードタブ切り替え
@@ -1750,6 +1750,44 @@ function loadDemoData() {
 }
 
 /**
+ * 分析実行中ローディング表示の制御
+ */
+function setAnalysisLoading(visible, title = '', step = '', status = '', percent = 0) {
+    const loadingBar = document.getElementById('analysisLoadingBar');
+    const titleEl = document.getElementById('analysisLoadingTitle');
+    const stepEl = document.getElementById('analysisLoadingStep');
+    const statusEl = document.getElementById('analysisLoadingStatus');
+    const fillEl = document.getElementById('analysisLoadingProgressFill');
+    const btn = document.getElementById('btnRunFocus');
+
+    if (!loadingBar) return;
+
+    if (visible) {
+        if (title && titleEl) titleEl.textContent = title;
+        if (step && stepEl) stepEl.textContent = step;
+        if (status && statusEl) statusEl.textContent = status;
+        if (fillEl) fillEl.style.width = `${Math.min(100, Math.max(5, percent))}%`;
+
+        loadingBar.style.display = 'block';
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('is-loading');
+            btn.innerHTML = `<span class="loading-spinner-ring" style="width: 14px; height: 14px; border-width: 2px; display: inline-block; vertical-align: middle; margin-right: 6px;"></span> 分析を実行中...`;
+        }
+    } else {
+        if (fillEl) fillEl.style.width = '100%';
+        setTimeout(() => {
+            loadingBar.style.display = 'none';
+            if (btn) {
+                btn.disabled = false;
+                btn.classList.remove('is-loading');
+                btn.innerHTML = '🚀 関連語を探索 ＆ 分析スタート';
+            }
+        }, 250);
+    }
+}
+
+/**
  * キーワード ＆ 関連語探索の実行
  */
 async function runFocusAnalysis() {
@@ -1763,16 +1801,15 @@ async function runFocusAnalysis() {
     }
     AppState.targetKeyword = kw;
 
-    const btn = document.getElementById('btnRunFocus');
-    const originalText = btn ? btn.innerHTML : '';
-    if (btn) {
-        btn.disabled = true;
-        btn.innerHTML = '⏳ 分析中...';
-    }
+    // 実行中表示の開始（ステップ 1: 準備）
+    setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, '準備中', '辞書設定および形態素解析器の準備をしています...', 15);
+    await new Promise(r => setTimeout(r, 40));
 
     try {
         // 1. Kuromoji が未完了の場合は待機を試みる
         if (!TextPreprocessor.tokenizer) {
+            setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 1/4', '形態素解析辞書（Kuromoji）をロード中...', 25);
+            await new Promise(r => setTimeout(r, 40));
             try {
                 await TextPreprocessor.init('lib/kuromoji/dict/');
             } catch (e) {
@@ -1796,6 +1833,9 @@ async function runFocusAnalysis() {
         }
 
         if (!AppState.isTokenized || !AppState.tokensPerDoc || AppState.tokensPerDoc.length !== targetRows.length) {
+            setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 2/4', `全回答文（${targetRows.length.toLocaleString()}件）の形態素解析・単語分解を実行中...`, 45);
+            await new Promise(r => setTimeout(r, 40));
+
             const texts = targetRows.map(r => String(r[AppState.textCol] || ''));
             AppState.tokensPerDoc = TextPreprocessor.tokenizeDocuments(texts, AppState.filterOptions);
             AppState.totalCorpusStats = TextPreprocessor.computeCorpusStats(targetRows, AppState.textCol, AppState.tokensPerDoc);
@@ -1803,6 +1843,9 @@ async function runFocusAnalysis() {
         }
 
         // 4. キーワード関連語の算出
+        setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 3/4', '指定キーワードとの文脈共起・関連度スコアを算出中...', 70);
+        await new Promise(r => setTimeout(r, 40));
+
         const res = AssociationEngine.findRelatedWords(
             AppState.tokensPerDoc,
             targetRows,
@@ -1818,19 +1861,20 @@ async function runFocusAnalysis() {
         AppState.resolvedTargetWord = res.resolvedTargetWord || AppState.targetKeyword;
         AppState.relatedWords = res.relatedWords || [];
 
-        // 4. 関連語チップの描画
+        // 5. 関連語チップの描画
         renderRelatedChips();
 
-        // 5. 該当意見のフィルタリング ＆ 可視化描画
+        // 6. 該当意見のフィルタリング ＆ 可視化描画
+        setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 4/4', '関連意見の抽出・トーン分類・集約サマリーを生成中...', 90);
+        await new Promise(r => setTimeout(r, 40));
+
         executeFilteringAndRender();
+        setAnalysisLoading(true, `🚀 注目キーワード「${kw}」分析完了`, '完了', 'サマリーと各種可視化を描画しました', 100);
     } catch (err) {
         console.error('Focus analysis error:', err);
         alert('分析処理中にエラーが発生しました: ' + err.message);
     } finally {
-        if (btn) {
-            btn.disabled = false;
-            btn.innerHTML = originalText || '🚀 関連語を探索 ＆ 分析';
-        }
+        setAnalysisLoading(false);
     }
 }
 
@@ -1877,7 +1921,7 @@ function renderRelatedChips() {
             rw.checked = !rw.checked;
             chip.classList.toggle('active', rw.checked);
             chip.querySelector('span:first-child').textContent = rw.checked ? '☑' : '☐';
-            executeFilteringAndRender();
+            executeFilteringAndRender(true);
         });
 
         chipsWrapper.appendChild(chip);
@@ -1888,7 +1932,10 @@ function renderRelatedChips() {
 /**
  * 対象意見の抽出 ＆ 描画
  */
-function executeFilteringAndRender() {
+function executeFilteringAndRender(showNotice = false) {
+    if (showNotice && typeof showToast === 'function') {
+        showToast('⏳ 抽出条件を反映し、意見集約を更新中...');
+    }
     const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word);
     const targetRows = getFilteredRows();
 
