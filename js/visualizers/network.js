@@ -410,7 +410,9 @@ const NetworkVisualizer = {
         // 2. 各属性で使われている単語を集計し、上位特徴語を選出
         const targetLower = (targetKeyword || '').toLowerCase();
         const resolvedLower = (this.resolvedTargetWord || '').toLowerCase();
-        const wordsPerAttr = 4; // 各属性の上位語数
+        // 各属性から選出する上位語数（デフォルト6語、ツールバー設定に応じて5〜8語へ動的連動）
+        const maxWordsSetting = options.maxWords || 40;
+        const wordsPerAttr = Math.max(5, Math.min(8, Math.round(maxWordsSetting / 6)));
 
         const attrTopWords = new Map();
         const allCandidateWords = new Set();
@@ -465,6 +467,18 @@ const NetworkVisualizer = {
             const py = centerY + radiusRing * Math.sin(angle);
             const colorObj = this.ATTR_PALETTE[idx % this.ATTR_PALETTE.length];
 
+            // 属性名称の長さに応じた動的ピル幅の計算（見切れを防止し最大240pxまで柔軟に拡大）
+            const fullText = `👥 ${cat} (${docsByAttr[cat].length})`;
+            let calcWidth = 100;
+            if (this.ctx && this.ctx.measureText) {
+                this.ctx.font = 'bold 12px sans-serif';
+                calcWidth = Math.round(this.ctx.measureText(fullText).width + 32);
+            } else {
+                calcWidth = Math.round(fullText.length * 10 + 36);
+            }
+            const boxWidth = Math.max(96, Math.min(240, calcWidth));
+            const boxHeight = 36;
+
             const attrNode = {
                 id: `attr_${cat}`,
                 label: cat,
@@ -478,8 +492,8 @@ const NetworkVisualizer = {
                 fx: px,
                 fy: py,
                 radius: 28,
-                boxWidth: Math.max(90, Math.min(145, cat.length * 13 + 40)),
-                boxHeight: 34,
+                boxWidth: boxWidth,
+                boxHeight: boxHeight,
                 color: colorObj.fill,
                 strokeColor: colorObj.stroke,
                 textColor: colorObj.text,
@@ -1219,23 +1233,23 @@ const NetworkVisualizer = {
             }
         });
 
-        // 4. 属性ノード（第3層: 最前面の角丸長方形バッジ）
+        // 4. 属性ノード（第3層: 最前面のピル型カプセルバッジ）
         this.nodes.filter(n => n.isAttrNode).forEach(node => {
             const isHover = !isExport && this.hoverNode && this.hoverNode.id === node.id;
-            const wBox = node.boxWidth || 95;
-            const hBox = node.boxHeight || 34;
+            const wBox = node.boxWidth || 100;
+            const hBox = node.boxHeight || 36;
             const xBox = node.x - wBox / 2;
             const yBox = node.y - hBox / 2;
-            const rCorner = 7;
+            const rCorner = hBox / 2; // 端が完全に丸いピル（カプセル）型
 
             // ドロップシャドウ
             ctx.save();
-            ctx.shadowColor = isHover ? 'rgba(37, 99, 235, 0.4)' : 'rgba(15, 23, 42, 0.12)';
-            ctx.shadowBlur = isHover ? 10 : 4;
+            ctx.shadowColor = isHover ? 'rgba(37, 99, 235, 0.45)' : 'rgba(15, 23, 42, 0.16)';
+            ctx.shadowBlur = isHover ? 12 : 5;
             ctx.shadowOffsetX = 0;
             ctx.shadowOffsetY = isHover ? 3 : 2;
 
-            // 角丸四角形
+            // ピル型塗りつぶし
             ctx.beginPath();
             if (ctx.roundRect) {
                 ctx.roundRect(xBox, yBox, wBox, hBox, rCorner);
@@ -1246,7 +1260,7 @@ const NetworkVisualizer = {
             ctx.fill();
             ctx.restore();
 
-            // 枠線
+            // 枠線（白い太フチでノードを際立たせる）
             ctx.beginPath();
             if (ctx.roundRect) {
                 ctx.roundRect(xBox, yBox, wBox, hBox, rCorner);
@@ -1254,15 +1268,23 @@ const NetworkVisualizer = {
                 ctx.rect(xBox, yBox, wBox, hBox);
             }
             ctx.strokeStyle = isHover ? '#FFFFFF' : (node.strokeColor || '#FFFFFF');
-            ctx.lineWidth = isHover ? 2.5 : 1.8;
+            ctx.lineWidth = isHover ? 2.8 : 2.0;
             ctx.stroke();
 
-            // テキストラベル「👥 {label} ({count})」
-            ctx.font = 'bold 12px sans-serif';
+            // テキストラベル「👥 {label} ({count})」の見切れ防止スケーリング
+            const fullText = `👥 ${node.label} (${node.docCount})`;
+            let fSize = 12;
+            ctx.font = `bold ${fSize}px sans-serif`;
+            const maxTextW = wBox - 22;
+            while (ctx.measureText(fullText).width > maxTextW && fSize > 9.0) {
+                fSize -= 0.5;
+                ctx.font = `bold ${fSize}px sans-serif`;
+            }
+
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#FFFFFF';
-            ctx.fillText(`👥 ${node.label} (${node.docCount})`, node.x, node.y);
+            ctx.fillText(fullText, node.x, node.y);
         });
 
         // 5. ホバー時の詳細ツールチップ

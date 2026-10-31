@@ -2326,6 +2326,7 @@ function updateNetwork() {
             AppState.targetKeyword,
             {
                 resolvedTargetWord: AppState.resolvedTargetWord,
+                maxWords: AppState.networkMaxWords,
                 spacingMode: AppState.networkSpacing,
                 fontSize: AppState.networkFontSize,
                 customStopWords: AppState.customStopWords,
