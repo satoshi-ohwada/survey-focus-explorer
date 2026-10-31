@@ -515,23 +515,12 @@ function setupUIEvents() {
             updateWordCloud();
         });
     }
-    const inputCloudMaxWords = document.getElementById('inputCloudMaxWords');
-    if (inputCloudMaxWords) {
-        const handleMaxWordsChange = () => {
-            let val = parseInt(inputCloudMaxWords.value, 10);
+    const selectCloudMaxWords = document.getElementById('selectCloudMaxWords') || document.getElementById('inputCloudMaxWords');
+    if (selectCloudMaxWords) {
+        selectCloudMaxWords.addEventListener('change', (e) => {
+            let val = parseInt(e.target.value, 10);
             if (isNaN(val) || val < 5) val = 60;
-            if (val > 300) val = 300;
-            if (AppState.cloudMaxWords !== val) {
-                AppState.cloudMaxWords = val;
-                updateWordCloud();
-            }
-        };
-        inputCloudMaxWords.addEventListener('change', handleMaxWordsChange);
-    }
-    const oldSelectCloudMaxWords = document.getElementById('selectCloudMaxWords');
-    if (oldSelectCloudMaxWords && oldSelectCloudMaxWords !== inputCloudMaxWords) {
-        oldSelectCloudMaxWords.addEventListener('change', (e) => {
-            AppState.cloudMaxWords = parseInt(e.target.value, 10) || 60;
+            AppState.cloudMaxWords = val;
             updateWordCloud();
         });
     }
