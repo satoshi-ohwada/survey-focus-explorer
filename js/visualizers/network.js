@@ -524,7 +524,8 @@ const NetworkVisualizer = {
         const nodeMap = new Map();
         const centerX = width / 2;
         const centerY = height / 2;
-        const radiusRing = Math.min(width, height) * 0.38;
+        // 外周リング半径（間隔設定に応じて微調整）
+        const radiusRing = Math.min(width, height) * (this.spacingMode === 'widest' ? 0.42 : (this.spacingMode === 'wide' ? 0.40 : 0.38));
 
         // (1) 属性ノードの生成（外周円上に均等配置）
         topAttrs.forEach((cat, idx) => {
@@ -576,18 +577,36 @@ const NetworkVisualizer = {
             const isShared = connectedCats.length >= 2;
             const bestScore = wordBestScoreMap.get(word) || {};
 
-            let sumX = 0, sumY = 0;
-            connectedCats.forEach(cat => {
-                const an = nodeMap.get(`attr_${cat}`);
+            let initX = centerX;
+            let initY = centerY;
+
+            if (isShared) {
+                // 複数属性に接続する共通語: 属性ノード群の重心とキャンバス中心の中間付近
+                let sumX = 0, sumY = 0;
+                connectedCats.forEach(cat => {
+                    const an = nodeMap.get(`attr_${cat}`);
+                    if (an) { sumX += an.x; sumY += an.y; }
+                });
+                const meanX = sumX / connectedCats.length;
+                const meanY = sumY / connectedCats.length;
+                initX = meanX * 0.6 + centerX * 0.4;
+                initY = meanY * 0.6 + centerY * 0.4;
+            } else {
+                // 単一属性に接続する固有語: 属性ノードの真上を避け、キャンバス中心に向かって内側に適度な距離で初期配置
+                const primaryCat = connectedCats[0];
+                const an = nodeMap.get(`attr_${primaryCat}`);
                 if (an) {
-                    sumX += an.x;
-                    sumY += an.y;
+                    const toCenterX = centerX - an.x;
+                    const toCenterY = centerY - an.y;
+                    const distToCenter = Math.hypot(toCenterX, toCenterY) || 1;
+                    const inwardOffset = Math.min(145, distToCenter * 0.55);
+                    initX = an.x + (toCenterX / distToCenter) * inwardOffset;
+                    initY = an.y + (toCenterY / distToCenter) * inwardOffset;
                 }
-            });
-            const initX = connectedCats.length > 0 ? (sumX / connectedCats.length) : centerX;
-            const initY = connectedCats.length > 0 ? (sumY / connectedCats.length) : centerY;
-            const jitterX = (Math.random() - 0.5) * 30;
-            const jitterY = (Math.random() - 0.5) * 30;
+            }
+
+            const jitterX = (Math.random() - 0.5) * 24;
+            const jitterY = (Math.random() - 0.5) * 24;
 
             const primaryCat = connectedCats[0];
             const catIdx = topAttrs.indexOf(primaryCat);
@@ -649,7 +668,7 @@ const NetworkVisualizer = {
         this.edges = edges;
 
         // 5. 属性ネットワーク用レイアウト物理シミュレーション
-        this.simulateAttrLayout(180);
+        this.simulateAttrLayout(220);
 
         // 6. 初回描画
         this.renderFrame();
@@ -657,64 +676,137 @@ const NetworkVisualizer = {
 
     /**
      * 属性×単語ネットワーク用物理シミュレーション
+     * 属性ノード（ピル型カプセル）と単語ノード、および単語ノード同士の間隔を十分に広げて
+     * ラベルの重なりを物理的に防止する
      */
-    simulateAttrLayout(iterations = 180) {
+    simulateAttrLayout(iterations = 220) {
         if (!this.nodes || this.nodes.length === 0) return;
         const width = this.canvas.width;
         const height = this.canvas.height;
+        const centerX = width / 2;
+        const centerY = height / 2;
+
+        const spacingFactor = this.spacingMode === 'widest' ? 1.35 : (this.spacingMode === 'wide' ? 1.18 : 1.0);
+
+        const attrNodes = this.nodes.filter(n => n.isAttrNode);
+        const wordNodes = this.nodes.filter(n => !n.isAttrNode);
 
         for (let iter = 0; iter < iterations; iter++) {
             const alpha = 1.0 - (iter / iterations);
 
-            // 1. ノード間の反発力
-            for (let i = 0; i < this.nodes.length; i++) {
-                const n1 = this.nodes[i];
-                for (let j = i + 1; j < this.nodes.length; j++) {
-                    const n2 = this.nodes[j];
-                    const dx = n2.x - n1.x;
-                    const dy = n2.y - n1.y;
-                    const distSq = dx * dx + dy * dy || 1;
-                    const dist = Math.sqrt(distSq);
+            // 1. 属性ノード（ピル型長方形）と単語ノードの衝突回避・安全反発力
+            // 単語ノードが属性ノードのピルカプセル領域および近傍に重なるのを強力に防止
+            for (const wn of wordNodes) {
+                for (const an of attrNodes) {
+                    const dx = wn.x - an.x;
+                    const dy = wn.y - an.y;
 
-                    const minDist = (n1.radius + n2.radius) * 2.2;
-                    if (dist < minDist) {
-                        const repForce = ((minDist - dist) / minDist) * 12 * alpha;
-                        const fx = (dx / dist) * repForce;
-                        const fy = (dy / dist) * repForce;
-                        if (!n1.isAttrNode) { n1.vx -= fx; n1.vy -= fy; }
-                        if (!n2.isAttrNode) { n2.vx += fx; n2.vy += fy; }
+                    // ピルの安全マージン（半幅・半高＋単語半径＋文字余白＋間隔係数）
+                    const halfW = (an.boxWidth || 100) / 2;
+                    const halfH = (an.boxHeight || 36) / 2;
+                    const safeMarginX = (halfW + (wn.radius || 14) + 26) * Math.min(1.2, spacingFactor);
+                    const safeMarginY = (halfH + (wn.radius || 14) + 22) * Math.min(1.2, spacingFactor);
+
+                    const absDx = Math.abs(dx);
+                    const absDy = Math.abs(dy);
+
+                    if (absDx < safeMarginX && absDy < safeMarginY) {
+                        const overlapX = safeMarginX - absDx;
+                        const overlapY = safeMarginY - absDy;
+
+                        // 属性ノードからキャンバス中心へ向かうベクトル
+                        const toCenterX = centerX - an.x;
+                        const toCenterY = centerY - an.y;
+                        const toCenterDist = Math.hypot(toCenterX, toCenterY) || 1;
+                        const dirCenterX = toCenterX / toCenterDist;
+                        const dirCenterY = toCenterY / toCenterDist;
+
+                        // 侵入している場合は、属性ノードのピルの外側かつキャンバス中心方向へ強力に押し出す
+                        const signX = dx >= 0 ? 1 : -1;
+                        const signY = dy >= 0 ? 1 : -1;
+
+                        const pushForce = 22 * alpha;
+                        wn.vx += signX * (overlapX / safeMarginX) * pushForce;
+                        wn.vy += signY * (overlapY / safeMarginY) * pushForce;
+
+                        // さらにキャンバス中心方向へのバイアスを加えて外周の壁に挟まれるのを防ぐ
+                        wn.vx += dirCenterX * pushForce * 0.7;
+                        wn.vy += dirCenterY * pushForce * 0.7;
                     }
                 }
             }
 
-            // 2. エッジ（バネ）引力
+            // 2. 単語ノード同士のテキスト重なり防止（横長ラベルを考慮した楕円距離反発）
+            const minDistX = 84 * spacingFactor;
+            const minDistY = 58 * spacingFactor;
+
+            for (let i = 0; i < wordNodes.length; i++) {
+                const w1 = wordNodes[i];
+                for (let j = i + 1; j < wordNodes.length; j++) {
+                    const w2 = wordNodes[j];
+                    const dx = w2.x - w1.x;
+                    const dy = w2.y - w1.y;
+
+                    // 楕円正規化距離
+                    const normDistSq = (dx * dx) / (minDistX * minDistX) + (dy * dy) / (minDistY * minDistY);
+                    if (normDistSq < 1.0 && normDistSq > 0.0001) {
+                        const normDist = Math.sqrt(normDistSq);
+                        const repForce = ((1.0 - normDist) / normDist) * 16 * alpha;
+                        const fx = (dx / (minDistX * minDistX)) * repForce * 1200;
+                        const fy = (dy / (minDistY * minDistY)) * repForce * 1200;
+
+                        w1.vx -= fx;
+                        w1.vy -= fy;
+                        w2.vx += fx;
+                        w2.vy += fy;
+                    }
+                }
+            }
+
+            // 3. エッジ引力（バネの力）
             for (const edge of this.edges) {
-                const s = edge.source;
-                const t = edge.target;
+                const s = edge.source; // 属性ノード
+                const t = edge.target; // 単語ノード
                 const dx = t.x - s.x;
                 const dy = t.y - s.y;
-                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const dist = Math.hypot(dx, dy) || 1;
 
-                const targetLen = t.isShared ? 110 : 85;
-                const springForce = (dist - targetLen) * 0.08 * alpha;
+                // 目標距離: 共通語は中央寄り(165px〜)、固有語は属性ノードの半幅+十分なクリアランス(135px〜)
+                const halfW = (s.boxWidth || 100) / 2;
+                const baseTargetLen = t.isShared ? 165 : Math.max(135, halfW + 48);
+                const targetLen = baseTargetLen * spacingFactor;
+
+                const springForce = (dist - targetLen) * 0.07 * alpha;
                 const fx = (dx / dist) * springForce;
                 const fy = (dy / dist) * springForce;
 
-                if (!s.isAttrNode) { s.vx += fx; s.vy += fy; }
-                if (!t.isAttrNode) { t.vx -= fx; t.vy -= fy; }
+                // 属性ノードは外周固定、単語ノードのみ移動
+                t.vx -= fx;
+                t.vy -= fy;
             }
 
-            // 3. 位置更新（減衰）
-            for (const n of this.nodes) {
-                if (n.isAttrNode) continue;
-                n.vx *= 0.65;
-                n.vy *= 0.65;
-                n.x += n.vx;
-                n.y += n.vy;
+            // 4. 外周飛び出し抑制の求心力（固有語が画面外や属性ノード背後に飛び出すのを抑制）
+            for (const wn of wordNodes) {
+                const dcx = centerX - wn.x;
+                const dcy = centerY - wn.y;
+                const centerDist = Math.hypot(dcx, dcy) || 1;
+                if (centerDist > Math.min(width, height) * 0.38) {
+                    const pull = 1.0 * alpha;
+                    wn.vx += (dcx / centerDist) * pull;
+                    wn.vy += (dcy / centerDist) * pull;
+                }
+            }
 
-                const pad = 30;
-                n.x = Math.max(pad, Math.min(width - pad, n.x));
-                n.y = Math.max(pad, Math.min(height - pad, n.y));
+            // 5. 速度減衰と位置更新、画面内安全クランプ
+            const pad = 36;
+            for (const wn of wordNodes) {
+                wn.vx *= 0.65;
+                wn.vy *= 0.65;
+                wn.x += wn.vx;
+                wn.y += wn.vy;
+
+                wn.x = Math.max(pad, Math.min(width - pad, wn.x));
+                wn.y = Math.max(pad, Math.min(height - pad, wn.y));
             }
         }
     },
@@ -1276,12 +1368,15 @@ const NetworkVisualizer = {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
 
-            const textY = node.y + node.radius + 6;
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 4;
+            const textY = node.y + node.radius + 5;
+            ctx.save();
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.96)';
+            ctx.lineWidth = 5.0;
             ctx.strokeText(node.label, node.x, textY);
-            ctx.fillStyle = node.isShared ? '#312E81' : (isConnectedToHover ? '#1D4ED8' : '#1E293B');
+            ctx.fillStyle = node.isShared ? '#312E81' : (isConnectedToHover ? '#1D4ED8' : '#0F172A');
             ctx.fillText(node.label, node.x, textY);
+            ctx.restore();
         });
 
         // 3. 単語ノード（第2層: 円・リング本体）
