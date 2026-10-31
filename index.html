@@ -598,29 +598,59 @@
         <section id="dashboardSection" class="dashboard-section" style="display: none;">
             <!-- ナビゲーションタブ ＆ 集中モード切り替えヘッダー -->
             <div class="dashboard-nav-header">
-                <div class="dashboard-nav-tabs">
-                    <button type="button" class="nav-tab-btn active" data-tab="summary">
-                        📑 要約サマリー
-                    </button>
-                    <button type="button" class="nav-tab-btn" data-tab="cloud">
-                        ☁️ ワードクラウド
-                    </button>
-                    <button type="button" class="nav-tab-btn" data-tab="network">
-                        🕸️ 共起ネットワーク
-                    </button>
-                    <button type="button" class="nav-tab-btn" data-tab="umap">
-                        🌌 UMAP散布図
-                    </button>
-                    <button type="button" class="nav-tab-btn" data-tab="attr">
-                        📊 属性クロス集計
-                    </button>
-                    <button type="button" class="nav-tab-btn" data-tab="opinions">
-                        💬 生の声一覧 (<span id="tabOpinionCount">0</span>)
-                    </button>
+                <div class="dashboard-nav-tabs-wrapper">
+                    <div class="dashboard-nav-guide">
+                        <span class="nav-guide-icon">🧭</span>
+                        <span class="nav-guide-text">表示する分析ビューを選択:</span>
+                    </div>
+                    <div class="dashboard-nav-tabs">
+                        <button type="button" class="nav-tab-btn active" data-tab="summary" title="抽出された意見の全体像、区分別代表意見、主要論点、特異キーワードを集約表示">
+                            <span class="nav-tab-icon">📑</span>
+                            <span class="nav-tab-content">
+                                <span class="nav-tab-title">要約サマリー</span>
+                                <span class="nav-tab-desc">代表意見 ＆ 論点集約</span>
+                            </span>
+                        </button>
+                        <button type="button" class="nav-tab-btn" data-tab="cloud" title="関連意見の中で頻出する重要単語の出現頻度・ボリューム感を視覚的に把握">
+                            <span class="nav-tab-icon">☁️</span>
+                            <span class="nav-tab-content">
+                                <span class="nav-tab-title">ワードクラウド</span>
+                                <span class="nav-tab-desc">頻出単語の全体観</span>
+                            </span>
+                        </button>
+                        <button type="button" class="nav-tab-btn" data-tab="network" title="同じ意見文の中で一緒に語られている単語の結びつきや話題クラスタを可視化">
+                            <span class="nav-tab-icon">🕸️</span>
+                            <span class="nav-tab-content">
+                                <span class="nav-tab-title">共起ネットワーク</span>
+                                <span class="nav-tab-desc">単語の結びつき・話題構造</span>
+                            </span>
+                        </button>
+                        <button type="button" class="nav-tab-btn" data-tab="umap" title="各回答文の意味的な類似度に基づいて2次元平面にプロットし、意見のまとまりや外れ値を可視化">
+                            <span class="nav-tab-icon">🌌</span>
+                            <span class="nav-tab-content">
+                                <span class="nav-tab-title">意見分布 (UMAP)</span>
+                                <span class="nav-tab-desc">文脈類似クラスタ</span>
+                            </span>
+                        </button>
+                        <button type="button" class="nav-tab-btn" data-tab="attr" title="年代・性別などの属性セグメントごとに、キーワードへの言及率や構成比を比較分析">
+                            <span class="nav-tab-icon">📊</span>
+                            <span class="nav-tab-content">
+                                <span class="nav-tab-title">属性クロス集計</span>
+                                <span class="nav-tab-desc">属性別の言及傾向</span>
+                            </span>
+                        </button>
+                        <button type="button" class="nav-tab-btn" data-tab="opinions" title="抽出条件に合致した生のアンケート回答文を全件表示し、フィルタやキーワード検索が可能">
+                            <span class="nav-tab-icon">💬</span>
+                            <span class="nav-tab-content">
+                                <span class="nav-tab-title">生の声一覧 <span id="tabOpinionCount" class="nav-tab-count-badge">0</span></span>
+                                <span class="nav-tab-desc">該当回答の全文閲覧</span>
+                            </span>
+                        </button>
+                    </div>
                 </div>
                 <div class="dashboard-nav-actions">
                     <button type="button" id="btnToggleFocusMode" class="btn btn-sm btn-focus-toggle" title="ノートパソコンなどの狭い画面で図を見やすくするために、上部の設定・入力パネルを折りたたみます">
-                        <span id="focusModeIcon">🔼</span> <span id="focusModeText">上部を折りたたむ (画面を広く使う)</span>
+                        <span id="focusModeIcon">🔼</span> <span id="focusModeText">画面を広く使う</span>
                     </button>
                 </div>
             </div>
