@@ -2384,6 +2384,52 @@ body {
     margin-top: 1px;
 }
 
+/* レポート用 キーワード＆関連語判定概要ボックス */
+.report-kw-detail-box {
+    background: #F8FAFC;
+    border: 1px solid #CBD5E1;
+    border-radius: 4px;
+    padding: 5px 8px;
+    font-size: 9px;
+}
+
+.report-kw-head-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 3px;
+}
+
+.report-kw-badge-group,
+.report-kw-rule-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.report-kw-desc-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 8px;
+    color: #475569;
+    background: #F1F5F9;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+
+.report-kw-desc-lbl {
+    font-weight: 700;
+    color: #1E293B;
+    white-space: nowrap;
+}
+
+.report-kw-desc-text {
+    color: #475569;
+}
+
 /* レポート用 関連意見集約サマリーボックス */
 .report-summary-box {
     background: #F8FAFC;
@@ -3051,8 +3097,9 @@ body {
         box-sizing: border-box !important;
     }
 
-    /* 最終ページは改ページを防止（勝手な3枚目発生を防ぐ） */
-    #reportPage2 {
+    /* 最終ページは改ページを防止（勝手な次ページ発生を防ぐ） */
+    #reportPage3,
+    .report-page:last-child {
         page-break-after: avoid !important;
         break-after: avoid !important;
     }

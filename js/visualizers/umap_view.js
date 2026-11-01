@@ -1338,6 +1338,32 @@ const UmapVisualizer = {
             ctx.fillText(displayText, tipX + 9, tipY + tipH / 2);
             ctx.restore();
         }
+
+        // 5. 左上タイトルバッジ（対象キーワード明記）
+        if (this.targetKeyword) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+            ctx.strokeStyle = '#CBD5E1';
+            ctx.lineWidth = 1;
+            const kwLabel = `🌌 意見分布（UMAP散布図） [対象: 🎯${this.targetKeyword}]`;
+            ctx.font = 'bold 12px sans-serif';
+            const badgeW = Math.max(220, ctx.measureText(kwLabel).width + 24);
+            const badgeH = 28;
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(14, 14, badgeW, badgeH, 6);
+            } else {
+                ctx.rect(14, 14, badgeW, badgeH);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#1E293B';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(kwLabel, 22, 14 + badgeH / 2);
+            ctx.restore();
+        }
     },
 
     /**

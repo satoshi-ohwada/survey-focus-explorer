@@ -232,6 +232,34 @@ const WordCloudVisualizer = {
             const done = () => {
                 if (finished) return;
                 finished = true;
+
+                // 左上タイトルバッジ（対象キーワード明記）
+                if (this.targetKeyword) {
+                    const ctx = exportCanvas.getContext('2d');
+                    ctx.save();
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+                    ctx.strokeStyle = '#CBD5E1';
+                    ctx.lineWidth = 1;
+                    const kwText = `☁️ ワードクラウド [対象: 🎯${this.targetKeyword}]`;
+                    ctx.font = 'bold 12.5px sans-serif';
+                    const titleW = Math.max(220, ctx.measureText(kwText).width + 24);
+                    const titleH = 30;
+                    ctx.beginPath();
+                    if (ctx.roundRect) {
+                        ctx.roundRect(14, 14, titleW, titleH, 6);
+                    } else {
+                        ctx.rect(14, 14, titleW, titleH);
+                    }
+                    ctx.fill();
+                    ctx.stroke();
+
+                    ctx.fillStyle = '#1E293B';
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(kwText, 22, 14 + titleH / 2);
+                    ctx.restore();
+                }
+
                 resolve(exportCanvas);
             };
 

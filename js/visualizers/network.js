@@ -1535,7 +1535,7 @@ const NetworkVisualizer = {
         ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
         ctx.strokeStyle = '#CBD5E1';
         ctx.lineWidth = 1;
-        const badgeW = 320;
+        const badgeW = 340;
         const badgeH = 54;
         ctx.beginPath();
         if (ctx.roundRect) {
@@ -1550,7 +1550,8 @@ const NetworkVisualizer = {
         ctx.font = 'bold 12.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
-        ctx.fillText(`👥 属性別 結びつきネットワーク (${this.attrColName || '属性'})`, 22, 19);
+        const kwPart = this.targetKeyword ? ` [対象: 🎯${this.targetKeyword}]` : '';
+        ctx.fillText(`👥 属性別 結びつき (${this.attrColName || '属性'})${kwPart}`, 22, 19);
 
         const metricBadge = this.attrMetric === 'distinct' ? '🎯 特徴度重視（特有語）' : '📊 頻度重視（高頻度語）';
         ctx.fillStyle = this.attrMetric === 'distinct' ? '#2563EB' : '#475569';
@@ -1674,12 +1675,119 @@ const NetworkVisualizer = {
     },
 
     /**
+     * 指定された単語選出基準（distinct: 特徴度重視 / freq: 頻度重視）で属性ネットワークを一時レンダリングして画像キャンバスを取得
+     * 現在の表示状態を壊さずに安全に復元する
+     * @param {'distinct'|'freq'} metric
+     * @param {Array<object>} matchedDocs
+     * @param {string} attrCol
+     * @param {Array<object>} targetRows
+     * @param {string} targetKeyword
+     * @param {object} [options={}]
+     * @param {number} [targetW=1200]
+     * @param {number} [targetH=900]
+     * @returns {HTMLCanvasElement|null}
+     */
+    getExportCanvasForAttrMetric(metric, matchedDocs, attrCol, targetRows, targetKeyword, options = {}, targetW = 1200, targetH = 900) {
+        if (!attrCol || !matchedDocs || matchedDocs.length === 0) return null;
+
+        const prevMode = this.networkMode;
+        const prevMetric = this.attrMetric;
+        const prevNodes = this.nodes;
+        const prevEdges = this.edges;
+        const prevScale = this.scale;
+        const prevPanX = this.panX;
+        const prevPanY = this.panY;
+        const prevTargetKw = this.targetKeyword;
+        const prevResolved = this.resolvedTargetWord;
+        const prevColName = this.attrColName;
+
+        try {
+            this.renderAttrNetwork(matchedDocs, attrCol, targetRows, targetKeyword, {
+                ...options,
+                attrMetric: metric
+            });
+            return this.getExportCanvas(targetW, targetH);
+        } finally {
+            this.networkMode = prevMode;
+            this.attrMetric = prevMetric;
+            this.nodes = prevNodes;
+            this.edges = prevEdges;
+            this.scale = prevScale;
+            this.panX = prevPanX;
+            this.panY = prevPanY;
+            this.targetKeyword = prevTargetKw;
+            this.resolvedTargetWord = prevResolved;
+            this.attrColName = prevColName;
+            if (this.ctx && this.canvas) this.renderFrame();
+        }
+    },
+
+    /**
+     * 単語共起ネットワーク（全体の話題構造）を一時レンダリングして画像キャンバスを取得
+     * 現在の表示状態を壊さずに安全に復元する
+     */
+    getExportCanvasForWordNetwork(wordList, coocCounts, targetKeyword, activeRelatedWords, options = {}, targetW = 1200, targetH = 900) {
+        if (!wordList || wordList.length === 0) return null;
+
+        const prevMode = this.networkMode;
+        const prevMetric = this.attrMetric;
+        const prevNodes = this.nodes;
+        const prevEdges = this.edges;
+        const prevScale = this.scale;
+        const prevPanX = this.panX;
+        const prevPanY = this.panY;
+        const prevTargetKw = this.targetKeyword;
+        const prevResolved = this.resolvedTargetWord;
+
+        try {
+            this.render(wordList, coocCounts, targetKeyword, activeRelatedWords, options);
+            return this.getExportCanvas(targetW, targetH);
+        } finally {
+            this.networkMode = prevMode;
+            this.attrMetric = prevMetric;
+            this.nodes = prevNodes;
+            this.edges = prevEdges;
+            this.scale = prevScale;
+            this.panX = prevPanX;
+            this.panY = prevPanY;
+            this.targetKeyword = prevTargetKw;
+            this.resolvedTargetWord = prevResolved;
+            if (this.ctx && this.canvas) this.renderFrame();
+        }
+    },
+
+    /**
      * 凡例（Legend）の描画
      * 図との重なりを防止するため、内容を最小限に凝縮し、
      * 最もノードと干渉しにくい左下隅にスリムなインラインバッジバーとして配置
      */
     drawLegend(ctx, w, h) {
         ctx.save();
+
+        // (1) 左上タイトルバッジ（対象キーワード明記）
+        if (this.targetKeyword) {
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+            ctx.strokeStyle = '#CBD5E1';
+            ctx.lineWidth = 1;
+            const kwLabel = `🌐 単語共起ネットワーク [対象: 🎯${this.targetKeyword}]`;
+            ctx.font = 'bold 12px sans-serif';
+            const badgeW = Math.max(220, ctx.measureText(kwLabel).width + 22);
+            const badgeH = 28;
+            ctx.beginPath();
+            if (ctx.roundRect) {
+                ctx.roundRect(14, 14, badgeW, badgeH, 6);
+            } else {
+                ctx.rect(14, 14, badgeW, badgeH);
+            }
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#1E293B';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(kwLabel, 22, 14 + badgeH / 2);
+        }
+
         ctx.font = '10.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
