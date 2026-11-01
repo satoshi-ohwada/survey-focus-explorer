@@ -460,6 +460,58 @@ const ReportGenerator = {
             repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType(mDocs, AppState.subcorpusStats, 3);
         }
 
+        // 12. 属性項目ごとの代表的な意見（生の声）
+        const attrRepresentativeOpinions = [];
+        if (AppState.attrCol && matchedDocs.length > 0) {
+            const docsByAttr = {};
+            matchedDocs.forEach(d => {
+                const cat = d.attribute && d.attribute.trim() !== '' ? d.attribute.trim() : '（未回答・不明）';
+                if (!docsByAttr[cat]) docsByAttr[cat] = [];
+                docsByAttr[cat].push(d);
+            });
+
+            // 言及数の多い順または言及率の高い順の上位属性を最大6カテゴリ選出
+            const sortedAttrs = (attrCrossTable.length > 0 ? attrCrossTable : attrDistFiltered).slice(0, 6);
+
+            sortedAttrs.forEach(stat => {
+                const cat = stat.category;
+                const docs = docsByAttr[cat] || [];
+                if (docs.length === 0) return;
+
+                // 代表意見の選定
+                let bestDoc = null;
+                if (typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.extractRepresentativeOpinions) {
+                    const reps = OpinionSummarizer.extractRepresentativeOpinions(docs, AppState.subcorpusStats, 1);
+                    if (reps && reps.length > 0) bestDoc = reps[0].doc;
+                }
+                if (!bestDoc) {
+                    const sorted = [...docs].sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+                    bestDoc = sorted.find(d => (d.text || '').trim().length >= 8) || sorted[0];
+                }
+
+                if (bestDoc) {
+                    let opType = bestDoc.opinionType || '';
+                    if (!opType && typeof TextPreprocessor !== 'undefined' && TextPreprocessor.classifyOpinionType) {
+                        opType = TextPreprocessor.classifyOpinionType(bestDoc.text);
+                    }
+
+                    let text = bestDoc.text ? bestDoc.text.trim() : '';
+                    if (text.length > 80) text = text.substring(0, 80) + '…';
+
+                    attrRepresentativeOpinions.push({
+                        category: cat,
+                        matchedCount: stat.matchedCount || docs.length,
+                        popCount: stat.popCount || docs.length,
+                        rate: stat.rate || '0.0',
+                        share: stat.share || '0.0',
+                        opinionType: opType,
+                        relevanceScore: bestDoc.relevanceScore || null,
+                        text: text
+                    });
+                }
+            });
+        }
+
         // 抽出条件ラベル
         const matchMode = AppState.matchMode || 'or';
         const extractUnit = AppState.extractUnit || 'doc';
@@ -495,7 +547,8 @@ const ReportGenerator = {
             clustersSummary,
             opinionTypeSummary,
             includedWords,
-            repOpinionsByType
+            repOpinionsByType,
+            attrRepresentativeOpinions
         };
     },
 
@@ -801,6 +854,57 @@ const ReportGenerator = {
             </tr>
         `).join('') : `<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding: 12px;">属性列が未選択です</td></tr>`;
 
+        // --- 11. 属性項目ごとの代表的な意見（生の声）HTML ---
+        let attrRepOpinionsHtml = '';
+        if (data.attrRepresentativeOpinions && data.attrRepresentativeOpinions.length > 0) {
+            const cardsHtml = data.attrRepresentativeOpinions.map(item => {
+                let typeBadge = '';
+                if (item.opinionType === 'issue') {
+                    typeBadge = '<span class="report-type-badge issue">🔴 困りごと</span>';
+                } else if (item.opinionType === 'request') {
+                    typeBadge = '<span class="report-type-badge request">🔵 要望</span>';
+                } else if (item.opinionType === 'positive') {
+                    typeBadge = '<span class="report-type-badge positive">🟢 肯定</span>';
+                } else {
+                    typeBadge = '<span class="report-type-badge neutral">⚪ その他</span>';
+                }
+
+                const scoreBadge = item.relevanceScore
+                    ? `<span class="report-type-rep-score">適合度 ${item.relevanceScore}%</span>`
+                    : '';
+
+                return `
+                    <div class="report-attr-rep-card">
+                        <div class="report-attr-rep-head">
+                            <div class="report-attr-rep-title-group">
+                                <span class="report-attr-rep-badge">👥 ${this.escape(item.category)}</span>
+                                <span class="report-attr-rep-stats">言及 <b>${item.matchedCount}件</b> (言及率 <b>${item.rate}%</b> / 構成比 ${item.share}%)</span>
+                            </div>
+                            <div class="report-attr-rep-meta">
+                                ${typeBadge}
+                                ${scoreBadge}
+                            </div>
+                        </div>
+                        <div class="report-attr-rep-quote">「${this.escape(item.text)}」</div>
+                    </div>
+                `;
+            }).join('');
+
+            attrRepOpinionsHtml = `
+                <div class="report-attr-rep-grid">
+                    ${cardsHtml}
+                </div>
+            `;
+        } else {
+            attrRepOpinionsHtml = `
+                <div class="report-hint-box" style="padding: 10px; text-align: center;">
+                    ${data.attrCol && data.attrCol !== '（属性列未設定）'
+                        ? '属性ごとの代表意見を抽出するのに十分な意見数がありません'
+                        : '属性列が未選択です。上部の設定パネルで年代や地域などの属性列を選択すると、属性ごとの代表意見がここに自動表示されます'}
+                </div>
+            `;
+        }
+
 
         // =========================================================================
         // 📄 ページ1: 分析前提 ＆ 要約サマリー (1/3)
@@ -1018,14 +1122,16 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- (8) クロス集計 -->
-                <div class="report-section" style="margin-bottom: 6px;">
-                    <div class="report-sec-title">📈 8. 属性別クロス集計 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
-                    <div class="report-dual-grid">
+                <!-- (8) クロス集計 ＆ 属性項目別の代表的な意見 -->
+                <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="report-sec-title">📈 8. 属性別クロス集計 ＆ 属性項目ごとの代表的な意見 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
+                    
+                    <!-- 上段: グラフ ＆ クロス集計詳細表 -->
+                    <div class="report-dual-grid" style="margin-bottom: 5px;">
                         <!-- 左: グラフ -->
                         <div class="report-card">
                             <div class="report-card-title">属性「${this.escape(data.attrCol)}」別の言及傾向グラフ</div>
-                            <div class="report-chart-box" style="height: 38mm;">
+                            <div class="report-chart-box" style="height: 36mm;">
                                 ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
                             </div>
                         </div>
@@ -1052,16 +1158,14 @@ const ReportGenerator = {
                             </div>
                         </div>
                     </div>
-                </div>
 
-                <!-- 分析所見・考察メモ欄 -->
-                <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
-                    <div class="report-sec-title">📝 分析所見・考察メモ（報告用）</div>
-                    <div class="report-memo-wrapper" style="flex: 1; min-height: 24mm;">
-                        <!-- 画面プレビュー時は入力可能 -->
-                        <textarea id="reportInputMemo" class="report-memo-input no-print" style="height: 100%; min-height: 22mm;" placeholder="ここに分析結果の要約や所見、考察、ネクストアクションなどを自由に入力できます（印刷時にそのまま反映されます）。">${this.escape(this.memoText)}</textarea>
-                        <!-- 印刷時は静的テキストとして印字 -->
-                        <div id="reportPrintMemo" class="report-memo-print print-only">${this.escape(this.memoText || '（特記事項なし）')}</div>
+                    <!-- 下段: 属性項目ごとの代表的な意見（生の声） -->
+                    <div class="report-attr-rep-wrap" style="flex: 1; display: flex; flex-direction: column; margin-top: 2px;">
+                        <div class="report-sub-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+                            <span>💬 属性項目ごとの代表的な意見（生の声）:</span>
+                            <span style="font-size: 8px; color: #64748b; font-weight: normal;">各属性カテゴリで最も適合度の高い代表的な発言を抜粋</span>
+                        </div>
+                        ${attrRepOpinionsHtml}
                     </div>
                 </div>
 

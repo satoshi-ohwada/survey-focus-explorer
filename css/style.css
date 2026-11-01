@@ -2877,6 +2877,87 @@ body {
     color: #334155;
 }
 
+/* 属性項目ごとの代表的な生の声（クロス集計用グリッドカード） */
+.report-attr-rep-wrap {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 4px;
+    padding: 5px 8px;
+}
+
+.report-attr-rep-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 4.5px;
+}
+
+.report-attr-rep-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 3px;
+    padding: 4px 6px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.report-attr-rep-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.report-attr-rep-title-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.report-attr-rep-badge {
+    background: #EFF6FF;
+    color: #1D4ED8;
+    font-weight: 700;
+    padding: 0.5px 5px;
+    border-radius: 2.5px;
+    font-size: 8px;
+    border: 1px solid #BFDBFE;
+}
+
+.report-attr-rep-stats {
+    font-size: 7.5px;
+    color: #64748B;
+}
+
+.report-attr-rep-meta {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.report-type-badge {
+    font-size: 7px;
+    padding: 0.5px 3.5px;
+    border-radius: 2px;
+    font-weight: 700;
+}
+.report-type-badge.issue { background: #FFE4E6; color: #BE123C; }
+.report-type-badge.request { background: #E0F2FE; color: #0369A1; }
+.report-type-badge.positive { background: #DCFCE7; color: #15803D; }
+.report-type-badge.neutral { background: #F1F5F9; color: #475569; }
+
+.report-attr-rep-quote {
+    font-size: 8px;
+    color: #1E293B;
+    line-height: 1.35;
+    background: #F8FAFC;
+    padding: 3px 5px;
+    border-radius: 2.5px;
+    border-left: 2.5px solid #2563EB;
+    word-break: break-all;
+}
+
 /* 主要な論点グループ（トピックサマリー）スタイル */
 .report-topics-grid {
     display: grid;
