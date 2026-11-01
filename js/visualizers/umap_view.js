@@ -1305,7 +1305,9 @@ const UmapVisualizer = {
             }
         });
 
-        // 4. ホバー時のツールチップ（画面表示時のみ）
+        ctx.restore();
+
+        // 4. ホバー時のツールチップ（画面固定スケールで描画）
         if (!isExport && this.hoverPoint) {
             const hp = this.hoverPoint;
             const groupLabel = hp.cluster < 0 ? '特異な個別意見 (特定グループ非所属)' : `トピック ${hp.cluster + 1}`;
@@ -1317,9 +1319,13 @@ const UmapVisualizer = {
             const metrics = ctx.measureText(tooltipText);
             const tipW = Math.min(380, metrics.width + 18);
             const tipH = 28;
-            const tipX = Math.min(w - tipW - 10, Math.max(10, hp.screenX - tipW / 2));
-            const tipY = hp.screenY - (hp.radius || 6) - tipH - 8;
+            const screenX = hp.screenX * scale + panX;
+            const screenY = hp.screenY * scale + panY;
+            const tipR = (hp.radius || 6) * scale;
+            const tipX = Math.min(w - tipW - 10, Math.max(10, screenX - tipW / 2));
+            const tipY = Math.max(10, screenY - tipR - tipH - 8);
 
+            ctx.save();
             ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
             ctx.beginPath();
             ctx.roundRect ? ctx.roundRect(tipX, tipY, tipW, tipH, 4) : ctx.rect(tipX, tipY, tipW, tipH);
@@ -1330,9 +1336,8 @@ const UmapVisualizer = {
             ctx.textBaseline = 'middle';
             const displayText = metrics.width > 360 ? tooltipText.substring(0, 34) + '…' : tooltipText;
             ctx.fillText(displayText, tipX + 9, tipY + tipH / 2);
+            ctx.restore();
         }
-
-        ctx.restore();
     },
 
     /**

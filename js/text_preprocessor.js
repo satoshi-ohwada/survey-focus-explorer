@@ -403,17 +403,24 @@ const TextPreprocessor = {
         let totalTokens = 0;
         const vocabSet = new Set();
         const posBreakdown = { 名詞: 0, 動詞: 0, 形容詞: 0, 副詞: 0, その他: 0 };
+        const docFreq = {};
 
         for (let i = 0; i < docCount; i++) {
             const text = String(rawRows[i][textCol] || '');
             totalChars += text.length;
             const tokens = tokensPerDoc[i] || [];
             totalTokens += tokens.length;
+            const seenInDoc = new Set();
             for (const t of tokens) {
                 vocabSet.add(t);
                 const pos = this.wordPosMap.get(t) || '名詞';
                 if (posBreakdown[pos] !== undefined) posBreakdown[pos]++;
                 else posBreakdown.その他++;
+
+                if (!seenInDoc.has(t)) {
+                    seenInDoc.add(t);
+                    docFreq[t] = (docFreq[t] || 0) + 1;
+                }
             }
         }
 
@@ -423,7 +430,8 @@ const TextPreprocessor = {
             avgCharsPerDoc: docCount > 0 ? Math.round((totalChars / docCount) * 10) / 10 : 0,
             totalTokens,
             uniqueVocabCount: vocabSet.size,
-            posBreakdown
+            posBreakdown,
+            docFreq
         };
     },
 
@@ -699,3 +707,8 @@ const TextPreprocessor = {
         return lines.join("\n");
     }
 };
+
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = TextPreprocessor;
+}
+

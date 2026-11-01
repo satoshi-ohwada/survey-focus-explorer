@@ -271,7 +271,7 @@ function setupUIEvents() {
             return;
         }
         const hasHeader = document.getElementById('checkPasteHasHeader').checked;
-        const parsed = CsvParser.parseTextContent(text, 'pasted_data.txt', hasHeader);
+        const parsed = CsvParser.parsePastedText(text, { hasHeader });
         loadParsedData(parsed);
     });
 
@@ -3158,10 +3158,12 @@ function exportMatchedOpinionsCsv() {
 
     const isSentenceUnit = AppState.extractUnit === 'sentence';
     const data = AppState.filterResult.matchedDocs.map((d, i) => {
+        const opType = (d.opinionType && typeof d.opinionType === 'object') ? d.opinionType.type : d.opinionType;
+        const opLabel = (d.opinionType && d.opinionType.label) ? d.opinionType.label : (typeLabels[opType] || 'その他');
         const row = {
             No: i + 1,
             属性: d.attribute || '（未設定）',
-            意見タイプ: typeLabels[d.opinionType] || 'その他',
+            意見タイプ: opLabel,
             適合度スコア: (d.relevanceScore !== undefined) ? `${d.relevanceScore}%` : '',
             意見テキスト: d.text
         };
@@ -3343,9 +3345,10 @@ function saveCurrentImage() {
 /**
  * トースト通知を表示
  * @param {string} message
+ * @param {number} [duration=3000]
  */
-function showToast(message) {
-    let toast = document.getElementById('appToast');
+function showToast(message, duration = 3000) {
+    let toast = document.getElementById('appToast') || document.getElementById('toastNotification');
     if (!toast) {
         toast = document.createElement('div');
         toast.id = 'appToast';
@@ -3355,11 +3358,15 @@ function showToast(message) {
     toast.textContent = message;
     toast.classList.remove('hide');
     toast.style.display = 'flex';
+    toast.style.opacity = '1';
+
     if (toast._timer) clearTimeout(toast._timer);
     toast._timer = setTimeout(() => {
         toast.classList.add('hide');
-        setTimeout(() => { toast.style.display = 'none'; }, 300);
-    }, 4000);
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 300);
+    }, duration);
 }
 
 function escapeHtml(str) {
@@ -3475,28 +3482,6 @@ function toggleFocusMode(forceState) {
 
 let pendingImportRules = null;
 
-/**
- * トースト通知の表示
- * @param {string} msg 
- */
-function showToast(msg) {
-    let toast = document.getElementById('toastNotification');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'toastNotification';
-        toast.className = 'toast-notification';
-        document.body.appendChild(toast);
-    }
-    toast.textContent = msg;
-    toast.style.display = 'block';
-    toast.style.opacity = '1';
-
-    if (toast._timer) clearTimeout(toast._timer);
-    toast._timer = setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => { toast.style.display = 'none'; }, 250);
-    }, 2800);
-}
 
 /**
  * カスタムルールのLocalStorageへの保存

@@ -1266,7 +1266,9 @@ const NetworkVisualizer = {
             }
         });
 
-        // 3. ホバーノードの詳細ツールチップ
+        ctx.restore();
+
+        // 3. ホバーノードの詳細ツールチップ（画面固定スケールで描画）
         if (!isExport && this.hoverNode) {
             const hn = this.hoverNode;
             let groupLabel = '';
@@ -1283,8 +1285,11 @@ const NetworkVisualizer = {
             const metrics = ctx.measureText(tipText);
             const tipW = metrics.width + 16;
             const tipH = 26;
-            const tipX = hn.x - tipW / 2;
-            const tipY = hn.y - hn.radius - 32;
+            const screenX = hn.x * scale + panX;
+            const screenY = hn.y * scale + panY;
+            const tipR = hn.radius * scale;
+            const tipX = Math.max(10, Math.min(w - tipW - 10, screenX - tipW / 2));
+            const tipY = Math.max(10, screenY - tipR - 32);
 
             ctx.save();
             ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
@@ -1298,11 +1303,10 @@ const NetworkVisualizer = {
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText(tipText, hn.x, tipY + tipH / 2);
+            ctx.fillText(tipText, tipX + tipW / 2, tipY + tipH / 2);
             ctx.restore();
         }
 
-        ctx.restore();
         this.drawLegend(ctx, w, h);
     },
 
@@ -1460,7 +1464,9 @@ const NetworkVisualizer = {
             ctx.fillText(fullText, node.x, node.y);
         });
 
-        // 5. ホバー時の詳細ツールチップ
+        ctx.restore();
+
+        // 5. ホバー時の詳細ツールチップ（画面固定スケールで描画）
         if (!isExport && this.hoverNode) {
             const hn = this.hoverNode;
             let tipText = '';
@@ -1487,8 +1493,13 @@ const NetworkVisualizer = {
             const metrics = ctx.measureText(tipText);
             const tipW = metrics.width + 20;
             const tipH = 26;
-            const tipX = Math.max(10, Math.min(w - tipW - 10, hn.x - tipW / 2));
-            const tipY = hn.y - (hn.isAttrNode ? (hn.boxHeight / 2 + 30) : (hn.radius + 32));
+            const screenX = hn.x * scale + panX;
+            const screenY = hn.y * scale + panY;
+            const halfBoxH = (hn.boxHeight || 28) * scale / 2;
+            const tipR = (hn.radius || 12) * scale;
+            const tipOffset = hn.isAttrNode ? (halfBoxH + 26) : (tipR + 26);
+            const tipX = Math.max(10, Math.min(w - tipW - 10, screenX - tipW / 2));
+            const tipY = Math.max(10, screenY - tipOffset);
 
             ctx.save();
             ctx.fillStyle = 'rgba(15, 23, 42, 0.94)';
@@ -1509,8 +1520,6 @@ const NetworkVisualizer = {
             ctx.fillText(tipText, tipX + tipW / 2, tipY + tipH / 2);
             ctx.restore();
         }
-
-        ctx.restore();
 
         // 6. 属性ネットワーク用ヘッダー・凡例・ガイドの描画（画面固定座標）
         this.drawAttrLegend(ctx, w, h);
