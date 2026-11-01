@@ -512,6 +512,24 @@ const ReportGenerator = {
             });
         }
 
+        // 13. 属性毎ではない全体状況データ（語彙規模・全体比特異語）
+        let totalWordTokens = 0;
+        const uniqueVocab = new Set();
+        matchedDocs.forEach(d => {
+            (d.tokens || []).forEach(t => {
+                totalWordTokens++;
+                uniqueVocab.add(t);
+            });
+        });
+        const vocabCount = uniqueVocab.size;
+
+        let oddsKeywords = [];
+        if (AppState.summaryData && AppState.summaryData.oddsRatioKeywords && AppState.summaryData.oddsRatioKeywords.length > 0) {
+            oddsKeywords = AppState.summaryData.oddsRatioKeywords.slice(0, 5);
+        } else if (typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.computeOddsRatioKeywords) {
+            oddsKeywords = OpinionSummarizer.computeOddsRatioKeywords(AppState.totalCorpusStats, AppState.subcorpusStats, 5);
+        }
+
         // 抽出条件ラベル
         const matchMode = AppState.matchMode || 'or';
         const extractUnit = AppState.extractUnit || 'doc';
@@ -540,6 +558,9 @@ const ReportGenerator = {
             attrDistAll: attrDistAll.slice(0, 8),
             attrDistFiltered: attrDistFiltered.slice(0, 8),
             attrDistMatched: attrDistMatched.slice(0, 8),
+            totalWordTokens,
+            vocabCount,
+            oddsKeywords,
             topWords,
             topCoocPairs,
             attrCrossTable: attrCrossTable.slice(0, 8),
@@ -726,8 +747,8 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 6. 頻出単語テーブル行 ---
-        const topWordsRows = data.topWords.map(w => `
+        // --- 6. 頻出単語テーブル行 (Top 8: 全体状況) ---
+        const topWordsRows = data.topWords.slice(0, 8).map(w => `
             <tr>
                 <td style="text-align: center; font-weight: 700; color: #475569;">${w.rank}</td>
                 <td style="font-weight: 600; color: #1e293b;">${this.escape(w.word)}</td>
@@ -735,6 +756,24 @@ const ReportGenerator = {
                 <td style="text-align: right; color: #2563eb; font-weight: 600;">${w.rate}%</td>
             </tr>
         `).join('');
+
+        // --- 6-2. 全体比特異キーワード（出現率オッズ比上位）HTML ---
+        let oddsKeywordsHtml = '';
+        if (data.oddsKeywords && data.oddsKeywords.length > 0) {
+            oddsKeywordsHtml = `
+                <div class="report-odds-box">
+                    <div class="report-odds-head">
+                        <span class="report-odds-title">🌟 全体データ比の特異キーワード (全体状況):</span>
+                        <span class="report-odds-sub">全体より突出して多く使われた語</span>
+                    </div>
+                    <div class="report-odds-tags">
+                        ${data.oddsKeywords.map(k => `
+                            <span class="report-odds-tag"><b>#${this.escape(k.word)}</b> (${k.oddsRatio}倍)</span>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        }
 
         // --- 7. 共起ペアテーブル行 ---
         const coocRows = data.topCoocPairs.length > 0 ? data.topCoocPairs.map(cp => `
@@ -1019,7 +1058,7 @@ const ReportGenerator = {
 
 
         // =========================================================================
-        // 📄 ページ2: テキスト構造分析（ワードクラウド ＆ 結びつきネットワーク） (2/3)
+        // 📄 ページ2: テキスト構造分析（全体状況 ＆ 属性別ネットワーク） (2/3)
         // =========================================================================
         const page2 = `
             <div class="report-page" id="reportPage2">
@@ -1027,7 +1066,7 @@ const ReportGenerator = {
                 <div class="report-header">
                     <div class="report-header-main">
                         <div class="report-title-badge">FOCUS EXPLORER REPORT (2/3)</div>
-                        <h2 class="report-title">テキスト構造分析（ワードクラウド ＆ 結びつきネットワーク）</h2>
+                        <h2 class="report-title">テキスト構造分析（全体状況 ＆ 属性別ネットワーク）</h2>
                     </div>
                     <div class="report-header-meta">
                         <div><b>対象キーワード:</b> 🎯「${this.escape(data.targetKeyword)}」</div>
@@ -1035,41 +1074,68 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- (5) ワードクラウド -->
-                <div class="report-section" style="margin-bottom: 6px;">
-                    <div class="report-sec-title">☁️ 5. 頻出重要単語（ワードクラウド ＆ 出現頻度ランキング） [対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
+                <!-- (5) 【全体状況】ワードクラウド ＆ 全体語彙構造 -->
+                <div class="report-section" style="margin-bottom: 5px;">
+                    <div class="report-sec-title">
+                        <span>🌐 5. 【全体状況】頻出重要単語（ワードクラウド ＆ 全体語彙構造） [属性毎ではない全体状況 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
+                    </div>
+                    
+                    <!-- 全体状況サマリーバナー -->
+                    <div class="report-global-summary-bar">
+                        <div class="report-global-summary-item">
+                            <span class="report-global-summary-lbl">全体分析の視点:</span>
+                            <span class="report-global-summary-val">属性（年代・性別等）に分ける前の、キーワード関連意見全体（${data.totalMatched.toLocaleString()}件）の語彙全体像</span>
+                        </div>
+                        <div class="report-global-summary-item">
+                            <span class="report-global-summary-lbl">語彙規模:</span>
+                            <span class="report-global-summary-val">総単語数 <b>${data.totalWordTokens ? data.totalWordTokens.toLocaleString() : '-'}語</b> / 異なり語彙数 <b>${data.vocabCount ? data.vocabCount.toLocaleString() : '-'}語</b></span>
+                        </div>
+                    </div>
+
                     <div class="report-dual-grid">
                         <!-- 左: ワードクラウド -->
                         <div class="report-card">
-                            <div class="report-card-title">頻出重要単語（ワードクラウド）</div>
-                            <div class="report-chart-box" style="height: 48mm;">
+                            <div class="report-card-title">
+                                <span>☁️ 意見全体の頻出語（ワードクラウド）</span>
+                                <span class="report-card-sub-tag">全体状況</span>
+                            </div>
+                            <div class="report-chart-box" style="height: 44mm;">
                                 ${images.cloudImg ? `<img src="${images.cloudImg}" class="report-chart-img" alt="ワードクラウド" />` : `<div class="report-no-chart">画像がありません</div>`}
+                            </div>
+                            <div class="report-hint-box" style="margin-top: 3px;">
+                                💡 属性毎に分解する前の、意見全体で多用された言葉のボリューム感（文字サイズ＝出現頻度）
                             </div>
                         </div>
 
-                        <!-- 右: 頻出単語表 -->
+                        <!-- 右: 頻出単語表 ＆ 全体比特異語 -->
                         <div class="report-card">
-                            <div class="report-card-title">頻出単語 Top 10（出現回数・出現率）</div>
+                            <div class="report-card-title">
+                                <span>📊 意見全体の頻出単語 Top 8 ＆ 全体比特異語</span>
+                                <span class="report-card-sub-tag">全体状況</span>
+                            </div>
                             <table class="report-table">
                                 <thead>
                                     <tr>
-                                        <th style="width: 38px; text-align: center;">順位</th>
+                                        <th style="width: 32px; text-align: center;">順位</th>
                                         <th>抽出単語</th>
-                                        <th style="width: 65px; text-align: right;">出現件数</th>
-                                        <th style="width: 65px; text-align: right;">出現率</th>
+                                        <th style="width: 58px; text-align: right;">出現件数</th>
+                                        <th style="width: 54px; text-align: right;">出現率</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     ${topWordsRows}
                                 </tbody>
                             </table>
+                            ${oddsKeywordsHtml}
                         </div>
                     </div>
                 </div>
 
-                <!-- (6) 共起ネットワーク（特徴語重視、頻度重視） -->
+                <!-- (6) 【属性ごとの状況】結びつきネットワーク（特徴語重視、頻度重視） -->
                 <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
-                    <div class="report-sec-title">🕸️ 6. 結びつき構造ネットワーク（特徴語重視 ＆ 頻度重視） [対象: 🎯「${this.escape(data.targetKeyword)}」${data.attrCol && data.attrCol !== '（属性列未設定）' ? ` / 整理属性: 👥「${this.escape(data.attrCol)}」` : ''}]</div>
+                    <div class="report-sec-title">
+                        <span>👥 6. 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
+                    </div>
                     ${networkSectionHtml}
                 </div>
 
@@ -1122,9 +1188,9 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- (8) クロス集計 ＆ 属性項目別の代表的な意見 -->
+                <!-- (8) 【属性ごとの状況】クロス集計 ＆ 属性項目ごとの代表的な意見 -->
                 <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
-                    <div class="report-sec-title">📈 8. 属性別クロス集計 ＆ 属性項目ごとの代表的な意見 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
+                    <div class="report-sec-title">📈 8. 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表意見 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
                     
                     <!-- 上段: グラフ ＆ クロス集計詳細表 -->
                     <div class="report-dual-grid" style="margin-bottom: 5px;">

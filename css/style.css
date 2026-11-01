@@ -2430,6 +2430,88 @@ body {
     color: #475569;
 }
 
+/* レポート用 全体状況サマリーバナー（属性毎ではない全体観） */
+.report-global-summary-bar {
+    background: #EFF6FF;
+    border: 1px solid #BFDBFE;
+    border-radius: 3px;
+    padding: 3px 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 8.5px;
+    margin-bottom: 4px;
+}
+
+.report-global-summary-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.report-global-summary-lbl {
+    font-weight: 700;
+    color: #1D4ED8;
+    white-space: nowrap;
+}
+
+.report-global-summary-val {
+    color: #1E293B;
+}
+
+.report-card-sub-tag {
+    background: #EFF6FF;
+    color: #1D4ED8;
+    font-size: 7.5px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 2px;
+    border: 1px solid #BFDBFE;
+    margin-left: 6px;
+}
+
+/* 全体比の特異キーワード（オッズ比）ボックス */
+.report-odds-box {
+    margin-top: 4px;
+    padding: 3px 6px;
+    background: #FFFBEB;
+    border: 1px solid #FDE68A;
+    border-radius: 3px;
+}
+
+.report-odds-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2px;
+}
+
+.report-odds-title {
+    font-weight: 700;
+    color: #92400E;
+    font-size: 8px;
+}
+
+.report-odds-sub {
+    font-size: 7px;
+    color: #B45309;
+}
+
+.report-odds-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3.5px;
+}
+
+.report-odds-tag {
+    background: #FEF3C7;
+    color: #78350F;
+    font-size: 7.5px;
+    padding: 1px 4px;
+    border-radius: 2px;
+    border: 1px solid #FCD34D;
+}
+
 /* レポート用 関連意見集約サマリーボックス */
 .report-summary-box {
     background: #F8FAFC;
