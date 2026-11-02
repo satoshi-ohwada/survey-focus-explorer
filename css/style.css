@@ -2420,6 +2420,45 @@ body {
     border-radius: 3px;
 }
 
+.report-filter-summary-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 8.5px;
+    background: #F1F5F9;
+    border: 1px solid #E2E8F0;
+    border-radius: 3px;
+    padding: 2.5px 7px;
+    margin-bottom: 2px;
+}
+
+.report-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.report-substat-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    font-size: 8px;
+    color: #475569;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 3px;
+    padding: 2px 7px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.report-substat-item b {
+    color: #1E293B;
+}
+
 .report-kw-desc-lbl {
     font-weight: 700;
     color: #1E293B;
@@ -2990,6 +3029,8 @@ body {
     border-radius: 3px;
     padding: 2px 6px;
     margin-top: 2px;
+    margin-bottom: 2px;
+    flex-shrink: 0;
 }
 
 .report-topic-inline-lbl {
@@ -3264,6 +3305,7 @@ body {
     border-top: 1px solid #E2E8F0;
     padding-top: 3px;
     margin-top: auto;
+    flex-shrink: 0;
 }
 
 .print-only {

@@ -600,6 +600,44 @@ const ReportGenerator = {
         const matchModeLabel = matchMode === 'and' ? 'AND条件 (キーワード必須＋関連語)' : 'OR条件 (キーワード または 関連語)';
         const extractUnitLabel = extractUnit === 'sentence' ? '文単位抽出' : '回答全体抽出';
 
+        // 14. 絞り込み条件（列フィルター・前処理除外・品詞設定）
+        const fOpt = AppState.filterOptions || {};
+        const posItems = [];
+        if (fOpt.posNoun) posItems.push('名詞');
+        if (fOpt.posVerb) posItems.push('動詞');
+        if (fOpt.posAdj) posItems.push('形容詞');
+        if (fOpt.posAdv) posItems.push('副詞');
+        if (fOpt.posIntj) posItems.push('感動詞');
+        const posText = posItems.length > 0 ? posItems.join('・') : '全品詞';
+        const posDetailText = `${posText}${fOpt.mergeCompoundNouns ? '（複合名詞結合: 有効）' : ''}`;
+
+        const activeFilters = Object.entries(AppState.columnFilters || {}).filter(([_, v]) => {
+            if (Array.isArray(v)) return v.length > 0;
+            return v !== undefined && v !== null && v !== '';
+        });
+        const columnFilterText = activeFilters.length > 0
+            ? activeFilters.map(([c, v]) => `${c}＝${Array.isArray(v) ? (v.length <= 2 ? v.join(', ') : `${v.slice(0, 2).join(', ')} ほか${v.length}件`) : v}`).join('; ')
+            : 'なし（全行対象）';
+
+        const excludedCount = totalRaw - totalFiltered;
+        const preprocessText = excludedCount > 0
+            ? `空欄・定型無効回答など ${excludedCount.toLocaleString()}件除外（有効率 ${((totalFiltered / Math.max(1, totalRaw)) * 100).toFixed(1)}%）`
+            : '全件有効（空欄・無効等の除外なし）';
+
+        // 15. 母集団の規模統計（投入データ全体）
+        const totalStats = AppState.totalCorpusStats || {};
+        const totalCharsAll = totalStats.totalChars || rawRows.reduce((sum, r) => sum + String(r[AppState.textCol] || '').length, 0);
+        const avgCharsAll = totalRaw > 0 ? (totalCharsAll / totalRaw).toFixed(1) : '0.0';
+        const totalTokensAll = totalStats.totalTokens || 0;
+        const uniqueVocabAll = totalStats.uniqueVocabCount || 0;
+
+        // 16. 絞り込んだあとの姿の規模統計（該当意見群）
+        const cov = AppState.coverageStats || null;
+        const matchedChars = cov ? cov.matched.totalChars : matchedDocs.reduce((sum, d) => sum + (d.text || '').length, 0);
+        const avgCharsMatched = totalMatched > 0 ? (matchedChars / totalMatched).toFixed(1) : '0.0';
+        const matchedTokens = cov ? cov.matched.totalTokens : totalWordTokens;
+        const tokenCoverageRate = (cov && cov.coverage) ? cov.coverage.tokenRate.toFixed(1) : (totalTokensAll > 0 ? ((matchedTokens / totalTokensAll) * 100).toFixed(1) : '0.0');
+
         const now = new Date();
         const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -618,6 +656,18 @@ const ReportGenerator = {
             totalFiltered,
             totalMatched,
             coverageRate,
+            posText,
+            posDetailText,
+            columnFilterText,
+            preprocessText,
+            totalCharsAll,
+            avgCharsAll,
+            totalTokensAll,
+            uniqueVocabAll,
+            matchedChars,
+            avgCharsMatched,
+            matchedTokens,
+            tokenCoverageRate,
             attrDist: attrDistFiltered.slice(0, 8),
             attrDistAll: attrDistAll.slice(0, 8),
             attrDistFiltered: attrDistFiltered.slice(0, 8),
@@ -716,7 +766,7 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 5. 意見タイプ別 代表的な生の声（3カラム・各最大5選） ---
+        // --- 5. 意見タイプ別 代表的な生の声（3カラム・各最大3選） ---
         let typeRepHtml = '';
         if (data.repOpinionsByType) {
             const rbt = data.repOpinionsByType;
@@ -728,7 +778,7 @@ const ReportGenerator = {
                     label: '困りごと・課題',
                     icon: '🔴',
                     color: '#e11d48',
-                    list: (rbt.issue || []).slice(0, 5),
+                    list: (rbt.issue || []).slice(0, 3),
                     total: ots.issueCount || 0
                 },
                 {
@@ -736,7 +786,7 @@ const ReportGenerator = {
                     label: '要望・改善提案',
                     icon: '🔵',
                     color: '#0284c7',
-                    list: (rbt.request || []).slice(0, 5),
+                    list: (rbt.request || []).slice(0, 3),
                     total: ots.requestCount || 0
                 },
                 {
@@ -744,7 +794,7 @@ const ReportGenerator = {
                     label: '肯定・満足',
                     icon: '🟢',
                     color: '#10b981',
-                    list: (rbt.positive || []).slice(0, 5),
+                    list: (rbt.positive || []).slice(0, 3),
                     total: ots.positiveCount || 0
                 }
             ];
@@ -756,17 +806,17 @@ const ReportGenerator = {
                 } else {
                     itemsHtml = c.list.map(rep => {
                         let text = rep.doc.text ? rep.doc.text.trim() : '';
-                        if (text.length > 55) text = text.substring(0, 55) + '…';
+                        if (text.length > 46) text = text.substring(0, 46) + '…';
                         const attrText = rep.doc.attribute ? `<span class="report-type-rep-attr">[${this.escape(rep.doc.attribute)}]</span>` : '';
                         const scoreBadge = rep.doc.relevanceScore ? `<span class="report-type-rep-score">適合度 ${rep.doc.relevanceScore}%</span>` : '';
                         return `
-                            <div class="report-type-rep-item" style="padding: 2px 4.5px; margin-bottom: 2px;">
+                            <div class="report-type-rep-item" style="padding: 2px 4px; margin-bottom: 2px;">
                                 <div class="report-type-rep-meta">
                                     <span class="report-type-rep-rank ${c.type}">#${rep.rank}</span>
                                     ${attrText}
                                     ${scoreBadge}
                                 </div>
-                                <div class="report-type-rep-quote" style="font-size: 7.2px; line-height: 1.3;">「${this.escape(text)}」</div>
+                                <div class="report-type-rep-quote" style="font-size: 7.2px; line-height: 1.25;">「${this.escape(text)}」</div>
                             </div>
                         `;
                     }).join('');
@@ -789,7 +839,7 @@ const ReportGenerator = {
             let topicsInlineHtml = '';
             if (data.topicSummaries && data.topicSummaries.length > 0) {
                 topicsInlineHtml = `
-                    <div class="report-topic-inline-row" style="margin-top: 5px;">
+                    <div class="report-topic-inline-row" style="margin-top: 3px; padding: 2px 5px;">
                         <span class="report-topic-inline-lbl">🏷️ 主要論点トピック:</span>
                         ${data.topicSummaries.slice(0, 3).map(t => `
                             <span class="report-topic-inline-tag"><b>${this.escape(t.name.replace(/^論点 \d+:\s*/, ''))}</b> (${t.docCount}件)</span>
@@ -799,7 +849,7 @@ const ReportGenerator = {
             }
 
             typeRepHtml = `
-                <div class="report-type-rep-grid" style="height: 100%;">
+                <div class="report-type-rep-grid" style="margin-bottom: 2px;">
                     ${colsHtml}
                 </div>
                 ${topicsInlineHtml}
@@ -1009,10 +1059,10 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- (1) 投入したデータ全体の概要 -->
+                <!-- (1) 母集団の姿（投入データ全体の規模 ＆ 構成） -->
                 <div class="report-section">
-                    <div class="report-sec-title">📁 1. 投入したデータ全体の概要</div>
-                    <div class="report-condition-bar">
+                    <div class="report-sec-title">📁 1. 母集団の姿（投入データ全体の規模 ＆ 構成）</div>
+                    <div class="report-condition-bar" style="margin-bottom: 2px;">
                         <div class="report-condition-item">
                             <span class="report-condition-lbl">対象ファイル:</span>
                             <span class="report-condition-val">${this.escape(data.fileName)}</span>
@@ -1022,35 +1072,55 @@ const ReportGenerator = {
                             <span class="report-condition-val" style="color: #2563eb;">${data.totalRaw.toLocaleString()} 件</span>
                         </div>
                         <div class="report-condition-item">
-                            <span class="report-condition-lbl">分析列:</span>
-                            <span class="report-condition-val">📄 ${this.escape(data.textCol)}</span>
-                            ${data.attrCol && data.attrCol !== '（属性列未設定）' ? `<span style="color: #64748b; font-size: 9.5px; margin-left: 4px;">/ 👥 属性列: <b>${this.escape(data.attrCol)}</b></span>` : ''}
+                            <span class="report-condition-lbl">対象列:</span>
+                            <span class="report-condition-val">📄 本文: ${this.escape(data.textCol)}</span>
+                            ${data.attrCol && data.attrCol !== '（属性列未設定）' ? `<span style="color: #64748b; font-size: 9.5px; margin-left: 4px;">/ 👥 属性: <b>${this.escape(data.attrCol)}</b></span>` : ''}
                         </div>
+                    </div>
+                    <!-- 母集団の文章・語彙規模バナー -->
+                    <div class="report-substat-row">
+                        <span class="report-substat-item"><b>全体文章規模:</b> 総文字数 <b>${data.totalCharsAll.toLocaleString()}</b> 字 (平均 <b>${data.avgCharsAll}</b> 字/件)</span>
+                        ${data.totalTokensAll > 0 ? `<span class="report-substat-item">/ 総形態素数: <b>${data.totalTokensAll.toLocaleString()}</b> 語</span>` : ''}
+                        ${data.uniqueVocabAll > 0 ? `<span class="report-substat-item">/ 語彙規模: <b>${data.uniqueVocabAll.toLocaleString()}</b> 語</span>` : ''}
                     </div>
                     ${attrSummaryAllHtml}
                 </div>
 
-                <!-- (2) 指定したキーワードとその関連語と判断した語の概要 -->
-                <div class="report-section" style="margin-top: 5px;">
-                    <div class="report-sec-title">🎯 2. 指定キーワード ＆ 判定された関連語の概要</div>
+                <!-- (2) 対象の絞り込み（フィルター・品詞・キーワード抽出条件） -->
+                <div class="report-section" style="margin-top: 3.5px;">
+                    <div class="report-sec-title">🔍 2. 対象の絞り込み（フィルター・品詞・キーワード条件）</div>
                     <div class="report-kw-detail-box">
-                        <div class="report-kw-head-row">
+                        <!-- 絞り込み条件（列フィルター、ノイズ除外、解析品詞） -->
+                        <div class="report-filter-summary-row">
+                            <div class="report-filter-item">
+                                <span class="report-condition-lbl">列フィルター:</span>
+                                <span class="report-condition-val" style="color: #0369a1;">${this.escape(data.columnFilterText)}</span>
+                            </div>
+                            <div class="report-filter-item">
+                                <span class="report-condition-lbl">前処理・除外:</span>
+                                <span class="report-condition-val">${this.escape(data.preprocessText)}</span>
+                            </div>
+                            <div class="report-filter-item">
+                                <span class="report-condition-lbl">解析対象品詞:</span>
+                                <span class="report-condition-val" style="color: #15803d;">🔤 ${this.escape(data.posDetailText)}</span>
+                            </div>
+                        </div>
+
+                        <!-- 注目キーワード ＆ 抽出基準 -->
+                        <div class="report-kw-head-row" style="margin-top: 2.5px; padding-top: 2.5px; border-top: 1px dashed #cbd5e1;">
                             <div class="report-kw-badge-group">
-                                <span class="report-condition-lbl">指定キーワード:</span>
+                                <span class="report-condition-lbl">注目キーワード:</span>
                                 <span class="report-condition-val-accent">🎯 ${this.escape(data.targetKeyword)}</span>
-                                ${data.resolvedWord && data.resolvedWord !== data.targetKeyword ? `<span style="font-size: 9.5px; color: #64748b; margin-left: 4px;">(代表形: <b>${this.escape(data.resolvedWord)}</b>)</span>` : ''}
+                                ${data.resolvedWord && data.resolvedWord !== data.targetKeyword ? `<span style="font-size: 9px; color: #64748b; margin-left: 3px;">(代表形: <b>${this.escape(data.resolvedWord)}</b>)</span>` : ''}
                             </div>
                             <div class="report-kw-rule-group">
                                 <span class="report-condition-lbl">抽出条件:</span>
                                 <span class="report-condition-val">${data.matchMode === 'and' ? 'AND条件 (キーワード必須＋関連語)' : 'OR条件 (キーワード または 関連語)'} / ${data.extractUnit === 'sentence' ? '文単位抽出' : '回答全体抽出'}</span>
                             </div>
                         </div>
-                        <div class="report-kw-desc-row">
-                            <span class="report-kw-desc-lbl">💡 関連語の判定基準:</span>
-                            <span class="report-kw-desc-text">注目キーワードとの共起頻度および統計的関連度（Jaccard係数）に基づき、同じ文脈で密接に語られている語を自動選定</span>
-                        </div>
-                        <div class="report-included-words-row" style="margin-top: 3px; padding-top: 3px; border-top: 1px dashed #cbd5e1;">
-                            <span class="report-included-title">採用された関連語一覧:</span>
+
+                        <div class="report-included-words-row" style="margin-top: 2px; padding-top: 2px; border-top: 1px dashed #e2e8f0;">
+                            <span class="report-included-title">💡 採用された関連語一覧:</span>
                             <div class="report-included-tags">
                                 ${relatedTagsHtml}
                             </div>
@@ -1058,9 +1128,9 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- (3) 分析対象の概要 -->
-                <div class="report-section" style="margin-top: 5px;">
-                    <div class="report-sec-title">📌 3. 分析対象（該当意見群）の概要</div>
+                <!-- (3) 絞り込んだあとの姿（分析対象意見群の規模 ＆ 構成） -->
+                <div class="report-section" style="margin-top: 3.5px;">
+                    <div class="report-sec-title">📌 3. 絞り込んだあとの姿（分析対象意見群の規模 ＆ 構成）</div>
                     <div class="report-kpi-grid">
                         <div class="report-kpi-card">
                             <div class="report-kpi-lbl">全体回答数</div>
@@ -1068,14 +1138,14 @@ const ReportGenerator = {
                             <div class="report-kpi-sub">取り込みデータ全件</div>
                         </div>
                         <div class="report-kpi-card">
-                            <div class="report-kpi-lbl">分析対象件数</div>
+                            <div class="report-kpi-lbl">絞込後母集団</div>
                             <div class="report-kpi-val">${data.totalFiltered.toLocaleString()} <span class="report-kpi-unit">件</span></div>
-                            <div class="report-kpi-sub">ノイズ除外・絞込後</div>
+                            <div class="report-kpi-sub">フィルター・除外後</div>
                         </div>
                         <div class="report-kpi-card accent">
                             <div class="report-kpi-lbl">キーワード該当意見数</div>
                             <div class="report-kpi-val accent">${data.totalMatched.toLocaleString()} <span class="report-kpi-unit">件</span></div>
-                            <div class="report-kpi-sub">関連意見・発言の総数</div>
+                            <div class="report-kpi-sub">抽出された分析対象</div>
                         </div>
                         <div class="report-kpi-card">
                             <div class="report-kpi-lbl">母集団カバー率</div>
@@ -1083,28 +1153,30 @@ const ReportGenerator = {
                             <div class="report-kpi-sub">言及者の全体比率</div>
                         </div>
                     </div>
+                    <!-- 該当意見群の文章・語彙規模バナー -->
+                    <div class="report-substat-row" style="margin-top: 2px;">
+                        <span class="report-substat-item"><b>該当文章規模:</b> 総文字数 <b>${data.matchedChars.toLocaleString()}</b> 字 (平均 <b>${data.avgCharsMatched}</b> 字/件)</span>
+                        <span class="report-substat-item">/ 該当形態素数: <b>${data.matchedTokens.toLocaleString()}</b> 語 (単語カバー率 <b>${data.tokenCoverageRate}%</b>)</span>
+                        <span class="report-substat-item">/ 語彙規模: <b>${data.vocabCount.toLocaleString()}</b> 語</span>
+                    </div>
                     ${attrSummaryMatchedHtml}
                 </div>
 
                 <!-- (4) 要約サマリー（集約概要と代表意見） -->
-                <div class="report-section" style="margin-top: 5px; flex: 1; display: flex; flex-direction: column;">
+                <div class="report-section" style="margin-top: 3.5px; flex: 1; display: flex; flex-direction: column;">
                     <div class="report-sec-title">💡 4. 要約サマリー（集約概要 ＆ 代表意見） [対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
                     
-                    <!-- 意見タイプ自動3分類基準の解説ボックス（常時表示） -->
-                    <div class="report-type-criteria-box">
-                        <div class="report-type-criteria-head">
-                            <span class="report-type-criteria-title">💡 意見タイプの3分類基準:</span>
-                            <span class="report-type-criteria-desc">文章全体の文脈構造および感情極性語彙パターンに基づき、発言者の意図を以下の3つに自動判定・分類しています。</span>
-                        </div>
-                        <div class="report-type-criteria-tags">
-                            <span class="report-criteria-item issue">🔴 <b>困りごと・課題</b>: 不満・使いづらさ・問題点・不具合の指摘など、改善が急務とされる課題発言</span>
-                            <span class="report-criteria-item request">🔵 <b>要望・改善提案</b>: 機能追加やサービス拡充、「〜してほしい」「〜を希望」などの前向きなリクエスト</span>
-                            <span class="report-criteria-item positive">🟢 <b>肯定・満足</b>: 満足感・感謝・「使いやすい」「親切」「助かった」などのポジティブな高評価</span>
+                    <!-- 意見タイプ自動3分類基準の解説ボックス（コンパクト化） -->
+                    <div class="report-type-criteria-box" style="padding: 2.5px 6px; margin-bottom: 2.5px;">
+                        <div class="report-type-criteria-tags" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                            <span class="report-criteria-item issue" style="font-size: 7.5px;">🔴 <b>困りごと・課題</b>: 不満・使いづらさ・不具合等の課題</span>
+                            <span class="report-criteria-item request" style="font-size: 7.5px;">🔵 <b>要望・改善提案</b>: 機能追加や「〜してほしい」等の希望</span>
+                            <span class="report-criteria-item positive" style="font-size: 7.5px;">🟢 <b>肯定・満足</b>: 満足感・「使いやすい」等のポジティブ評価</span>
                         </div>
                     </div>
 
                     ${summaryTypeBarHtml}
-                    <div style="flex: 1; margin-top: 4px;">
+                    <div style="flex: 1; margin-top: 2.5px;">
                         ${typeRepHtml}
                     </div>
                 </div>
