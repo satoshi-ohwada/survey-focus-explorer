@@ -524,14 +524,15 @@ const NetworkVisualizer = {
         const nodeMap = new Map();
         const centerX = width / 2;
         const centerY = height / 2;
-        // 外周リング半径（間隔設定に応じて微調整）
-        const radiusRing = Math.min(width, height) * (this.spacingMode === 'widest' ? 0.44 : (this.spacingMode === 'wide' ? 0.41 : 0.39));
+        // 外周リング半径（横長4:3画面に合わせて楕円リングで全空間を最適活用）
+        const radiusRingX = width * (this.spacingMode === 'widest' ? 0.44 : (this.spacingMode === 'wide' ? 0.42 : 0.40));
+        const radiusRingY = height * (this.spacingMode === 'widest' ? 0.43 : (this.spacingMode === 'wide' ? 0.41 : 0.39));
 
-        // (1) 属性ノードの生成（外周円上に均等配置）
+        // (1) 属性ノードの生成（外周楕円リング上に均等配置）
         topAttrs.forEach((cat, idx) => {
             const angle = (idx / topAttrs.length) * (Math.PI * 2) - Math.PI / 2;
-            const px = centerX + radiusRing * Math.cos(angle);
-            const py = centerY + radiusRing * Math.sin(angle);
+            const px = centerX + radiusRingX * Math.cos(angle);
+            const py = centerY + radiusRingY * Math.sin(angle);
             const colorObj = this.ATTR_PALETTE[idx % this.ATTR_PALETTE.length];
 
             // 属性名称の長さに応じた動的ピル幅の計算（見切れを防止し最大240pxまで柔軟に拡大）
@@ -552,6 +553,7 @@ const NetworkVisualizer = {
                 attrCategory: cat,
                 isAttrNode: true,
                 docCount: docsByAttr[cat].length,
+                angle: angle,
                 x: px,
                 y: py,
                 vx: 0,
@@ -571,72 +573,130 @@ const NetworkVisualizer = {
             nodeMap.set(attrNode.id, attrNode);
         });
 
-        // (2) 単語ノードの生成
+        // (2) 単語の分類（単一属性の固有語 vs 複数属性の共通語）
+        const spacingFactor = this.spacingMode === 'widest' ? 1.25 : (this.spacingMode === 'wide' ? 1.12 : 1.0);
+        const uniqueWordsByAttr = new Map();
+        topAttrs.forEach(cat => uniqueWordsByAttr.set(cat, []));
+        const sharedWords = [];
+
         allCandidateWords.forEach(word => {
             const connectedCats = Array.from(wordGlobalAttrCount.get(word) || []);
-            const isShared = connectedCats.length >= 2;
-            const bestScore = wordBestScoreMap.get(word) || {};
-
-            let initX = centerX;
-            let initY = centerY;
-
-            if (isShared) {
-                // 複数属性に接続する共通語: 属性ノード群の重心とキャンバス中心の中間付近
-                let sumX = 0, sumY = 0;
-                connectedCats.forEach(cat => {
-                    const an = nodeMap.get(`attr_${cat}`);
-                    if (an) { sumX += an.x; sumY += an.y; }
-                });
-                const meanX = sumX / connectedCats.length;
-                const meanY = sumY / connectedCats.length;
-                initX = meanX * 0.6 + centerX * 0.4;
-                initY = meanY * 0.6 + centerY * 0.4;
+            if (connectedCats.length >= 2) {
+                sharedWords.push(word);
             } else {
-                // 単一属性に接続する固有語: 属性ノードのピルバッジの真上・近傍を完全に避け、中心方向へ十分な距離で初期配置
                 const primaryCat = connectedCats[0];
-                const an = nodeMap.get(`attr_${primaryCat}`);
-                if (an) {
-                    const toCenterX = centerX - an.x;
-                    const toCenterY = centerY - an.y;
-                    const distToCenter = Math.hypot(toCenterX, toCenterY) || 1;
-                    const halfW = ((an.boxWidth || 100) * 1.5) / 2;
-                    // ピルの縁から内側に最低 85px 離れた位置を確保
-                    const minOffset = halfW + 85;
-                    const inwardOffset = Math.min(distToCenter * 0.70, Math.max(minOffset, distToCenter * 0.50));
-                    initX = an.x + (toCenterX / distToCenter) * inwardOffset;
-                    initY = an.y + (toCenterY / distToCenter) * inwardOffset;
+                if (uniqueWordsByAttr.has(primaryCat)) {
+                    uniqueWordsByAttr.get(primaryCat).push(word);
                 }
             }
+        });
 
-            const jitterX = (Math.random() - 0.5) * 24;
-            const jitterY = (Math.random() - 0.5) * 24;
+        // (3) 単語ノードの生成とセクター初期配置
+        // [A] 固有語: 親属性ノードの内側セクター（足元）に花びら状（扇形千鳥配置）に整列
+        topAttrs.forEach(cat => {
+            const an = nodeMap.get(`attr_${cat}`);
+            const uWords = uniqueWordsByAttr.get(cat) || [];
+            const count = uWords.length;
+            if (count === 0) return;
 
+            const toCenterX = centerX - an.x;
+            const toCenterY = centerY - an.y;
+            const distToCenter = Math.hypot(toCenterX, toCenterY) || 1;
+            const dirX = toCenterX / distToCenter;
+            const dirY = toCenterY / distToCenter;
+            const tanX = -dirY;
+            const tanY = dirX;
+
+            const halfW = (an.boxWidth || 100) / 2;
+            // 属性ピルバッジの縁から内側に適度かつ十分なクリアランス（60px〜105px）
+            const baseInward = halfW * 0.38 + 65 * spacingFactor;
+
+            uWords.forEach((word, idx) => {
+                const row = idx % 2; // 2列千鳥配置で縦横の広がりをバランスよく分散
+                const col = Math.floor(idx / 2);
+                const colCount = Math.ceil(count / 2);
+                const offsetCol = (col - (colCount - 1) / 2);
+
+                const spreadTan = offsetCol * (46 * spacingFactor);
+                const spreadRad = baseInward + row * (44 * spacingFactor);
+
+                const posX = an.x + dirX * spreadRad + tanX * spreadTan;
+                const posY = an.y + dirY * spreadRad + tanY * spreadTan;
+
+                const bestScore = wordBestScoreMap.get(word) || {};
+                const catIdx = topAttrs.indexOf(cat);
+                const primaryColor = catIdx >= 0 ? this.ATTR_PALETTE[catIdx % this.ATTR_PALETTE.length].fill : '#2563EB';
+
+                const wordNode = {
+                    id: word,
+                    label: word,
+                    isAttrNode: false,
+                    isShared: false,
+                    connectedCats: [cat],
+                    primaryCat: cat,
+                    scoreInfo: bestScore,
+                    count: bestScore.count || 1,
+                    zScore: bestScore.zScore || 0,
+                    homeX: posX,
+                    homeY: posY,
+                    x: posX,
+                    y: posY,
+                    vx: 0,
+                    vy: 0,
+                    fx: null,
+                    fy: null,
+                    radius: 14,
+                    color: primaryColor,
+                    strokeColor: '#FFFFFF',
+                    textColor: '#1E293B'
+                };
+                nodes.push(wordNode);
+                nodeMap.set(wordNode.id, wordNode);
+            });
+        });
+
+        // [B] 共通語: 接続属性の重心とキャンバス中心の間にゆったり配置
+        sharedWords.forEach((word, idx) => {
+            const connectedCats = Array.from(wordGlobalAttrCount.get(word) || []);
+            let sumX = 0, sumY = 0;
+            connectedCats.forEach(c => {
+                const an = nodeMap.get(`attr_${c}`);
+                if (an) { sumX += an.x; sumY += an.y; }
+            });
+            const meanX = sumX / connectedCats.length;
+            const meanY = sumY / connectedCats.length;
+
+            const isSuperShared = connectedCats.length >= 3;
+            const centerWeight = isSuperShared ? 0.75 : 0.45;
+            const posX = meanX * (1 - centerWeight) + centerX * centerWeight + (idx % 2 === 0 ? 16 : -16);
+            const posY = meanY * (1 - centerWeight) + centerY * centerWeight + (idx % 3 === 0 ? 16 : -16);
+
+            const bestScore = wordBestScoreMap.get(word) || {};
             const primaryCat = connectedCats[0];
-            const catIdx = topAttrs.indexOf(primaryCat);
-            const primaryColor = catIdx >= 0 ? this.ATTR_PALETTE[catIdx % this.ATTR_PALETTE.length].fill : '#2563EB';
 
             const wordNode = {
                 id: word,
                 label: word,
                 isAttrNode: false,
-                isShared: isShared,
+                isShared: true,
                 connectedCats: connectedCats,
                 primaryCat: primaryCat,
                 scoreInfo: bestScore,
                 count: bestScore.count || 1,
                 zScore: bestScore.zScore || 0,
-                x: initX + jitterX,
-                y: initY + jitterY,
+                homeX: posX,
+                homeY: posY,
+                x: posX,
+                y: posY,
                 vx: 0,
                 vy: 0,
                 fx: null,
                 fy: null,
-                radius: isShared ? 18 : 14,
-                color: isShared ? '#4F46E5' : primaryColor,
+                radius: 18,
+                color: '#4F46E5',
                 strokeColor: '#FFFFFF',
-                textColor: isShared ? '#312E81' : '#1E293B'
+                textColor: '#312E81'
             };
-
             nodes.push(wordNode);
             nodeMap.set(wordNode.id, wordNode);
         });
@@ -689,7 +749,7 @@ const NetworkVisualizer = {
         const centerX = width / 2;
         const centerY = height / 2;
 
-        const spacingFactor = this.spacingMode === 'widest' ? 1.35 : (this.spacingMode === 'wide' ? 1.18 : 1.0);
+        const spacingFactor = this.spacingMode === 'widest' ? 1.25 : (this.spacingMode === 'wide' ? 1.12 : 1.0);
 
         const attrNodes = this.nodes.filter(n => n.isAttrNode);
         const wordNodes = this.nodes.filter(n => !n.isAttrNode);
@@ -697,49 +757,26 @@ const NetworkVisualizer = {
         for (let iter = 0; iter < iterations; iter++) {
             const alpha = 1.0 - (iter / iterations);
 
-            // 1. 属性ノード（ピル型長方形）と単語ノードの衝突回避・安全反発力
-            // 単語ノードが属性ノードのピルカプセル領域および近傍に重なるのを強力に防止
+            // 1. ホームポジション（扇形セクター）保持引力
+            // 固有語が親属性のセクター外（特に中央や他の属性）へ流出・密集するのを強力に防止
             for (const wn of wordNodes) {
-                for (const an of attrNodes) {
-                    const dx = wn.x - an.x;
-                    const dy = wn.y - an.y;
-
-                    // ピルの安全マージン（エクスポート時の1.5倍拡大・単語ラベル幅・十分なクリアランスを織り込む）
-                    const halfW = ((an.boxWidth || 100) * 1.5) / 2;
-                    const halfH = ((an.boxHeight || 36) * 1.5) / 2;
-                    const wordPadX = Math.max(28, (wn.label || '').length * 8.5);
-                    const safeMarginX = (halfW + (wn.radius || 14) + wordPadX + 22) * spacingFactor;
-                    const safeMarginY = (halfH + (wn.radius || 14) + 48) * spacingFactor;
-
-                    const absDx = Math.abs(dx);
-                    const absDy = Math.abs(dy);
-
-                    if (absDx < safeMarginX && absDy < safeMarginY) {
-                        const overlapX = safeMarginX - absDx;
-                        const overlapY = safeMarginY - absDy;
-
-                        // 属性ノードからキャンバス中心へ向かうベクトル
-                        const toCenterX = centerX - an.x;
-                        const toCenterY = centerY - an.y;
-                        const toCenterDist = Math.hypot(toCenterX, toCenterY) || 1;
-                        const dirCenterX = toCenterX / toCenterDist;
-                        const dirCenterY = toCenterY / toCenterDist;
-
-                        // 属性ノードのピルバッジから中心（内側）へ向かって強力に押し出す（背後や下への潜り込みを100%防止）
-                        const pushForce = 32 * alpha;
-                        wn.vx += dirCenterX * pushForce;
-                        wn.vy += dirCenterY * pushForce;
-                        // 侵入している場合は直接位置を中心方向へ退避
-                        const pushDist = Math.max(overlapX, overlapY) * 0.45;
-                        wn.x += dirCenterX * pushDist;
-                        wn.y += dirCenterY * pushDist;
-                    }
+                if (!wn.isShared && wn.homeX !== undefined) {
+                    const hdx = wn.homeX - wn.x;
+                    const hdy = wn.homeY - wn.y;
+                    wn.vx += hdx * 0.09 * alpha;
+                    wn.vy += hdy * 0.09 * alpha;
+                } else if (wn.isShared && wn.homeX !== undefined) {
+                    // 共通語も中央付近の適正位置を保持
+                    const hdx = wn.homeX - wn.x;
+                    const hdy = wn.homeY - wn.y;
+                    wn.vx += hdx * 0.04 * alpha;
+                    wn.vy += hdy * 0.04 * alpha;
                 }
             }
 
-            // 2. 単語ノード同士のテキスト重なり防止（横長ラベルを考慮した楕円距離反発）
-            const minDistX = 84 * spacingFactor;
-            const minDistY = 58 * spacingFactor;
+            // 2. 単語ノード同士のテキスト重なり防止（安全クランプ付き反発で四隅への爆発的吹き飛びを防止）
+            const minDistX = 80 * spacingFactor;
+            const minDistY = 52 * spacingFactor;
 
             for (let i = 0; i < wordNodes.length; i++) {
                 const w1 = wordNodes[i];
@@ -748,13 +785,13 @@ const NetworkVisualizer = {
                     const dx = w2.x - w1.x;
                     const dy = w2.y - w1.y;
 
-                    // 楕円正規化距離
                     const normDistSq = (dx * dx) / (minDistX * minDistX) + (dy * dy) / (minDistY * minDistY);
-                    if (normDistSq < 1.0 && normDistSq > 0.0001) {
-                        const normDist = Math.sqrt(normDistSq);
-                        const repForce = ((1.0 - normDist) / normDist) * 16 * alpha;
-                        const fx = (dx / (minDistX * minDistX)) * repForce * 1200;
-                        const fy = (dy / (minDistY * minDistY)) * repForce * 1200;
+                    if (normDistSq < 1.0) {
+                        const normDist = Math.max(0.12, Math.sqrt(normDistSq));
+                        // 反発力に安全クランプを設けて安定化
+                        const repMagnitude = Math.min(10.0, ((1.0 - normDist) / normDist) * 8.5) * alpha;
+                        const fx = (dx / (minDistX * normDist)) * repMagnitude * 30;
+                        const fy = (dy / (minDistY * normDist)) * repMagnitude * 30;
 
                         w1.vx -= fx;
                         w1.vy -= fy;
@@ -764,7 +801,37 @@ const NetworkVisualizer = {
                 }
             }
 
-            // 3. エッジ引力（バネの力）
+            // 3. 属性ピルバッジ（角丸長方形）との不可侵・内側安全マージン押し出し
+            for (const wn of wordNodes) {
+                for (const an of attrNodes) {
+                    const dx = wn.x - an.x;
+                    const dy = wn.y - an.y;
+
+                    const safeW = (an.boxWidth / 2) + (wn.radius || 14) + 48;
+                    const safeH = (an.boxHeight / 2) + (wn.radius || 14) + 48;
+
+                    const absX = Math.abs(dx);
+                    const absY = Math.abs(dy);
+
+                    if (absX < safeW && absY < safeH) {
+                        // 属性ノードからキャンバス中心へ向かう方向
+                        const toCenterX = centerX - an.x;
+                        const toCenterY = centerY - an.y;
+                        const distC = Math.hypot(toCenterX, toCenterY) || 1;
+                        const dirX = toCenterX / distC;
+                        const dirY = toCenterY / distC;
+
+                        const overlap = Math.max(safeW - absX, safeH - absY);
+                        wn.vx += dirX * overlap * 0.35 * alpha;
+                        wn.vy += dirY * overlap * 0.35 * alpha;
+                        wn.x += dirX * overlap * 0.30;
+                        wn.y += dirY * overlap * 0.30;
+                    }
+                }
+            }
+
+            // 4. バネの力（エッジ引力）
+            // 固有語はバッジ近傍の扇形に留める適正目標長、共通語は中央へ伸びる目標長
             for (const edge of this.edges) {
                 const s = edge.source; // 属性ノード
                 const t = edge.target; // 単語ノード
@@ -772,35 +839,16 @@ const NetworkVisualizer = {
                 const dy = t.y - s.y;
                 const dist = Math.hypot(dx, dy) || 1;
 
-                // 目標距離: 属性ピルバッジから単語ノードまで十分なクリアランス(エッジの可視長)を確保
-                const halfW = ((s.boxWidth || 100) * 1.5) / 2;
-                const minClearance = halfW + 85; // ピルバッジ端から最低85pxのクリアランス
-                const baseTargetLen = t.isShared ? 255 : Math.max(minClearance, 200);
-                const targetLen = baseTargetLen * spacingFactor;
+                const baseWordClearance = (s.boxWidth / 2) + 55;
+                const targetLen = t.isShared ? (195 * spacingFactor) : (Math.max(baseWordClearance, s.boxWidth * 0.35 + 75) * spacingFactor);
+                const springForce = (dist - targetLen) * (t.isShared ? 0.05 : 0.04) * alpha;
 
-                const springForce = (dist - targetLen) * 0.08 * alpha;
-                const fx = (dx / dist) * springForce;
-                const fy = (dy / dist) * springForce;
-
-                // 属性ノードは外周固定、単語ノードのみ移動
-                t.vx -= fx;
-                t.vy -= fy;
-            }
-
-            // 4. 外周飛び出し抑制の求心力（固有語が画面外や属性ノード背後に飛び出すのを抑制）
-            for (const wn of wordNodes) {
-                const dcx = centerX - wn.x;
-                const dcy = centerY - wn.y;
-                const centerDist = Math.hypot(dcx, dcy) || 1;
-                if (centerDist > Math.min(width, height) * 0.38) {
-                    const pull = 1.0 * alpha;
-                    wn.vx += (dcx / centerDist) * pull;
-                    wn.vy += (dcy / centerDist) * pull;
-                }
+                t.vx -= (dx / dist) * springForce;
+                t.vy -= (dy / dist) * springForce;
             }
 
             // 5. 速度減衰と位置更新、画面内安全クランプ
-            const pad = 36;
+            const pad = 24;
             for (const wn of wordNodes) {
                 wn.vx *= 0.65;
                 wn.vy *= 0.65;
