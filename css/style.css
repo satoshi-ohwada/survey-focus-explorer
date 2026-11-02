@@ -1256,8 +1256,8 @@ body {
 .dashboard-nav-guide {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 10px;
+    gap: 4px;
+    padding: 4px 8px;
     background: #E2E8F0;
     border: 1px solid #CBD5E1;
     border-radius: 6px;
@@ -4220,12 +4220,12 @@ body {
 }
 
 /* 画面幅がやや狭い環境でのタブナビゲーション最適化 */
-@media screen and (max-width: 1200px) {
+@media screen and (max-width: 1024px) {
     .dashboard-nav-guide .nav-guide-text {
         display: none;
     }
     .dashboard-nav-guide {
-        padding: 6px 8px;
+        padding: 4px 6px;
     }
 }
 
