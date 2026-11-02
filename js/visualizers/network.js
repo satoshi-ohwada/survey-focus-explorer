@@ -525,7 +525,7 @@ const NetworkVisualizer = {
         const centerX = width / 2;
         const centerY = height / 2;
         // 外周リング半径（間隔設定に応じて微調整）
-        const radiusRing = Math.min(width, height) * (this.spacingMode === 'widest' ? 0.42 : (this.spacingMode === 'wide' ? 0.40 : 0.38));
+        const radiusRing = Math.min(width, height) * (this.spacingMode === 'widest' ? 0.44 : (this.spacingMode === 'wide' ? 0.41 : 0.39));
 
         // (1) 属性ノードの生成（外周円上に均等配置）
         topAttrs.forEach((cat, idx) => {
@@ -592,14 +592,17 @@ const NetworkVisualizer = {
                 initX = meanX * 0.6 + centerX * 0.4;
                 initY = meanY * 0.6 + centerY * 0.4;
             } else {
-                // 単一属性に接続する固有語: 属性ノードの真上を避け、キャンバス中心に向かって内側に適度な距離で初期配置
+                // 単一属性に接続する固有語: 属性ノードのピルバッジの真上・近傍を完全に避け、中心方向へ十分な距離で初期配置
                 const primaryCat = connectedCats[0];
                 const an = nodeMap.get(`attr_${primaryCat}`);
                 if (an) {
                     const toCenterX = centerX - an.x;
                     const toCenterY = centerY - an.y;
                     const distToCenter = Math.hypot(toCenterX, toCenterY) || 1;
-                    const inwardOffset = Math.min(145, distToCenter * 0.55);
+                    const halfW = ((an.boxWidth || 100) * 1.5) / 2;
+                    // ピルの縁から内側に最低 85px 離れた位置を確保
+                    const minOffset = halfW + 85;
+                    const inwardOffset = Math.min(distToCenter * 0.70, Math.max(minOffset, distToCenter * 0.50));
                     initX = an.x + (toCenterX / distToCenter) * inwardOffset;
                     initY = an.y + (toCenterY / distToCenter) * inwardOffset;
                 }
@@ -701,11 +704,12 @@ const NetworkVisualizer = {
                     const dx = wn.x - an.x;
                     const dy = wn.y - an.y;
 
-                    // ピルの安全マージン（半幅・半高＋単語半径＋文字余白＋間隔係数）
-                    const halfW = (an.boxWidth || 100) / 2;
-                    const halfH = (an.boxHeight || 36) / 2;
-                    const safeMarginX = (halfW + (wn.radius || 14) + 26) * Math.min(1.2, spacingFactor);
-                    const safeMarginY = (halfH + (wn.radius || 14) + 22) * Math.min(1.2, spacingFactor);
+                    // ピルの安全マージン（エクスポート時の1.5倍拡大・単語ラベル幅・十分なクリアランスを織り込む）
+                    const halfW = ((an.boxWidth || 100) * 1.5) / 2;
+                    const halfH = ((an.boxHeight || 36) * 1.5) / 2;
+                    const wordPadX = Math.max(28, (wn.label || '').length * 8.5);
+                    const safeMarginX = (halfW + (wn.radius || 14) + wordPadX + 22) * spacingFactor;
+                    const safeMarginY = (halfH + (wn.radius || 14) + 48) * spacingFactor;
 
                     const absDx = Math.abs(dx);
                     const absDy = Math.abs(dy);
@@ -721,17 +725,14 @@ const NetworkVisualizer = {
                         const dirCenterX = toCenterX / toCenterDist;
                         const dirCenterY = toCenterY / toCenterDist;
 
-                        // 侵入している場合は、属性ノードのピルの外側かつキャンバス中心方向へ強力に押し出す
-                        const signX = dx >= 0 ? 1 : -1;
-                        const signY = dy >= 0 ? 1 : -1;
-
-                        const pushForce = 22 * alpha;
-                        wn.vx += signX * (overlapX / safeMarginX) * pushForce;
-                        wn.vy += signY * (overlapY / safeMarginY) * pushForce;
-
-                        // さらにキャンバス中心方向へのバイアスを加えて外周の壁に挟まれるのを防ぐ
-                        wn.vx += dirCenterX * pushForce * 0.7;
-                        wn.vy += dirCenterY * pushForce * 0.7;
+                        // 属性ノードのピルバッジから中心（内側）へ向かって強力に押し出す（背後や下への潜り込みを100%防止）
+                        const pushForce = 32 * alpha;
+                        wn.vx += dirCenterX * pushForce;
+                        wn.vy += dirCenterY * pushForce;
+                        // 侵入している場合は直接位置を中心方向へ退避
+                        const pushDist = Math.max(overlapX, overlapY) * 0.45;
+                        wn.x += dirCenterX * pushDist;
+                        wn.y += dirCenterY * pushDist;
                     }
                 }
             }
@@ -771,12 +772,13 @@ const NetworkVisualizer = {
                 const dy = t.y - s.y;
                 const dist = Math.hypot(dx, dy) || 1;
 
-                // 目標距離: 共通語は中央寄り(165px〜)、固有語は属性ノードの半幅+十分なクリアランス(135px〜)
-                const halfW = (s.boxWidth || 100) / 2;
-                const baseTargetLen = t.isShared ? 165 : Math.max(135, halfW + 48);
+                // 目標距離: 属性ピルバッジから単語ノードまで十分なクリアランス(エッジの可視長)を確保
+                const halfW = ((s.boxWidth || 100) * 1.5) / 2;
+                const minClearance = halfW + 85; // ピルバッジ端から最低85pxのクリアランス
+                const baseTargetLen = t.isShared ? 255 : Math.max(minClearance, 200);
                 const targetLen = baseTargetLen * spacingFactor;
 
-                const springForce = (dist - targetLen) * 0.07 * alpha;
+                const springForce = (dist - targetLen) * 0.08 * alpha;
                 const fx = (dx / dist) * springForce;
                 const fy = (dy / dist) * springForce;
 
@@ -1364,62 +1366,8 @@ const NetworkVisualizer = {
             ctx.globalAlpha = 1.0;
         });
 
-        // 2. 単語ノード（第1層: テキストラベル）
-        this.nodes.filter(n => !n.isAttrNode).forEach(node => {
-            const isConnectedToHover = !isExport && this.hoverNode &&
-                (this.hoverNode.id === node.id || this.edges.some(e =>
-                    (e.source.id === this.hoverNode.id && e.target.id === node.id) ||
-                    (e.target.id === this.hoverNode.id && e.source.id === node.id)
-                ));
-
-            // エクスポート（印刷・レポート）時は縮小表示でもクッキリ読めるよう文字サイズを大幅拡大
-            const fSize = isExport ? (node.isShared ? 25 : 22) : (node.isShared ? 14 : 12.5);
-            ctx.font = `bold ${fSize}px sans-serif`;
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-
-            const nodeRadius = isExport ? (node.radius * 1.3) : node.radius;
-            const textY = node.y + nodeRadius + (isExport ? 7 : 5);
-            ctx.save();
-            ctx.lineJoin = 'round';
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.96)';
-            ctx.lineWidth = isExport ? 7.5 : 5.0;
-            ctx.strokeText(node.label, node.x, textY);
-            ctx.fillStyle = node.isShared ? '#312E81' : (isConnectedToHover ? '#1D4ED8' : '#0F172A');
-            ctx.fillText(node.label, node.x, textY);
-            ctx.restore();
-        });
-
-        // 3. 単語ノード（第2層: 円・リング本体）
-        this.nodes.filter(n => !n.isAttrNode).forEach(node => {
-            const isConnectedToHover = !isExport && this.hoverNode &&
-                (this.hoverNode.id === node.id || this.edges.some(e =>
-                    (e.source.id === this.hoverNode.id && e.target.id === node.id) ||
-                    (e.target.id === this.hoverNode.id && e.source.id === node.id)
-                ));
-
-            const nodeRadius = isExport ? (node.radius * 1.3) : node.radius;
-
-            // 円本体
-            ctx.beginPath();
-            ctx.arc(node.x, node.y, nodeRadius, 0, Math.PI * 2);
-            ctx.fillStyle = isConnectedToHover ? '#2563EB' : node.color;
-            ctx.fill();
-            ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = isExport ? 3.5 : 2.5;
-            ctx.stroke();
-
-            // 共通語（複数属性に接続）の場合はアクセント外周リング
-            if (node.isShared) {
-                ctx.beginPath();
-                ctx.arc(node.x, node.y, nodeRadius + (isExport ? 5.0 : 3.8), 0, Math.PI * 2);
-                ctx.strokeStyle = isConnectedToHover ? '#1D4ED8' : '#F59E0B'; // ゴールドリング
-                ctx.lineWidth = isExport ? 3.2 : 2.2;
-                ctx.stroke();
-            }
-        });
-
-        // 4. 属性ノード（第3層: 最前面のピル型カプセルバッジ）
+        // 2. 属性ノード（第2層: 背景側のピル型カプセルバッジ）
+        // 単語ノードやその文字を覆い隠さないよう、エッジの直後・単語ノードの手前に描画
         this.nodes.filter(n => n.isAttrNode).forEach(node => {
             const isHover = !isExport && this.hoverNode && this.hoverNode.id === node.id;
             const badgeScale = isExport ? 1.45 : 1.0;
@@ -1473,6 +1421,62 @@ const NetworkVisualizer = {
             ctx.textBaseline = 'middle';
             ctx.fillStyle = '#FFFFFF';
             ctx.fillText(fullText, node.x, node.y);
+        });
+
+        // 3. 単語ノード（第3層: 円・リング本体）
+        this.nodes.filter(n => !n.isAttrNode).forEach(node => {
+            const isConnectedToHover = !isExport && this.hoverNode &&
+                (this.hoverNode.id === node.id || this.edges.some(e =>
+                    (e.source.id === this.hoverNode.id && e.target.id === node.id) ||
+                    (e.target.id === this.hoverNode.id && e.source.id === node.id)
+                ));
+
+            const nodeRadius = isExport ? (node.radius * 1.3) : node.radius;
+
+            // 円本体
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, nodeRadius, 0, Math.PI * 2);
+            ctx.fillStyle = isConnectedToHover ? '#2563EB' : node.color;
+            ctx.fill();
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = isExport ? 3.5 : 2.5;
+            ctx.stroke();
+
+            // 共通語（複数属性に接続）の場合はアクセント外周リング
+            if (node.isShared) {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, nodeRadius + (isExport ? 5.0 : 3.8), 0, Math.PI * 2);
+                ctx.strokeStyle = isConnectedToHover ? '#1D4ED8' : '#F59E0B'; // ゴールドリング
+                ctx.lineWidth = isExport ? 3.2 : 2.2;
+                ctx.stroke();
+            }
+        });
+
+        // 4. 単語ノード（第4層: 最前面テキストラベル）
+        // 最前面レイヤーに描画することで、属性ノードやエッジによる文字の欠け・隠れを完全防止
+        this.nodes.filter(n => !n.isAttrNode).forEach(node => {
+            const isConnectedToHover = !isExport && this.hoverNode &&
+                (this.hoverNode.id === node.id || this.edges.some(e =>
+                    (e.source.id === this.hoverNode.id && e.target.id === node.id) ||
+                    (e.target.id === this.hoverNode.id && e.source.id === node.id)
+                ));
+
+            // エクスポート（印刷・レポート）時は縮小表示でもクッキリ読めるよう文字サイズを大幅拡大
+            const fSize = isExport ? (node.isShared ? 25 : 22) : (node.isShared ? 14 : 12.5);
+            ctx.font = `bold ${fSize}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'top';
+
+            const nodeRadius = isExport ? (node.radius * 1.3) : node.radius;
+            const textY = node.y + nodeRadius + (isExport ? 7 : 5);
+            ctx.save();
+            ctx.lineJoin = 'round';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.96)';
+            ctx.lineWidth = isExport ? 7.5 : 5.0;
+            ctx.strokeText(node.label, node.x, textY);
+            ctx.fillStyle = node.isShared ? '#312E81' : (isConnectedToHover ? '#1D4ED8' : '#0F172A');
+            ctx.fillText(node.label, node.x, textY);
+            ctx.restore();
         });
 
         ctx.restore();
@@ -1659,8 +1663,12 @@ const NetworkVisualizer = {
         let minY = Infinity, maxY = -Infinity;
 
         this.nodes.forEach(n => {
-            const padX = n.isAttrNode ? ((n.boxWidth || 95) / 2 + 10) : (n.radius + Math.max(24, (n.id || '').length * 8.5));
-            const padY = n.isAttrNode ? ((n.boxHeight || 34) / 2 + 10) : (n.radius + 32);
+            const padX = n.isAttrNode
+                ? (((n.boxWidth || 100) * 1.5) / 2 + 18)
+                : (n.radius * 1.3 + Math.max(30, (n.label || n.id || '').length * 10));
+            const padY = n.isAttrNode
+                ? (((n.boxHeight || 36) * 1.5) / 2 + 18)
+                : (n.radius * 1.3 + 38);
             if (n.x - padX < minX) minX = n.x - padX;
             if (n.x + padX > maxX) maxX = n.x + padX;
             if (n.y - padY < minY) minY = n.y - padY;
@@ -1670,10 +1678,10 @@ const NetworkVisualizer = {
         const bboxW = Math.max(100, maxX - minX);
         const bboxH = Math.max(100, maxY - minY);
 
-        // 周囲マージン（凡例が下部スリムバーのため上下均等に美しくフィット）
-        const marginX = 50;
-        const marginTop = 50;
-        const marginBottom = 55;
+        // 周囲マージン（エクスポート時の大文字バッジや凡例に配慮し安全マージンを確保）
+        const marginX = 55;
+        const marginTop = 58;
+        const marginBottom = 62;
 
         const availW = targetW - marginX * 2;
         const availH = targetH - (marginTop + marginBottom);
