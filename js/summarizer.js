@@ -292,10 +292,10 @@ const OpinionSummarizer = {
      * 意見タイプ別（その他以外: 困りごと・課題、要望・改善提案、肯定・満足）の代表意見を選出する
      * @param {Array<object>} matchedDocs - 抽出された回答文配列
      * @param {object} subcorpusStats - コーパス統計
-     * @param {number} topN - タイプごとの選出件数（デフォルト: 3）
+     * @param {number} topN - タイプごとの選出件数（デフォルト: 5）
      * @returns {object} { issue: [...], request: [...], positive: [...] }
      */
-    extractRepresentativeOpinionsByType(matchedDocs, subcorpusStats, topN = 3) {
+    extractRepresentativeOpinionsByType(matchedDocs, subcorpusStats, topN = 5) {
         if (!matchedDocs || matchedDocs.length === 0) {
             return { issue: [], request: [], positive: [] };
         }

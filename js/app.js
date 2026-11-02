@@ -2062,10 +2062,10 @@ function generateSummaryData() {
         neutralRate: neutralRate
     };
 
-    // 2. 代表意見（抽出型要約）の選出（全体代表 ＆ 意見タイプ別代表）
+    // 2. 代表意見（抽出型要約）の選出（全体代表 ＆ 意見タイプ別代表・各5選）
     const repOpinions = OpinionSummarizer.extractRepresentativeOpinions(docs, AppState.subcorpusStats, 4);
     const repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType
-        ? OpinionSummarizer.extractRepresentativeOpinionsByType(docs, AppState.subcorpusStats, 3)
+        ? OpinionSummarizer.extractRepresentativeOpinionsByType(docs, AppState.subcorpusStats, 5)
         : { issue: [], request: [], positive: [] };
 
     // 3. 論点（トピッククラスタ）サマリーの生成
@@ -2770,7 +2770,7 @@ function renderSummaryDashboard() {
     if (repListEl) {
         repListEl.innerHTML = '';
         const repsByType = summary.repOpinionsByType || (OpinionSummarizer && OpinionSummarizer.extractRepresentativeOpinionsByType
-            ? OpinionSummarizer.extractRepresentativeOpinionsByType(AppState.filterResult.matchedDocs, AppState.subcorpusStats, 3)
+            ? OpinionSummarizer.extractRepresentativeOpinionsByType(AppState.filterResult.matchedDocs, AppState.subcorpusStats, 5)
             : null);
 
         const typeConfigs = [

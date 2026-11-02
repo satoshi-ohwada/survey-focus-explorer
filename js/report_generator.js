@@ -452,12 +452,13 @@ const ReportGenerator = {
         }
 
         // 11. 意見タイプ別代表意見（困りごと・要望・肯定 各5選）
-        let repOpinionsByType = (AppState.summaryData && AppState.summaryData.repOpinionsByType)
-            ? AppState.summaryData.repOpinionsByType
-            : null;
-        if (!repOpinionsByType && typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.extractRepresentativeOpinionsByType) {
+        let repOpinionsByType = null;
+        if (typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.extractRepresentativeOpinionsByType) {
             const mDocs = (AppState.filterResult && AppState.filterResult.matchedDocs) ? AppState.filterResult.matchedDocs : [];
             repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType(mDocs, AppState.subcorpusStats, 5);
+        }
+        if (!repOpinionsByType && AppState.summaryData && AppState.summaryData.repOpinionsByType) {
+            repOpinionsByType = AppState.summaryData.repOpinionsByType;
         }
 
         // 12. 属性項目ごとの代表的な意見（生の声・各属性2〜3例）
@@ -642,24 +643,11 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 4. 意見タイプ構成比バー ＆ 自動分類基準 ---
+        // --- 4. 意見タイプ構成比バー ---
         let summaryTypeBarHtml = '';
         if (data.opinionTypeSummary) {
             const ots = data.opinionTypeSummary;
             summaryTypeBarHtml = `
-                <!-- 意見タイプ自動分類基準の説明ボックス -->
-                <div class="report-type-criteria-box">
-                    <div class="report-type-criteria-head">
-                        <span class="report-type-criteria-title">💡 意見タイプの自動分類基準:</span>
-                        <span class="report-type-criteria-desc">文章全体の文脈・構文構造および感情極性語彙に基づき、発言者の意図を判定しています。</span>
-                    </div>
-                    <div class="report-type-criteria-tags">
-                        <span class="report-criteria-item issue">🔴 <b>困りごと</b>: 不満・問題点・使いづらさ・不具合などの課題指摘</span>
-                        <span class="report-criteria-item request">🔵 <b>要望</b>: 改善提案・機能追加・「〜してほしい」等の前向きなリクエスト</span>
-                        <span class="report-criteria-item positive">🟢 <b>肯定</b>: 満足・感謝・使いやすさ・親切さ等のポジティブな評価</span>
-                    </div>
-                </div>
-
                 <div class="report-summary-type-row" style="margin-bottom: 4px;">
                     <div class="report-summary-type-header">
                         <span class="report-summary-sub-title">意見タイプ構成比（自動判定）:</span>
@@ -1054,6 +1042,20 @@ const ReportGenerator = {
                 <!-- (4) 要約サマリー（集約概要と代表意見） -->
                 <div class="report-section" style="margin-top: 5px; flex: 1; display: flex; flex-direction: column;">
                     <div class="report-sec-title">💡 4. 要約サマリー（集約概要 ＆ 代表意見） [対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
+                    
+                    <!-- 意見タイプ自動3分類基準の解説ボックス（常時表示） -->
+                    <div class="report-type-criteria-box">
+                        <div class="report-type-criteria-head">
+                            <span class="report-type-criteria-title">💡 意見タイプの3分類基準:</span>
+                            <span class="report-type-criteria-desc">文章全体の文脈構造および感情極性語彙パターンに基づき、発言者の意図を以下の3つに自動判定・分類しています。</span>
+                        </div>
+                        <div class="report-type-criteria-tags">
+                            <span class="report-criteria-item issue">🔴 <b>困りごと・課題</b>: 不満・使いづらさ・問題点・不具合の指摘など、改善が急務とされる課題発言</span>
+                            <span class="report-criteria-item request">🔵 <b>要望・改善提案</b>: 機能追加やサービス拡充、「〜してほしい」「〜を希望」などの前向きなリクエスト</span>
+                            <span class="report-criteria-item positive">🟢 <b>肯定・満足</b>: 満足感・感謝・「使いやすい」「親切」「助かった」などのポジティブな高評価</span>
+                        </div>
+                    </div>
+
                     ${summaryTypeBarHtml}
                     <div style="flex: 1; margin-top: 4px;">
                         ${typeRepHtml}
