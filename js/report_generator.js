@@ -451,16 +451,16 @@ const ReportGenerator = {
             );
         }
 
-        // 11. 意見タイプ別代表意見（困りごと・要望・肯定 各3選）
+        // 11. 意見タイプ別代表意見（困りごと・要望・肯定 各5選）
         let repOpinionsByType = (AppState.summaryData && AppState.summaryData.repOpinionsByType)
             ? AppState.summaryData.repOpinionsByType
             : null;
         if (!repOpinionsByType && typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.extractRepresentativeOpinionsByType) {
             const mDocs = (AppState.filterResult && AppState.filterResult.matchedDocs) ? AppState.filterResult.matchedDocs : [];
-            repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType(mDocs, AppState.subcorpusStats, 3);
+            repOpinionsByType = OpinionSummarizer.extractRepresentativeOpinionsByType(mDocs, AppState.subcorpusStats, 5);
         }
 
-        // 12. 属性項目ごとの代表的な意見（生の声）
+        // 12. 属性項目ごとの代表的な意見（生の声・各属性2〜3例）
         const attrRepresentativeOpinions = [];
         if (AppState.attrCol && matchedDocs.length > 0) {
             const docsByAttr = {};
@@ -478,25 +478,40 @@ const ReportGenerator = {
                 const docs = docsByAttr[cat] || [];
                 if (docs.length === 0) return;
 
-                // 代表意見の選定
-                let bestDoc = null;
+                // 代表意見の選定（各属性2〜3例）
+                let repDocs = [];
                 if (typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.extractRepresentativeOpinions) {
-                    const reps = OpinionSummarizer.extractRepresentativeOpinions(docs, AppState.subcorpusStats, 1);
-                    if (reps && reps.length > 0) bestDoc = reps[0].doc;
+                    const reps = OpinionSummarizer.extractRepresentativeOpinions(docs, AppState.subcorpusStats, 3);
+                    if (reps && reps.length > 0) repDocs = reps.map(r => r.doc);
                 }
-                if (!bestDoc) {
+                if (repDocs.length === 0) {
                     const sorted = [...docs].sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
-                    bestDoc = sorted.find(d => (d.text || '').trim().length >= 8) || sorted[0];
+                    repDocs = sorted.filter(d => (d.text || '').trim().length >= 8).slice(0, 3);
+                    if (repDocs.length === 0 && docs.length > 0) repDocs = docs.slice(0, 3);
                 }
 
-                if (bestDoc) {
-                    let opType = bestDoc.opinionType || '';
-                    if (!opType && typeof TextPreprocessor !== 'undefined' && TextPreprocessor.classifyOpinionType) {
-                        opType = TextPreprocessor.classifyOpinionType(bestDoc.text);
+                if (repDocs.length > 0) {
+                    const bestDoc = repDocs[0];
+                    let firstOpType = bestDoc.opinionType || '';
+                    if (!firstOpType && typeof TextPreprocessor !== 'undefined' && TextPreprocessor.classifyOpinionType) {
+                        firstOpType = TextPreprocessor.classifyOpinionType(bestDoc.text);
                     }
+                    let firstText = bestDoc.text ? bestDoc.text.trim() : '';
+                    if (firstText.length > 70) firstText = firstText.substring(0, 70) + '…';
 
-                    let text = bestDoc.text ? bestDoc.text.trim() : '';
-                    if (text.length > 80) text = text.substring(0, 80) + '…';
+                    const opinionsList = repDocs.map(d => {
+                        let opType = d.opinionType || '';
+                        if (!opType && typeof TextPreprocessor !== 'undefined' && TextPreprocessor.classifyOpinionType) {
+                            opType = TextPreprocessor.classifyOpinionType(d.text);
+                        }
+                        let text = d.text ? d.text.trim() : '';
+                        if (text.length > 60) text = text.substring(0, 60) + '…';
+                        return {
+                            text,
+                            opinionType: opType,
+                            relevanceScore: d.relevanceScore || null
+                        };
+                    });
 
                     attrRepresentativeOpinions.push({
                         category: cat,
@@ -504,9 +519,10 @@ const ReportGenerator = {
                         popCount: stat.popCount || docs.length,
                         rate: stat.rate || '0.0',
                         share: stat.share || '0.0',
-                        opinionType: opType,
+                        opinionType: firstOpType,
                         relevanceScore: bestDoc.relevanceScore || null,
-                        text: text
+                        text: firstText,
+                        opinions: opinionsList
                     });
                 }
             });
@@ -626,11 +642,24 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 4. 意見タイプ構成比バー ---
+        // --- 4. 意見タイプ構成比バー ＆ 自動分類基準 ---
         let summaryTypeBarHtml = '';
         if (data.opinionTypeSummary) {
             const ots = data.opinionTypeSummary;
             summaryTypeBarHtml = `
+                <!-- 意見タイプ自動分類基準の説明ボックス -->
+                <div class="report-type-criteria-box">
+                    <div class="report-type-criteria-head">
+                        <span class="report-type-criteria-title">💡 意見タイプの自動分類基準:</span>
+                        <span class="report-type-criteria-desc">文章全体の文脈・構文構造および感情極性語彙に基づき、発言者の意図を判定しています。</span>
+                    </div>
+                    <div class="report-type-criteria-tags">
+                        <span class="report-criteria-item issue">🔴 <b>困りごと</b>: 不満・問題点・使いづらさ・不具合などの課題指摘</span>
+                        <span class="report-criteria-item request">🔵 <b>要望</b>: 改善提案・機能追加・「〜してほしい」等の前向きなリクエスト</span>
+                        <span class="report-criteria-item positive">🟢 <b>肯定</b>: 満足・感謝・使いやすさ・親切さ等のポジティブな評価</span>
+                    </div>
+                </div>
+
                 <div class="report-summary-type-row" style="margin-bottom: 4px;">
                     <div class="report-summary-type-header">
                         <span class="report-summary-sub-title">意見タイプ構成比（自動判定）:</span>
@@ -652,7 +681,7 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 5. 意見タイプ別 代表的な生の声（3カラム） ---
+        // --- 5. 意見タイプ別 代表的な生の声（3カラム・各最大5選） ---
         let typeRepHtml = '';
         if (data.repOpinionsByType) {
             const rbt = data.repOpinionsByType;
@@ -664,7 +693,7 @@ const ReportGenerator = {
                     label: '困りごと・課題',
                     icon: '🔴',
                     color: '#e11d48',
-                    list: rbt.issue || [],
+                    list: (rbt.issue || []).slice(0, 5),
                     total: ots.issueCount || 0
                 },
                 {
@@ -672,7 +701,7 @@ const ReportGenerator = {
                     label: '要望・改善提案',
                     icon: '🔵',
                     color: '#0284c7',
-                    list: rbt.request || [],
+                    list: (rbt.request || []).slice(0, 5),
                     total: ots.requestCount || 0
                 },
                 {
@@ -680,7 +709,7 @@ const ReportGenerator = {
                     label: '肯定・満足',
                     icon: '🟢',
                     color: '#10b981',
-                    list: rbt.positive || [],
+                    list: (rbt.positive || []).slice(0, 5),
                     total: ots.positiveCount || 0
                 }
             ];
@@ -692,17 +721,17 @@ const ReportGenerator = {
                 } else {
                     itemsHtml = c.list.map(rep => {
                         let text = rep.doc.text ? rep.doc.text.trim() : '';
-                        if (text.length > 70) text = text.substring(0, 70) + '…';
+                        if (text.length > 55) text = text.substring(0, 55) + '…';
                         const attrText = rep.doc.attribute ? `<span class="report-type-rep-attr">[${this.escape(rep.doc.attribute)}]</span>` : '';
                         const scoreBadge = rep.doc.relevanceScore ? `<span class="report-type-rep-score">適合度 ${rep.doc.relevanceScore}%</span>` : '';
                         return `
-                            <div class="report-type-rep-item">
+                            <div class="report-type-rep-item" style="padding: 2px 4.5px; margin-bottom: 2px;">
                                 <div class="report-type-rep-meta">
                                     <span class="report-type-rep-rank ${c.type}">#${rep.rank}</span>
                                     ${attrText}
                                     ${scoreBadge}
                                 </div>
-                                <div class="report-type-rep-quote">「${this.escape(text)}」</div>
+                                <div class="report-type-rep-quote" style="font-size: 7.2px; line-height: 1.3;">「${this.escape(text)}」</div>
                             </div>
                         `;
                     }).join('');
@@ -710,7 +739,7 @@ const ReportGenerator = {
 
                 return `
                     <div class="report-type-rep-col ${c.type}">
-                        <div class="report-type-rep-head" style="border-left: 3px solid ${c.color};">
+                        <div class="report-type-rep-head" style="border-left: 3px solid ${c.color}; margin-bottom: 2px;">
                             <span class="report-type-rep-title">${c.icon} ${c.label}</span>
                             <span class="report-type-rep-count">${c.list.length}選 / 全${c.total}件</span>
                         </div>
@@ -791,7 +820,7 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>🎯 7-A. 属性別 結びつき（特徴度重視・特有語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 48mm;">
+                        <div class="report-chart-box" style="height: 44mm;">
                             ${images.networkImgDistinct ? `<img src="${images.networkImgDistinct}" class="report-chart-img" alt="属性ネットワーク(特徴度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
                         <div class="report-hint-box" style="margin-top: 3px;">
@@ -804,7 +833,7 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>📊 7-B. 属性別 結びつき（頻度重視・高頻度語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 48mm;">
+                        <div class="report-chart-box" style="height: 44mm;">
                             ${images.networkImgFreq ? `<img src="${images.networkImgFreq}" class="report-chart-img" alt="属性ネットワーク(頻度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
                         <div class="report-hint-box" style="margin-top: 3px;">
@@ -863,24 +892,38 @@ const ReportGenerator = {
             </tr>
         `).join('') : `<tr><td colspan="5" style="text-align:center; color:#94a3b8; padding: 12px;">属性列が未選択です</td></tr>`;
 
-        // --- 11. 属性項目ごとの代表的な意見（生の声）HTML ---
+        // --- 11. 属性項目ごとの代表的な意見（生の声・各属性2〜3例）HTML ---
         let attrRepOpinionsHtml = '';
         if (data.attrRepresentativeOpinions && data.attrRepresentativeOpinions.length > 0) {
             const cardsHtml = data.attrRepresentativeOpinions.map(item => {
-                let typeBadge = '';
-                if (item.opinionType === 'issue') {
-                    typeBadge = '<span class="report-type-badge issue">🔴 困りごと</span>';
-                } else if (item.opinionType === 'request') {
-                    typeBadge = '<span class="report-type-badge request">🔵 要望</span>';
-                } else if (item.opinionType === 'positive') {
-                    typeBadge = '<span class="report-type-badge positive">🟢 肯定</span>';
-                } else {
-                    typeBadge = '<span class="report-type-badge neutral">⚪ その他</span>';
-                }
+                const opinionsList = (item.opinions && item.opinions.length > 0)
+                    ? item.opinions
+                    : [{ text: item.text, opinionType: item.opinionType, relevanceScore: item.relevanceScore }];
 
-                const scoreBadge = item.relevanceScore
-                    ? `<span class="report-type-rep-score">適合度 ${item.relevanceScore}%</span>`
-                    : '';
+                const quotesHtml = opinionsList.map(op => {
+                    let typeBadge = '';
+                    if (op.opinionType === 'issue') {
+                        typeBadge = '<span class="report-type-badge issue">🔴 困りごと</span>';
+                    } else if (op.opinionType === 'request') {
+                        typeBadge = '<span class="report-type-badge request">🔵 要望</span>';
+                    } else if (op.opinionType === 'positive') {
+                        typeBadge = '<span class="report-type-badge positive">🟢 肯定</span>';
+                    } else {
+                        typeBadge = '<span class="report-type-badge neutral">⚪ その他</span>';
+                    }
+
+                    const scoreBadge = op.relevanceScore
+                        ? `<span class="report-type-rep-score">適合度 ${op.relevanceScore}%</span>`
+                        : '';
+
+                    return `
+                        <div class="report-attr-rep-quote-item">
+                            ${typeBadge}
+                            <span class="report-quote-text">「${this.escape(op.text)}」</span>
+                            ${scoreBadge}
+                        </div>
+                    `;
+                }).join('');
 
                 return `
                     <div class="report-attr-rep-card">
@@ -889,12 +932,11 @@ const ReportGenerator = {
                                 <span class="report-attr-rep-badge">👥 ${this.escape(item.category)}</span>
                                 <span class="report-attr-rep-stats">言及 <b>${item.matchedCount}件</b> (言及率 <b>${item.rate}%</b> / 構成比 ${item.share}%)</span>
                             </div>
-                            <div class="report-attr-rep-meta">
-                                ${typeBadge}
-                                ${scoreBadge}
-                            </div>
+                            <span class="report-attr-rep-count-badge">代表意見 ${opinionsList.length}選</span>
                         </div>
-                        <div class="report-attr-rep-quote">「${this.escape(item.text)}」</div>
+                        <div class="report-attr-rep-quotes">
+                            ${quotesHtml}
+                        </div>
                     </div>
                 `;
             }).join('');
@@ -1070,7 +1112,7 @@ const ReportGenerator = {
                                 <span>☁️ 5-A. 意見全体の頻出語（ワードクラウド）</span>
                                 <span class="report-card-sub-tag">全体状況</span>
                             </div>
-                            <div class="report-chart-box" style="height: 44mm;">
+                            <div class="report-chart-box" style="height: 56mm;">
                                 ${images.cloudImg ? `<img src="${images.cloudImg}" class="report-chart-img" alt="ワードクラウド" />` : `<div class="report-no-chart">画像がありません</div>`}
                             </div>
                             <div class="report-hint-box" style="margin-top: 3px;">
@@ -1084,7 +1126,7 @@ const ReportGenerator = {
                                 <span>🌐 5-B. 単語共起ネットワーク（全体の話題構造）</span>
                                 <span class="report-card-sub-tag">全体状況</span>
                             </div>
-                            <div class="report-chart-box" style="height: 44mm;">
+                            <div class="report-chart-box" style="height: 56mm;">
                                 ${globalNetImg ? `<img src="${globalNetImg}" class="report-chart-img" alt="全体共起ネットワーク" />` : `<div class="report-no-chart">画像がありません</div>`}
                             </div>
                             <div class="report-hint-box" style="margin-top: 3px;">
@@ -1191,7 +1233,7 @@ const ReportGenerator = {
                             <div class="report-card-title">
                                 <span>📈 8-A. 属性「${this.escape(data.attrCol)}」別の言及傾向グラフ</span>
                             </div>
-                            <div class="report-chart-box" style="height: 33mm;">
+                            <div class="report-chart-box" style="height: 30mm;">
                                 ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
                             </div>
                         </div>
