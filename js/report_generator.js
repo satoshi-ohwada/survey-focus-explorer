@@ -575,14 +575,9 @@ const ReportGenerator = {
 
     /**
      * A4・全3ページのHTMLを生成する
-     * （１）投入したデータ全体の概要
-     * （２）指定したキーワードとその関連語と判断した語の概要
-     * （３）分析対象の概要
-     * （４）要約サマリー（集約概要と代表意見）
-     * （５）ワードクラウド
-     * （６）共起ネットワーク（特徴語重視、頻度重視）
-     * （７）意見分布
-     * （８）クロス集計
+     * （１）アンケートの概要 ＆ 全体要約サマリー（Page 1: 項目1〜4）
+     * （２）キーワードと関連語の使用状況・全体可視化集約（Page 2: 項目5〜6）
+     * （３）属性情報とキーワード関連語の関係・属性別深掘り集約（Page 3: 項目7〜8）
      */
     generateHtml(data, images) {
         // --- 1. 全体属性内訳ピル (投入データ全体) ---
@@ -784,22 +779,22 @@ const ReportGenerator = {
             </tr>
         `).join('') : `<tr><td colspan="3" style="text-align:center; color:#94a3b8; padding: 12px;">共起データがありません</td></tr>`;
 
-        // --- 8. 結びつきネットワーク（特徴語重視 ＆ 頻度重視）セクションHTML ---
-        let networkSectionHtml = '';
+        // --- 8. 【属性ごとの状況】結びつきネットワーク（特徴語重視 ＆ 頻度重視）セクションHTML ---
+        let attrNetworkSectionHtml = '';
         const hasAttrNetwork = (images.networkImgDistinct || images.networkImgFreq) && data.attrCol && data.attrCol !== '（属性列未設定）';
 
         if (hasAttrNetwork) {
-            networkSectionHtml = `
+            attrNetworkSectionHtml = `
                 <div class="report-dual-grid">
                     <!-- 左: 特徴語重視 -->
                     <div class="report-card">
                         <div class="report-card-title">
-                            <span>🎯 6-A. 属性別 結びつき（特徴度重視・特有語）</span>
+                            <span>🎯 7-A. 属性別 結びつき（特徴度重視・特有語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 60mm;">
+                        <div class="report-chart-box" style="height: 48mm;">
                             ${images.networkImgDistinct ? `<img src="${images.networkImgDistinct}" class="report-chart-img" alt="属性ネットワーク(特徴度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
-                        <div class="report-hint-box" style="margin-top: 4px;">
+                        <div class="report-hint-box" style="margin-top: 3px;">
                             💡 <b>特有語の発見:</b> 他の属性と比べて突出して使われた単語を結びつけ、セグメント特有の悩みや独自関心をあぶり出します。
                         </div>
                     </div>
@@ -807,48 +802,23 @@ const ReportGenerator = {
                     <!-- 右: 頻度重視 -->
                     <div class="report-card">
                         <div class="report-card-title">
-                            <span>📊 6-B. 属性別 結びつき（頻度重視・高頻度語）</span>
+                            <span>📊 7-B. 属性別 結びつき（頻度重視・高頻度語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 60mm;">
+                        <div class="report-chart-box" style="height: 48mm;">
                             ${images.networkImgFreq ? `<img src="${images.networkImgFreq}" class="report-chart-img" alt="属性ネットワーク(頻度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
-                        <div class="report-hint-box" style="margin-top: 4px;">
+                        <div class="report-hint-box" style="margin-top: 3px;">
                             💡 <b>共通語・ボリュームの把握:</b> 各属性で出現回数の多い単語を結びつけ、全体に共通する基本ニーズや関心規模を把握します。
                         </div>
                     </div>
                 </div>
             `;
         } else {
-            // 属性列未指定時のフォールバック: 全体単語共起ネットワーク ＋ 共起ペア表
-            const netImg = images.networkImgWord || images.networkImg;
-            networkSectionHtml = `
-                <div class="report-dual-grid">
-                    <div class="report-card">
-                        <div class="report-card-title">
-                            <span>🌐 6. 単語共起ネットワーク（全体の話題構造）</span>
-                        </div>
-                        <div class="report-chart-box" style="height: 60mm;">
-                            ${netImg ? `<img src="${netImg}" class="report-chart-img" alt="共起ネットワーク" />` : `<div class="report-no-chart">画像がありません</div>`}
-                        </div>
-                    </div>
-                    <div class="report-card">
-                        <div class="report-card-title">強く共起している単語ペア Top 6</div>
-                        <table class="report-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 38px; text-align: center;">順位</th>
-                                    <th>強く共起している単語ペア</th>
-                                    <th style="width: 75px; text-align: right;">共起頻度</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${coocRows}
-                            </tbody>
-                        </table>
-                        <div class="report-hint-box" style="margin-top: 6px;">
-                            💡 色のまとまりは同一文脈で語られる話題クラスタを表し、線の太さは共起の強さを示します。
-                        </div>
-                    </div>
+            // 属性列未指定時の案内
+            attrNetworkSectionHtml = `
+                <div class="report-hint-box" style="padding: 16px; text-align: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px;">
+                    <div style="font-weight: 700; color: #475569; font-size: 11px; margin-bottom: 4px;">👥 属性列が未選択です</div>
+                    <div style="color: #64748b; font-size: 9.5px;">上部の設定パネルで「年代」や「性別」などの属性列を選択すると、属性ごとの特徴度重視ネットワーク（特有語）と頻度重視ネットワーク（高頻度語）がここに自動生成されます。</div>
                 </div>
             `;
         }
@@ -857,13 +827,13 @@ const ReportGenerator = {
         let clustersHtml = '';
         if (data.clustersSummary && data.clustersSummary.length > 0) {
             clustersHtml = `
-                <table class="report-table">
+                <table class="report-table" style="margin-top: 3px;">
                     <thead>
                         <tr>
-                            <th style="width: 32px; text-align: center;">#</th>
-                            <th style="width: 78px;">クラスタ名</th>
-                            <th style="width: 48px; text-align: right;">件数</th>
-                            <th>主要な代表語彙・話題傾向</th>
+                            <th style="width: 28px; text-align: center;">#</th>
+                            <th style="width: 76px;">クラスタ名</th>
+                            <th style="width: 44px; text-align: right;">件数</th>
+                            <th>代表語彙・話題傾向</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -872,14 +842,14 @@ const ReportGenerator = {
                                 <td style="text-align: center; font-weight: 700; color: #475569;">${c.id}</td>
                                 <td style="font-weight: 600; color: #1e293b;">${this.escape(c.label)}</td>
                                 <td style="text-align: right; color: #2563eb; font-weight: 600;">${c.size}件</td>
-                                <td style="color: #475569; font-size: 9.5px;">${this.escape(c.topKw)}</td>
+                                <td style="color: #475569; font-size: 8.5px;">${this.escape(c.topKw)}</td>
                             </tr>
                         `).join('')}
                     </tbody>
                 </table>
             `;
         } else {
-            clustersHtml = `<div class="report-hint-box" style="padding: 10px; text-align: center;">クラスタリング可能な十分な意見数がありません</div>`;
+            clustersHtml = `<div class="report-hint-box" style="padding: 6px; text-align: center; margin-top: 3px;">クラスタリング可能な十分な意見数がありません</div>`;
         }
 
         // --- 10. 属性別クロス集計テーブル行 ---
@@ -946,7 +916,7 @@ const ReportGenerator = {
 
 
         // =========================================================================
-        // 📄 ページ1: 分析前提 ＆ 要約サマリー (1/3)
+        // 📄 ページ1: 分析前提 ＆ キーワード要約サマリー (1/3)
         // =========================================================================
         const page1 = `
             <div class="report-page" id="reportPage1">
@@ -1058,26 +1028,27 @@ const ReportGenerator = {
 
 
         // =========================================================================
-        // 📄 ページ2: テキスト構造分析（全体状況 ＆ 属性別ネットワーク） (2/3)
+        // 📄 ページ2: キーワードと関連語の使用状況（属性分解前の全体状況・可視化集約） (2/3)
         // =========================================================================
+        const globalNetImg = images.networkImgWord || images.networkImg;
         const page2 = `
             <div class="report-page" id="reportPage2">
                 <!-- ページ2 ヘッダー -->
                 <div class="report-header">
                     <div class="report-header-main">
                         <div class="report-title-badge">FOCUS EXPLORER REPORT (2/3)</div>
-                        <h2 class="report-title">テキスト構造分析（全体状況 ＆ 属性別ネットワーク）</h2>
+                        <h2 class="report-title">キーワードと関連語の使用状況（全体話題構造 ＆ 意見分布）</h2>
                     </div>
                     <div class="report-header-meta">
                         <div><b>対象キーワード:</b> 🎯「${this.escape(data.targetKeyword)}」</div>
-                        <div><b>ファイル:</b> ${this.escape(data.fileName)}</div>
+                        <div><b>全体回答数:</b> ${data.totalRaw.toLocaleString()} 件 / <b>該当:</b> ${data.totalMatched.toLocaleString()} 件</div>
                     </div>
                 </div>
 
-                <!-- (5) 【全体状況】ワードクラウド ＆ 全体語彙構造 -->
+                <!-- (5) 【全体状況】語彙・共起構造（ワードクラウド ＆ 全体共起ネットワーク） -->
                 <div class="report-section" style="margin-bottom: 5px;">
                     <div class="report-sec-title">
-                        <span>🌐 5. 【全体状況】頻出重要単語（ワードクラウド ＆ 全体語彙構造） [属性毎ではない全体状況 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
+                        <span>🌐 5. 【全体状況】語彙・話題構造（ワードクラウド ＆ 全体共起ネットワーク） [属性毎ではない全体状況 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
                     
                     <!-- 全体状況サマリーバナー -->
@@ -1096,7 +1067,7 @@ const ReportGenerator = {
                         <!-- 左: ワードクラウド -->
                         <div class="report-card">
                             <div class="report-card-title">
-                                <span>☁️ 意見全体の頻出語（ワードクラウド）</span>
+                                <span>☁️ 5-A. 意見全体の頻出語（ワードクラウド）</span>
                                 <span class="report-card-sub-tag">全体状況</span>
                             </div>
                             <div class="report-chart-box" style="height: 44mm;">
@@ -1107,36 +1078,70 @@ const ReportGenerator = {
                             </div>
                         </div>
 
-                        <!-- 右: 頻出単語表 ＆ 全体比特異語 -->
+                        <!-- 右: 単語共起ネットワーク -->
                         <div class="report-card">
                             <div class="report-card-title">
-                                <span>📊 意見全体の頻出単語 Top 8 ＆ 全体比特異語</span>
+                                <span>🌐 5-B. 単語共起ネットワーク（全体の話題構造）</span>
                                 <span class="report-card-sub-tag">全体状況</span>
                             </div>
-                            <table class="report-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 32px; text-align: center;">順位</th>
-                                        <th>抽出単語</th>
-                                        <th style="width: 58px; text-align: right;">出現件数</th>
-                                        <th style="width: 54px; text-align: right;">出現率</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${topWordsRows}
-                                </tbody>
-                            </table>
-                            ${oddsKeywordsHtml}
+                            <div class="report-chart-box" style="height: 44mm;">
+                                ${globalNetImg ? `<img src="${globalNetImg}" class="report-chart-img" alt="全体共起ネットワーク" />` : `<div class="report-no-chart">画像がありません</div>`}
+                            </div>
+                            <div class="report-hint-box" style="margin-top: 3px;">
+                                💡 キーワード関連意見全体で、どの単語とどの単語が同時に語られているかの文脈クラスタ・話題マップ
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- (6) 【属性ごとの状況】結びつきネットワーク（特徴語重視、頻度重視） -->
+                <!-- (6) 【全体状況】頻出・特異語彙 ＆ 意見分布構造（UMAP） -->
                 <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
                     <div class="report-sec-title">
-                        <span>👥 6. 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
+                        <span>📊 6. 【全体状況】頻出・特異語彙 ＆ 意見分布構造（UMAP） [属性毎ではない全体状況 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
-                    ${networkSectionHtml}
+
+                    <div class="report-dual-grid" style="flex: 1;">
+                        <!-- 左: 頻出単語表 ＆ 全体比特異語 -->
+                        <div class="report-card" style="justify-content: space-between;">
+                            <div>
+                                <div class="report-card-title">
+                                    <span>📊 6-A. 意見全体の頻出単語 Top 8 ＆ 全体比特異語</span>
+                                    <span class="report-card-sub-tag">全体状況</span>
+                                </div>
+                                <table class="report-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 30px; text-align: center;">順位</th>
+                                            <th>抽出単語</th>
+                                            <th style="width: 54px; text-align: right;">出現件数</th>
+                                            <th style="width: 50px; text-align: right;">出現率</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${topWordsRows}
+                                    </tbody>
+                                </table>
+                            </div>
+                            ${oddsKeywordsHtml}
+                        </div>
+
+                        <!-- 右: UMAP散布図 ＆ 主要クラスタ傾向表 -->
+                        <div class="report-card" style="justify-content: space-between;">
+                            <div>
+                                <div class="report-card-title">
+                                    <span>🌌 6-B. 発言の意味的類似度マップ（UMAP散布図 ＆ 主要クラスタ）</span>
+                                    <span class="report-card-sub-tag">全体状況</span>
+                                </div>
+                                <div class="report-chart-box" style="height: 35mm;">
+                                    ${images.umapImg ? `<img src="${images.umapImg}" class="report-chart-img" alt="UMAP散布図" />` : `<div class="report-no-chart">画像がありません</div>`}
+                                </div>
+                                ${clustersHtml}
+                            </div>
+                            <div class="report-hint-box" style="margin-top: 3px;">
+                                💡 各プロットは1件の発言を表し、距離が近い発言ほど意味・文脈が類似しています。
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- ページ2 フッター -->
@@ -1149,7 +1154,7 @@ const ReportGenerator = {
 
 
         // =========================================================================
-        // 📄 ページ3: 意見分布構造（UMAP） ＆ 属性クロス集計・考察 (3/3)
+        // 📄 ページ3: 属性情報とキーワード関連語の関係（セグメント深掘り・属性別集約） (3/3)
         // =========================================================================
         const page3 = `
             <div class="report-page" id="reportPage3">
@@ -1157,7 +1162,7 @@ const ReportGenerator = {
                 <div class="report-header">
                     <div class="report-header-main">
                         <div class="report-title-badge">FOCUS EXPLORER REPORT (3/3)</div>
-                        <h2 class="report-title">意見分布構造（UMAP） ＆ 属性クロス集計・考察</h2>
+                        <h2 class="report-title">属性情報とキーワード関連語の関係（属性別ネットワーク ＆ クロス分析）</h2>
                     </div>
                     <div class="report-header-meta">
                         <div><b>対象キーワード:</b> 🎯「${this.escape(data.targetKeyword)}」</div>
@@ -1165,46 +1170,37 @@ const ReportGenerator = {
                     </div>
                 </div>
 
-                <!-- (7) 意見分布 -->
-                <div class="report-section" style="margin-bottom: 6px;">
-                    <div class="report-sec-title">🌌 7. 意見分布構造（UMAP散布図 ＆ 話題クラスタ） [対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
-                    <div class="report-dual-grid">
-                        <!-- 左: UMAP散布図 -->
-                        <div class="report-card">
-                            <div class="report-card-title">発言の意味的類似度マップ（UMAP散布図）</div>
-                            <div class="report-chart-box" style="height: 50mm;">
-                                ${images.umapImg ? `<img src="${images.umapImg}" class="report-chart-img" alt="UMAP散布図" />` : `<div class="report-no-chart">画像がありません</div>`}
-                            </div>
-                            <div class="report-hint-box" style="margin-top: 4px;">
-                                💡 各プロットは1件の発言を表し、距離が近い発言ほど意味・文脈が類似しています。
-                            </div>
-                        </div>
-
-                        <!-- 右: クラスタ傾向表 -->
-                        <div class="report-card">
-                            <div class="report-card-title">主要な意見クラスタ傾向</div>
-                            ${clustersHtml}
-                        </div>
+                <!-- (7) 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） -->
+                <div class="report-section" style="margin-bottom: 5px;">
+                    <div class="report-sec-title">
+                        <span>👥 7. 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
+                    ${attrNetworkSectionHtml}
                 </div>
 
-                <!-- (8) 【属性ごとの状況】クロス集計 ＆ 属性項目ごとの代表的な意見 -->
+                <!-- (8) 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表的な意見 -->
                 <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
-                    <div class="report-sec-title">📈 8. 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表意見 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
+                    <div class="report-sec-title">
+                        <span>📈 8. 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表意見 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
+                    </div>
                     
-                    <!-- 上段: グラフ ＆ クロス集計詳細表 -->
-                    <div class="report-dual-grid" style="margin-bottom: 5px;">
+                    <!-- 中段: グラフ ＆ クロス集計詳細表 -->
+                    <div class="report-dual-grid" style="margin-bottom: 4px;">
                         <!-- 左: グラフ -->
                         <div class="report-card">
-                            <div class="report-card-title">属性「${this.escape(data.attrCol)}」別の言及傾向グラフ</div>
-                            <div class="report-chart-box" style="height: 36mm;">
+                            <div class="report-card-title">
+                                <span>📈 8-A. 属性「${this.escape(data.attrCol)}」別の言及傾向グラフ</span>
+                            </div>
+                            <div class="report-chart-box" style="height: 33mm;">
                                 ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
                             </div>
                         </div>
 
                         <!-- 右: クロス集計表 -->
                         <div class="report-card">
-                            <div class="report-card-title">属性クロス集計詳細表</div>
+                            <div class="report-card-title">
+                                <span>📋 8-B. 属性クロス集計詳細表</span>
+                            </div>
                             <table class="report-table">
                                 <thead>
                                     <tr>
@@ -1228,7 +1224,7 @@ const ReportGenerator = {
                     <!-- 下段: 属性項目ごとの代表的な意見（生の声） -->
                     <div class="report-attr-rep-wrap" style="flex: 1; display: flex; flex-direction: column; margin-top: 2px;">
                         <div class="report-sub-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-                            <span>💬 属性項目ごとの代表的な意見（生の声）:</span>
+                            <span>💬 8-C. 属性項目ごとの代表的な意見（生の声）:</span>
                             <span style="font-size: 8px; color: #64748b; font-weight: normal;">各属性カテゴリで最も適合度の高い代表的な発言を抜粋</span>
                         </div>
                         ${attrRepOpinionsHtml}
