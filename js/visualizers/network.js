@@ -158,7 +158,11 @@ const NetworkVisualizer = {
     resetZoom() {
         const width = this.canvas ? this.canvas.width : 800;
         const height = this.canvas ? this.canvas.height : 600;
-        this.scale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        if (this.networkMode === 'attr') {
+            this.scale = this.spacingMode === 'widest' ? 0.88 : (this.spacingMode === 'wide' ? 0.95 : 1.0);
+        } else {
+            this.scale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        }
         this.panX = (width * (1 - this.scale)) / 2;
         this.panY = (height * (1 - this.scale)) / 2;
         this.renderFrame();
@@ -377,7 +381,7 @@ const NetworkVisualizer = {
         this.canvas.width = width;
         this.canvas.height = height;
 
-        const baseScale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
+        const baseScale = this.spacingMode === 'widest' ? 0.88 : (this.spacingMode === 'wide' ? 0.95 : 1.0);
         this.scale = baseScale;
         this.panX = (width * (1 - this.scale)) / 2;
         this.panY = (height * (1 - this.scale)) / 2;
@@ -535,18 +539,9 @@ const NetworkVisualizer = {
         const nodeMap = new Map();
         const centerX = width / 2;
         const centerY = height / 2;
-        // 外周リング半径（横長4:3画面に合わせて楕円リングで全空間を最適活用）
-        const radiusRingX = width * (this.spacingMode === 'widest' ? 0.44 : (this.spacingMode === 'wide' ? 0.42 : 0.40));
-        const radiusRingY = height * (this.spacingMode === 'widest' ? 0.43 : (this.spacingMode === 'wide' ? 0.41 : 0.39));
 
-        // (1) 属性ノードの生成（外周楕円リング上に均等配置）
-        topAttrs.forEach((cat, idx) => {
-            const angle = (idx / topAttrs.length) * (Math.PI * 2) - Math.PI / 2;
-            const px = centerX + radiusRingX * Math.cos(angle);
-            const py = centerY + radiusRingY * Math.sin(angle);
-            const colorObj = this.ATTR_PALETTE[idx % this.ATTR_PALETTE.length];
-
-            // 属性名称の長さに応じた動的ピル幅の計算（見切れを防止し最大240pxまで柔軟に拡大）
+        // 属性ノードのバッジサイズを事前計測（ピル幅・高さ）
+        const attrMetrics = topAttrs.map(cat => {
             const fullText = `👥 ${cat} (${docsByAttr[cat].length})`;
             let calcWidth = 100;
             if (this.ctx && this.ctx.measureText) {
@@ -557,6 +552,33 @@ const NetworkVisualizer = {
             }
             const boxWidth = Math.max(96, Math.min(240, calcWidth));
             const boxHeight = 36;
+            return { cat, boxWidth, boxHeight };
+        });
+
+        // 画面の縁（キャンバス外枠）に近い部分へ配置するためのスーパー楕円フィッティング
+        // 単語ノードはすべて属性ノードの内側に配置されるため、属性ノードは外周の縁いっぱいまで押し出す
+        const marginX = isExport ? 22 : 16;
+        const marginY = isExport ? 22 : 16;
+        const pSuper = 2.8; // スーパー楕円指数（長方形の四隅まで自然かつ広々と拡大）
+        const edgeScale = this.spacingMode === 'widest' ? 0.98 : (this.spacingMode === 'wide' ? 0.96 : 0.94);
+
+        // (1) 属性ノードの生成（外周縁に沿ってスーパー楕円上に均等配置）
+        topAttrs.forEach((cat, idx) => {
+            const angle = (idx / topAttrs.length) * (Math.PI * 2) - Math.PI / 2;
+            const m = attrMetrics[idx];
+            const maxRx = (width / 2 - m.boxWidth / 2 - marginX) * edgeScale;
+            const maxRy = (height / 2 - m.boxHeight / 2 - marginY) * edgeScale;
+
+            const cosVal = Math.cos(angle);
+            const sinVal = Math.sin(angle);
+            const sgnCos = cosVal >= 0 ? 1 : -1;
+            const sgnSin = sinVal >= 0 ? 1 : -1;
+            const cosP = sgnCos * Math.pow(Math.abs(cosVal), 2 / pSuper);
+            const sinP = sgnSin * Math.pow(Math.abs(sinVal), 2 / pSuper);
+
+            const px = centerX + maxRx * cosP;
+            const py = centerY + maxRy * sinP;
+            const colorObj = this.ATTR_PALETTE[idx % this.ATTR_PALETTE.length];
 
             const attrNode = {
                 id: `attr_${cat}`,
@@ -572,8 +594,8 @@ const NetworkVisualizer = {
                 fx: px,
                 fy: py,
                 radius: 28,
-                boxWidth: boxWidth,
-                boxHeight: boxHeight,
+                boxWidth: m.boxWidth,
+                boxHeight: m.boxHeight,
                 color: colorObj.fill,
                 strokeColor: colorObj.stroke,
                 textColor: colorObj.text,
@@ -619,8 +641,8 @@ const NetworkVisualizer = {
             const tanY = dirX;
 
             const halfW = (an.boxWidth || 100) / 2;
-            // 属性ピルバッジの縁から内側に適度かつ十分なクリアランス（60px〜105px）
-            const baseInward = halfW * 0.38 + 65 * spacingFactor;
+            // 属性ピルバッジの縁から内側に適度かつ十分なクリアランス
+            const baseInward = halfW * 0.35 + 68 * spacingFactor;
 
             uWords.forEach((word, idx) => {
                 const row = idx % 2; // 2列千鳥配置で縦横の広がりをバランスよく分散
@@ -628,8 +650,8 @@ const NetworkVisualizer = {
                 const colCount = Math.ceil(count / 2);
                 const offsetCol = (col - (colCount - 1) / 2);
 
-                const spreadTan = offsetCol * (46 * spacingFactor);
-                const spreadRad = baseInward + row * (44 * spacingFactor);
+                const spreadTan = offsetCol * (48 * spacingFactor);
+                const spreadRad = baseInward + row * (46 * spacingFactor);
 
                 const posX = an.x + dirX * spreadRad + tanX * spreadTan;
                 const posY = an.y + dirY * spreadRad + tanY * spreadTan;
@@ -851,7 +873,7 @@ const NetworkVisualizer = {
                 const dist = Math.hypot(dx, dy) || 1;
 
                 const baseWordClearance = (s.boxWidth / 2) + 55;
-                const targetLen = t.isShared ? (195 * spacingFactor) : (Math.max(baseWordClearance, s.boxWidth * 0.35 + 75) * spacingFactor);
+                const targetLen = t.isShared ? (230 * spacingFactor) : (Math.max(baseWordClearance, s.boxWidth * 0.35 + 82) * spacingFactor);
                 const springForce = (dist - targetLen) * (t.isShared ? 0.05 : 0.04) * alpha;
 
                 t.vx -= (dx / dist) * springForce;
@@ -859,7 +881,7 @@ const NetworkVisualizer = {
             }
 
             // 5. 速度減衰と位置更新、画面内安全クランプ
-            const pad = 24;
+            const pad = 18;
             for (const wn of wordNodes) {
                 wn.vx *= 0.65;
                 wn.vy *= 0.65;
