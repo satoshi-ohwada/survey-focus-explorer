@@ -108,7 +108,8 @@ function setupUIEvents() {
     document.querySelectorAll('input[name="radioMatchMode"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             AppState.matchMode = e.target.value;
-            if (AppState.rawRows.length > 0 && AppState.targetKeyword) {
+            const currentKw = (document.getElementById('inputTargetKeyword')?.value || '').trim();
+            if (AppState.rawRows.length > 0 && currentKw && AppState.targetKeyword) {
                 executeFilteringAndRender(true);
             }
         });
@@ -118,7 +119,8 @@ function setupUIEvents() {
     document.querySelectorAll('input[name="radioExtractUnit"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
             AppState.extractUnit = e.target.value;
-            if (AppState.rawRows.length > 0 && AppState.targetKeyword) {
+            const currentKw = (document.getElementById('inputTargetKeyword')?.value || '').trim();
+            if (AppState.rawRows.length > 0 && currentKw && AppState.targetKeyword) {
                 executeFilteringAndRender(true);
             }
         });
@@ -473,20 +475,35 @@ function setupUIEvents() {
         await runFocusAnalysis();
     });
 
-    document.getElementById('inputTargetKeyword').addEventListener('keydown', (e) => {
+    const kwInputEl = document.getElementById('inputTargetKeyword');
+    kwInputEl.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             document.getElementById('btnRunFocus').click();
+        }
+    });
+    kwInputEl.addEventListener('input', (e) => {
+        const val = e.target.value.trim();
+        if (!val) {
+            AppState.targetKeyword = '';
+            AppState.resolvedTargetWord = '';
+            AppState.relatedWords = [];
+            const chipsContainer = document.getElementById('relatedChipsContainer');
+            if (chipsContainer) {
+                chipsContainer.innerHTML = '<span style="color: var(--text-muted); font-size: 13px;">注目したいキーワードを入力（または候補をクリック）し、右隣の「🚀 分析スタート」ボタンをクリックしてください</span>';
+            }
         }
     });
 
     // 関連語全選択 / 全解除
     document.getElementById('btnSelectAllRelated').addEventListener('click', () => {
+        if (!AppState.targetKeyword || !AppState.relatedWords.length) return;
         AppState.relatedWords.forEach(r => { r.checked = true; });
         renderRelatedChips();
         executeFilteringAndRender(true);
     });
 
     document.getElementById('btnDeselectAllRelated').addEventListener('click', () => {
+        if (!AppState.targetKeyword || !AppState.relatedWords.length) return;
         AppState.relatedWords.forEach(r => { r.checked = false; });
         renderRelatedChips();
         executeFilteringAndRender(true);
@@ -937,7 +954,7 @@ function loadParsedData(parsed) {
         document.getElementById('coveragePanel').style.display = 'none';
         const chipsContainer = document.getElementById('relatedChipsContainer');
         if (chipsContainer) {
-            chipsContainer.innerHTML = '<span style="color: var(--text-muted); font-size: 13px;">注目したいキーワードを入力（または候補をクリック）して「🚀 関連語を探索 ＆ 分析スタート」をクリックしてください</span>';
+            chipsContainer.innerHTML = '<span style="color: var(--text-muted); font-size: 13px;">注目したいキーワードを入力（または候補をクリック）し、右隣の「🚀 分析スタート」ボタンをクリックしてください</span>';
         }
     }
 }
@@ -1044,13 +1061,13 @@ function updateFocusRunButtons() {
 
     if (btnRun) {
         if (isFiltered) {
-            btnRun.innerHTML = `🚀 絞り込んだ ${filteredRows.length}件 で分析`;
+            btnRun.innerHTML = `🚀 絞り込んだ ${filteredRows.length}件 で分析スタート`;
             if (runHint) runHint.innerHTML = `※ 絞り込み条件（<b>${escapeHtml(filterDesc)}</b>）に合致した有効な <b>${filteredRows.length}件</b> を対象に分析します`;
         } else if (hasExcluded) {
-            btnRun.innerHTML = `🚀 有効な ${filteredRows.length}件 で分析`;
+            btnRun.innerHTML = `🚀 有効な ${filteredRows.length}件 で分析スタート`;
             if (runHint) runHint.innerHTML = `※ 空欄・定型無効等のノイズを除外した有効な <b>${filteredRows.length}件</b>（全${totalRaw}件中）を対象に分析します`;
         } else {
-            btnRun.innerHTML = `🚀 関連語を探索 ＆ 分析`;
+            btnRun.innerHTML = `🚀 関連語を探索 ＆ 分析スタート`;
             if (runHint) runHint.textContent = `※ 全 ${totalRaw} 件の有効データを対象に分析します`;
         }
     }
