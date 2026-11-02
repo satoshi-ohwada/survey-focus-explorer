@@ -408,7 +408,10 @@ const NetworkVisualizer = {
         // 上位属性（レポート出力時は過密防止のため上位最大6属性、画面表示時は最大8属性）
         const isExport = options.isExport || false;
         const maxAttrs = isExport ? 6 : 8;
-        const topAttrs = attrCategories.slice(0, maxAttrs);
+        let topAttrs = attrCategories.slice(0, maxAttrs);
+        if (typeof AttributeSorter !== 'undefined' && AttributeSorter.sort) {
+            topAttrs = AttributeSorter.sort(topAttrs.map(c => ({ category: c, matchedCount: (docsByAttr[c] || []).length }))).map(d => d.category);
+        }
 
         // 2. 単語集計と上位特徴語／頻度語の選出
         const targetLower = (targetKeyword || '').toLowerCase();

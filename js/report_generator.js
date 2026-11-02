@@ -365,8 +365,18 @@ const ReportGenerator = {
                     share: mShare
                 });
             });
-            // 言及率の高い順にソート
-            attrCrossTable.sort((a, b) => parseFloat(b.rate) - parseFloat(a.rate));
+            // 属性の自然順序（年代順・評価順等）または言及割合順（名義尺度）に自動ソート
+            if (typeof AttributeSorter !== 'undefined' && AttributeSorter.sort) {
+                const sorted = AttributeSorter.sort(attrCrossTable, 'rate');
+                attrCrossTable.length = 0;
+                attrCrossTable.push(...sorted);
+            } else if (typeof AttrChartVisualizer !== 'undefined' && AttrChartVisualizer.sortAttributeData) {
+                const sorted = AttrChartVisualizer.sortAttributeData(attrCrossTable, 'rate');
+                attrCrossTable.length = 0;
+                attrCrossTable.push(...sorted);
+            } else {
+                attrCrossTable.sort((a, b) => parseFloat(b.rate) - parseFloat(a.rate));
+            }
         }
 
         // 7. 主要な論点グループ（トピックサマリー）
