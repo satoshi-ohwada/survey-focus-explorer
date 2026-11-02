@@ -241,8 +241,8 @@ const ReportGenerator = {
                         AppState.attrCol,
                         AppState.targetKeyword,
                         { isFiltered, calcMode: AppState.attrCalcMode || 'rate' },
-                        imgW,
-                        imgH
+                        1000,
+                        480
                     );
                 }
 
@@ -253,8 +253,8 @@ const ReportGenerator = {
                     }
                     attrImg = await Plotly.toImage('attrChartContainer', {
                         format: 'png',
-                        width: imgW,
-                        height: imgH
+                        width: 1000,
+                        height: 480
                     });
                 }
             } catch (e) {
@@ -858,10 +858,10 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>🎯 7-A. 属性別 結びつき（特徴度重視・特有語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 44mm;">
+                        <div class="report-chart-box" style="height: 52mm;">
                             ${images.networkImgDistinct ? `<img src="${images.networkImgDistinct}" class="report-chart-img" alt="属性ネットワーク(特徴度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
-                        <div class="report-hint-box" style="margin-top: 3px;">
+                        <div class="report-hint-box" style="margin-top: 2px; padding: 2.5px 6px; font-size: 8px; line-height: 1.25;">
                             💡 <b>特有語の発見:</b> 他の属性と比べて突出して使われた単語を結びつけ、セグメント特有の悩みや独自関心をあぶり出します。
                         </div>
                     </div>
@@ -871,10 +871,10 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>📊 7-B. 属性別 結びつき（頻度重視・高頻度語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 44mm;">
+                        <div class="report-chart-box" style="height: 52mm;">
                             ${images.networkImgFreq ? `<img src="${images.networkImgFreq}" class="report-chart-img" alt="属性ネットワーク(頻度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
-                        <div class="report-hint-box" style="margin-top: 3px;">
+                        <div class="report-hint-box" style="margin-top: 2px; padding: 2.5px 6px; font-size: 8px; line-height: 1.25;">
                             💡 <b>共通語・ボリュームの把握:</b> 各属性で出現回数の多い単語を結びつけ、全体に共通する基本ニーズや関心規模を把握します。
                         </div>
                     </div>
@@ -1285,7 +1285,7 @@ const ReportGenerator = {
                             <div class="report-card-title">
                                 <span>📈 8-A. 属性「${this.escape(data.attrCol)}」別の言及傾向グラフ</span>
                             </div>
-                            <div class="report-chart-box" style="height: 30mm;">
+                            <div class="report-chart-box" style="height: 38mm;">
                                 ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
                             </div>
                         </div>

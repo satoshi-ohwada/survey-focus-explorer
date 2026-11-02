@@ -188,20 +188,52 @@ const AttrChartVisualizer = {
     /**
      * エクスポート用高解像度画像の取得（DOM表示状態に依存しない）
      */
-    async getExportImage(targetRows, matchedDocs, attrCol, targetKeyword, options = {}, targetW = 1200, targetH = 900) {
+    async getExportImage(targetRows, matchedDocs, attrCol, targetKeyword, options = {}, targetW = 1000, targetH = 480) {
         if (typeof Plotly === 'undefined') return '';
         const plotData = this.buildPlotData(targetRows, matchedDocs, attrCol, targetKeyword, options);
         if (!plotData) return '';
 
+        // レポート・印刷用に文字を大きく鮮明にしたエクスポート用トレース＆レイアウト
+        const exportTrace = {
+            ...plotData.trace,
+            textfont: {
+                size: 20,
+                color: '#ffffff',
+                family: '"Noto Sans JP", sans-serif'
+            }
+        };
+
         const exportLayout = {
             ...plotData.layout,
             width: targetW,
-            height: targetH
+            height: targetH,
+            font: {
+                family: '"Noto Sans JP", sans-serif',
+                size: 19,
+                color: '#1e293b'
+            },
+            title: {
+                text: (plotData.layout.title && plotData.layout.title.text) ? plotData.layout.title.text : '',
+                font: { size: 21, color: '#0f172a' }
+            },
+            margin: { l: 140, r: 40, t: 45, b: 55 },
+            xaxis: {
+                ...plotData.layout.xaxis,
+                title: {
+                    text: (plotData.layout.xaxis && plotData.layout.xaxis.title) ? plotData.layout.xaxis.title : '',
+                    font: { size: 19, color: '#475569' }
+                },
+                tickfont: { size: 18, color: '#334155' }
+            },
+            yaxis: {
+                ...plotData.layout.yaxis,
+                tickfont: { size: 21, color: '#0f172a' }
+            }
         };
 
         try {
             return await Plotly.toImage({
-                data: [plotData.trace],
+                data: [exportTrace],
                 layout: exportLayout
             }, {
                 format: 'png',

@@ -1184,16 +1184,19 @@ const NetworkVisualizer = {
         this.nodes.forEach(node => {
             const isTarget = this.isTargetNode(node.id);
             const isRelated = relatedSet.has(node.id.toLowerCase());
-            const fSize = isTarget ? fCfg.target : (isRelated ? fCfg.related : fCfg.other);
+            const baseFSize = isTarget ? fCfg.target : (isRelated ? fCfg.related : fCfg.other);
+            // エクスポート（印刷・レポート）時は縮小表示でもクッキリ読めるよう文字サイズを拡大
+            const fSize = isExport ? Math.round(baseFSize * 1.6) : baseFSize;
 
             ctx.font = `bold ${fSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
 
             const textMargin = Math.max(6, Math.round(fSize * 0.38));
-            const textY = node.y + node.radius + textMargin;
+            const nodeRadius = isExport ? (node.radius * 1.25) : node.radius;
+            const textY = node.y + nodeRadius + textMargin;
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = Math.max(4, Math.round(fSize * 0.32));
+            ctx.lineWidth = Math.max(4, Math.round(fSize * (isExport ? 0.38 : 0.32)));
             ctx.strokeText(node.id, node.x, textY);
             ctx.fillStyle = isTarget ? '#9f1239' : (isRelated ? '#0369a1' : '#1e293b');
             ctx.fillText(node.id, node.x, textY);
@@ -1307,7 +1310,7 @@ const NetworkVisualizer = {
             ctx.restore();
         }
 
-        this.drawLegend(ctx, w, h);
+        this.drawLegend(ctx, w, h, isExport);
     },
 
     /**
@@ -1336,6 +1339,7 @@ const NetworkVisualizer = {
 
         // 1. エッジ描画
         const maxWeight = Math.max(...this.edges.map(e => e.weight), 1);
+        const edgeScale = isExport ? 1.5 : 1.0;
 
         this.edges.forEach(e => {
             const isConnectedToHover = !isExport && this.hoverNode &&
@@ -1345,9 +1349,10 @@ const NetworkVisualizer = {
                 ? (isConnectedToHover ? 0.95 : 0.05)
                 : 0.35 + (e.weight / maxWeight) * 0.40;
 
-            const lineWidth = (!isExport && this.hoverNode && isConnectedToHover)
+            const baseLineWidth = (!isExport && this.hoverNode && isConnectedToHover)
                 ? Math.min(5.0, 2.0 + (e.weight / maxWeight) * 3.5)
                 : Math.min(3.2, 1.2 + (e.weight / maxWeight) * 2.0);
+            const lineWidth = baseLineWidth * edgeScale;
 
             ctx.globalAlpha = alpha;
             ctx.lineWidth = lineWidth;
@@ -1367,16 +1372,18 @@ const NetworkVisualizer = {
                     (e.target.id === this.hoverNode.id && e.source.id === node.id)
                 ));
 
-            const fSize = node.isShared ? 14 : 12.5;
+            // エクスポート（印刷・レポート）時は縮小表示でもクッキリ読めるよう文字サイズを大幅拡大
+            const fSize = isExport ? (node.isShared ? 25 : 22) : (node.isShared ? 14 : 12.5);
             ctx.font = `bold ${fSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
 
-            const textY = node.y + node.radius + 5;
+            const nodeRadius = isExport ? (node.radius * 1.3) : node.radius;
+            const textY = node.y + nodeRadius + (isExport ? 7 : 5);
             ctx.save();
             ctx.lineJoin = 'round';
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.96)';
-            ctx.lineWidth = 5.0;
+            ctx.lineWidth = isExport ? 7.5 : 5.0;
             ctx.strokeText(node.label, node.x, textY);
             ctx.fillStyle = node.isShared ? '#312E81' : (isConnectedToHover ? '#1D4ED8' : '#0F172A');
             ctx.fillText(node.label, node.x, textY);
@@ -1391,21 +1398,23 @@ const NetworkVisualizer = {
                     (e.target.id === this.hoverNode.id && e.source.id === node.id)
                 ));
 
+            const nodeRadius = isExport ? (node.radius * 1.3) : node.radius;
+
             // 円本体
             ctx.beginPath();
-            ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+            ctx.arc(node.x, node.y, nodeRadius, 0, Math.PI * 2);
             ctx.fillStyle = isConnectedToHover ? '#2563EB' : node.color;
             ctx.fill();
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = isExport ? 3.5 : 2.5;
             ctx.stroke();
 
             // 共通語（複数属性に接続）の場合はアクセント外周リング
             if (node.isShared) {
                 ctx.beginPath();
-                ctx.arc(node.x, node.y, node.radius + 3.8, 0, Math.PI * 2);
+                ctx.arc(node.x, node.y, nodeRadius + (isExport ? 5.0 : 3.8), 0, Math.PI * 2);
                 ctx.strokeStyle = isConnectedToHover ? '#1D4ED8' : '#F59E0B'; // ゴールドリング
-                ctx.lineWidth = 2.2;
+                ctx.lineWidth = isExport ? 3.2 : 2.2;
                 ctx.stroke();
             }
         });
@@ -1413,8 +1422,9 @@ const NetworkVisualizer = {
         // 4. 属性ノード（第3層: 最前面のピル型カプセルバッジ）
         this.nodes.filter(n => n.isAttrNode).forEach(node => {
             const isHover = !isExport && this.hoverNode && this.hoverNode.id === node.id;
-            const wBox = node.boxWidth || 100;
-            const hBox = node.boxHeight || 36;
+            const badgeScale = isExport ? 1.45 : 1.0;
+            const wBox = (node.boxWidth || 100) * badgeScale;
+            const hBox = (node.boxHeight || 36) * badgeScale;
             const xBox = node.x - wBox / 2;
             const yBox = node.y - hBox / 2;
             const rCorner = hBox / 2; // 端が完全に丸いピル（カプセル）型
@@ -1422,9 +1432,9 @@ const NetworkVisualizer = {
             // ドロップシャドウ
             ctx.save();
             ctx.shadowColor = isHover ? 'rgba(37, 99, 235, 0.45)' : 'rgba(15, 23, 42, 0.16)';
-            ctx.shadowBlur = isHover ? 12 : 5;
+            ctx.shadowBlur = isHover ? 12 : (isExport ? 8 : 5);
             ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = isHover ? 3 : 2;
+            ctx.shadowOffsetY = isHover ? 3 : (isExport ? 3 : 2);
 
             // ピル型塗りつぶし
             ctx.beginPath();
@@ -1445,15 +1455,16 @@ const NetworkVisualizer = {
                 ctx.rect(xBox, yBox, wBox, hBox);
             }
             ctx.strokeStyle = isHover ? '#FFFFFF' : (node.strokeColor || '#FFFFFF');
-            ctx.lineWidth = isHover ? 2.8 : 2.0;
+            ctx.lineWidth = isHover ? 2.8 : (isExport ? 3.0 : 2.0);
             ctx.stroke();
 
             // テキストラベル「👥 {label} ({count})」の見切れ防止スケーリング
             const fullText = `👥 ${node.label} (${node.docCount})`;
-            let fSize = 12;
+            let fSize = isExport ? 20 : 12;
             ctx.font = `bold ${fSize}px sans-serif`;
-            const maxTextW = wBox - 22;
-            while (ctx.measureText(fullText).width > maxTextW && fSize > 9.0) {
+            const maxTextW = wBox - (isExport ? 28 : 22);
+            const minFSize = isExport ? 14.0 : 9.0;
+            while (ctx.measureText(fullText).width > maxTextW && fSize > minFSize) {
                 fSize -= 0.5;
                 ctx.font = `bold ${fSize}px sans-serif`;
             }
@@ -1522,97 +1533,113 @@ const NetworkVisualizer = {
         }
 
         // 6. 属性ネットワーク用ヘッダー・凡例・ガイドの描画（画面固定座標）
-        this.drawAttrLegend(ctx, w, h);
+        this.drawAttrLegend(ctx, w, h, isExport);
     },
 
     /**
      * 属性ネットワーク用の凡例・ガイド描画
+     * レポート／画像エクスポート時は縮小表示でもハッキリ読めるサイズにスケールアップ
      */
-    drawAttrLegend(ctx, w, h) {
+    drawAttrLegend(ctx, w, h, isExport = false) {
         ctx.save();
 
+        const titleScale = isExport ? 1.7 : 1.0;
+
         // (1) 左上タイトルバッジ
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
         ctx.strokeStyle = '#CBD5E1';
-        ctx.lineWidth = 1;
-        const badgeW = 340;
-        const badgeH = 54;
+        ctx.lineWidth = isExport ? 1.8 : 1;
+        const badgeW = isExport ? 540 : 340;
+        const badgeH = isExport ? 82 : 54;
+        const padX = isExport ? 20 : 14;
+        const padY = isExport ? 18 : 14;
         ctx.beginPath();
         if (ctx.roundRect) {
-            ctx.roundRect(14, 14, badgeW, badgeH, 6);
+            ctx.roundRect(padX, padY, badgeW, badgeH, isExport ? 8 : 6);
         } else {
-            ctx.rect(14, 14, badgeW, badgeH);
+            ctx.rect(padX, padY, badgeW, badgeH);
         }
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = '#1E293B';
-        ctx.font = 'bold 12.5px sans-serif';
+        ctx.font = isExport ? 'bold 20px sans-serif' : 'bold 12.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         const kwPart = this.targetKeyword ? ` [対象: 🎯${this.targetKeyword}]` : '';
-        ctx.fillText(`👥 属性別 結びつき (${this.attrColName || '属性'})${kwPart}`, 22, 19);
+        ctx.fillText(`👥 属性別 結びつき (${this.attrColName || '属性'})${kwPart}`, padX + (isExport ? 14 : 8), padY + (isExport ? 8 : 5));
 
         const metricBadge = this.attrMetric === 'distinct' ? '🎯 特徴度重視（特有語）' : '📊 頻度重視（高頻度語）';
         ctx.fillStyle = this.attrMetric === 'distinct' ? '#2563EB' : '#475569';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.fillText(`選出基準: ${metricBadge}`, 22, 34);
+        ctx.font = isExport ? 'bold 17px sans-serif' : 'bold 11px sans-serif';
+        ctx.fillText(`選出基準: ${metricBadge}`, padX + (isExport ? 14 : 8), padY + (isExport ? 32 : 20));
 
         ctx.fillStyle = '#64748B';
-        ctx.font = '9.5px sans-serif';
+        ctx.font = isExport ? '14px sans-serif' : '9.5px sans-serif';
         const subGuide = this.attrMetric === 'distinct'
             ? '※ 外側は他属性と比べて突出して使われた特有語、中央は複数属性共通の特有語'
             : '※ 中央は複数属性の共通話題、外側は属性ごとの高頻度語';
-        ctx.fillText(subGuide, 22, 48);
+        ctx.fillText(subGuide, padX + (isExport ? 14 : 8), padY + (isExport ? 55 : 34));
 
         // (2) 右上凡例
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
         ctx.strokeStyle = '#CBD5E1';
-        ctx.lineWidth = 1;
-        const legW = 210;
-        const legH = 46;
-        const legX = w - legW - 14;
+        ctx.lineWidth = isExport ? 1.8 : 1;
+        const legW = isExport ? 310 : 210;
+        const legH = isExport ? 62 : 46;
+        const legX = w - legW - padX;
         ctx.beginPath();
         if (ctx.roundRect) {
-            ctx.roundRect(legX, 14, legW, legH, 6);
+            ctx.roundRect(legX, padY, legW, legH, isExport ? 8 : 6);
         } else {
-            ctx.rect(legX, 14, legW, legH);
+            ctx.rect(legX, padY, legW, legH);
         }
         ctx.fill();
         ctx.stroke();
 
         // 凡例アイコン1: 属性ノード
         ctx.fillStyle = '#2563EB';
+        const icon1W = isExport ? 26 : 18;
+        const icon1H = isExport ? 18 : 12;
+        const icon1Y = padY + (isExport ? 12 : 6);
         if (ctx.roundRect) {
             ctx.beginPath();
-            ctx.roundRect(legX + 10, 20, 18, 12, 3);
+            ctx.roundRect(legX + (isExport ? 14 : 10), icon1Y, icon1W, icon1H, 4);
             ctx.fill();
         } else {
-            ctx.fillRect(legX + 10, 20, 18, 12);
+            ctx.fillRect(legX + (isExport ? 14 : 10), icon1Y, icon1W, icon1H);
         }
         ctx.fillStyle = '#334155';
-        ctx.font = '11px sans-serif';
+        ctx.font = isExport ? 'bold 16px sans-serif' : '11px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText('属性グループ', legX + 34, 26);
+        ctx.fillText('属性グループ', legX + (isExport ? 46 : 34), icon1Y + icon1H / 2);
 
         // 凡例アイコン2: 共通語（ゴールド二重丸）
+        const icon2X = legX + (isExport ? 175 : 120);
+        const icon2Y = icon1Y + icon1H / 2;
         ctx.beginPath();
-        ctx.arc(legX + 120, 26, 6, 0, Math.PI * 2);
+        ctx.arc(icon2X, icon2Y, isExport ? 8.5 : 6, 0, Math.PI * 2);
         ctx.fillStyle = '#4F46E5';
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(legX + 120, 26, 8.5, 0, Math.PI * 2);
+        ctx.arc(icon2X, icon2Y, isExport ? 12.0 : 8.5, 0, Math.PI * 2);
         ctx.strokeStyle = '#F59E0B';
-        ctx.lineWidth = 1.5;
+        ctx.lineWidth = isExport ? 2.2 : 1.5;
         ctx.stroke();
         ctx.fillStyle = '#334155';
         const sharedLabel = this.attrMetric === 'distinct' ? '共通特徴語' : '共通語';
-        ctx.fillText(sharedLabel, legX + 135, 26);
+        ctx.fillText(sharedLabel, icon2X + (isExport ? 20 : 15), icon2Y);
 
-        ctx.fillStyle = '#64748B';
-        ctx.font = '10px sans-serif';
-        ctx.fillText('💡 ノードクリックで詳細を表示', legX + 10, 44);
+        if (!isExport) {
+            ctx.fillStyle = '#64748B';
+            ctx.font = '10px sans-serif';
+            ctx.fillText('💡 ノードクリックで詳細を表示', legX + 10, padY + 30);
+        } else {
+            ctx.fillStyle = '#64748B';
+            ctx.font = '13px sans-serif';
+            ctx.fillText('線幅: 単語の出現回数・共起強度', legX + 14, padY + 44);
+        }
 
         ctx.restore();
     },
@@ -1761,21 +1788,21 @@ const NetworkVisualizer = {
      * 図との重なりを防止するため、内容を最小限に凝縮し、
      * 最もノードと干渉しにくい左下隅にスリムなインラインバッジバーとして配置
      */
-    drawLegend(ctx, w, h) {
+    drawLegend(ctx, w, h, isExport = false) {
         ctx.save();
 
         // (1) 左上タイトルバッジ（対象キーワード明記）
         if (this.targetKeyword) {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
             ctx.strokeStyle = '#CBD5E1';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = isExport ? 1.8 : 1;
             const kwLabel = `🌐 単語共起ネットワーク [対象: 🎯${this.targetKeyword}]`;
-            ctx.font = 'bold 12px sans-serif';
-            const badgeW = Math.max(220, ctx.measureText(kwLabel).width + 22);
-            const badgeH = 28;
+            ctx.font = isExport ? 'bold 19px sans-serif' : 'bold 12px sans-serif';
+            const badgeW = Math.max(isExport ? 360 : 220, ctx.measureText(kwLabel).width + (isExport ? 32 : 22));
+            const badgeH = isExport ? 42 : 28;
             ctx.beginPath();
             if (ctx.roundRect) {
-                ctx.roundRect(14, 14, badgeW, badgeH, 6);
+                ctx.roundRect(14, 14, badgeW, badgeH, isExport ? 8 : 6);
             } else {
                 ctx.rect(14, 14, badgeW, badgeH);
             }
@@ -1785,10 +1812,10 @@ const NetworkVisualizer = {
             ctx.fillStyle = '#1E293B';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(kwLabel, 22, 14 + badgeH / 2);
+            ctx.fillText(kwLabel, isExport ? 26 : 22, 14 + badgeH / 2);
         }
 
-        ctx.font = '10.5px sans-serif';
+        ctx.font = isExport ? 'bold 15px sans-serif' : '10.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
 
@@ -1827,17 +1854,17 @@ const NetworkVisualizer = {
         let totalContentW = 0;
         const itemWidths = items.map(item => {
             let itemW = 0;
-            if (item.type === 'target') itemW = 14 + ctx.measureText(item.label).width;
-            else if (item.type === 'related') itemW = 14 + ctx.measureText(item.label).width;
-            else if (item.type === 'multi-dots') itemW = 26 + ctx.measureText(item.label).width;
-            else if (item.type === 'edge-direct' || item.type === 'edge-sub') itemW = 22 + ctx.measureText(item.label).width;
-            else itemW = 13 + ctx.measureText(item.label).width;
-            totalContentW += itemW + 10;
+            const iconW = isExport ? 20 : 14;
+            if (item.type === 'target' || item.type === 'related') itemW = iconW + ctx.measureText(item.label).width;
+            else if (item.type === 'multi-dots') itemW = (isExport ? 36 : 26) + ctx.measureText(item.label).width;
+            else if (item.type === 'edge-direct' || item.type === 'edge-sub') itemW = (isExport ? 30 : 22) + ctx.measureText(item.label).width;
+            else itemW = (isExport ? 18 : 13) + ctx.measureText(item.label).width;
+            totalContentW += itemW + (isExport ? 14 : 10);
             return itemW;
         });
 
-        const boxPadX = 10;
-        const boxH = 26;
+        const boxPadX = isExport ? 16 : 10;
+        const boxH = isExport ? 40 : 26;
         const boxW = Math.min(w - 28, totalContentW + boxPadX * 2 - 2);
 
         // 左下隅に配置（ネットワーク図の中心から離れ、最も重なりにくいエリア）
@@ -1845,11 +1872,11 @@ const NetworkVisualizer = {
         const y = h - boxH - 12;
 
         // 背景プレート（半透明白＋淡いボーダー）
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
-        ctx.strokeStyle = 'rgba(203, 213, 225, 0.85)';
-        ctx.lineWidth = 1;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.94)';
+        ctx.strokeStyle = 'rgba(203, 213, 225, 0.95)';
+        ctx.lineWidth = isExport ? 1.5 : 1;
         ctx.beginPath();
-        ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, 6) : ctx.rect(x, y, boxW, boxH);
+        ctx.roundRect ? ctx.roundRect(x, y, boxW, boxH, isExport ? 8 : 6) : ctx.rect(x, y, boxW, boxH);
         ctx.fill();
         ctx.stroke();
 
@@ -1858,32 +1885,33 @@ const NetworkVisualizer = {
         const midY = y + boxH / 2;
 
         items.forEach((item, idx) => {
+            const rad = isExport ? 6.5 : 4.5;
             if (item.type === 'target') {
                 ctx.beginPath();
-                ctx.arc(curX + 5, midY, 4.5, 0, Math.PI * 2);
+                ctx.arc(curX + rad, midY, rad, 0, Math.PI * 2);
                 ctx.fillStyle = item.color;
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(curX + 5, midY, 6.5, 0, Math.PI * 2);
+                ctx.arc(curX + rad, midY, rad + (isExport ? 2.5 : 2.0), 0, Math.PI * 2);
                 ctx.strokeStyle = '#f43f5e';
-                ctx.lineWidth = 1.2;
+                ctx.lineWidth = isExport ? 1.6 : 1.2;
                 ctx.stroke();
 
                 ctx.fillStyle = '#334155';
-                ctx.fillText(item.label, curX + 14, midY);
+                ctx.fillText(item.label, curX + rad * 2 + (isExport ? 8 : 5), midY);
             } else if (item.type === 'related') {
                 ctx.beginPath();
-                ctx.arc(curX + 5, midY, 4, 0, Math.PI * 2);
+                ctx.arc(curX + rad, midY, rad - 0.5, 0, Math.PI * 2);
                 ctx.fillStyle = '#64748b';
                 ctx.fill();
                 ctx.beginPath();
-                ctx.arc(curX + 5, midY, 5.8, 0, Math.PI * 2);
+                ctx.arc(curX + rad, midY, rad + (isExport ? 2.0 : 1.8), 0, Math.PI * 2);
                 ctx.strokeStyle = '#0284c7';
-                ctx.lineWidth = 1.4;
+                ctx.lineWidth = isExport ? 1.8 : 1.4;
                 ctx.stroke();
 
                 ctx.fillStyle = '#334155';
-                ctx.fillText(item.label, curX + 14, midY);
+                ctx.fillText(item.label, curX + rad * 2 + (isExport ? 8 : 5), midY);
             } else if (item.type === 'multi-dots') {
                 item.colors.forEach((c, cIdx) => {
                     ctx.beginPath();
