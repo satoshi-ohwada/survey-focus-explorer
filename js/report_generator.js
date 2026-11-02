@@ -845,7 +845,7 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>🎯 7-A. 属性別 結びつき（特徴度重視・特有語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 55mm;">
+                        <div class="report-chart-box" style="height: 58mm;">
                             ${images.networkImgDistinct ? `<img src="${images.networkImgDistinct}" class="report-chart-img" alt="属性ネットワーク(特徴度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
                         <div class="report-hint-box" style="margin-top: 2px; padding: 2px 6px; font-size: 8px; line-height: 1.25;">
@@ -858,7 +858,7 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>📊 7-B. 属性別 結びつき（頻度重視・高頻度語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 55mm;">
+                        <div class="report-chart-box" style="height: 58mm;">
                             ${images.networkImgFreq ? `<img src="${images.networkImgFreq}" class="report-chart-img" alt="属性ネットワーク(頻度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
                         <div class="report-hint-box" style="margin-top: 2px; padding: 2.5px 6px; font-size: 8px; line-height: 1.25;">
@@ -1151,7 +1151,7 @@ const ReportGenerator = {
                                 <span>☁️ 5-A. 意見全体の頻出語（ワードクラウド）</span>
                                 <span class="report-card-sub-tag">全体状況</span>
                             </div>
-                            <div class="report-chart-box" style="height: 56mm;">
+                            <div class="report-chart-box" style="height: 58mm;">
                                 ${images.cloudImg ? `<img src="${images.cloudImg}" class="report-chart-img" alt="ワードクラウド" />` : `<div class="report-no-chart">画像がありません</div>`}
                             </div>
                             <div class="report-hint-box" style="margin-top: 3px;">
@@ -1165,7 +1165,7 @@ const ReportGenerator = {
                                 <span>🌐 5-B. 単語共起ネットワーク（全体の話題構造）</span>
                                 <span class="report-card-sub-tag">全体状況</span>
                             </div>
-                            <div class="report-chart-box" style="height: 56mm;">
+                            <div class="report-chart-box" style="height: 58mm;">
                                 ${globalNetImg ? `<img src="${globalNetImg}" class="report-chart-img" alt="全体共起ネットワーク" />` : `<div class="report-no-chart">画像がありません</div>`}
                             </div>
                             <div class="report-hint-box" style="margin-top: 3px;">

@@ -1719,25 +1719,35 @@ const NetworkVisualizer = {
         let minY = Infinity, maxY = -Infinity;
 
         this.nodes.forEach(n => {
-            const padX = n.isAttrNode
-                ? (((n.boxWidth || 100) * 1.5) / 2 + 18)
-                : (n.radius * 1.3 + Math.max(30, (n.label || n.id || '').length * 10));
-            const padY = n.isAttrNode
-                ? (((n.boxHeight || 36) * 1.5) / 2 + 18)
-                : (n.radius * 1.3 + 38);
-            if (n.x - padX < minX) minX = n.x - padX;
-            if (n.x + padX > maxX) maxX = n.x + padX;
-            if (n.y - padY < minY) minY = n.y - padY;
-            if (n.y + padY > maxY) maxY = n.y + padY;
+            let padLeft = 0, padRight = 0, padTop = 0, padBottom = 0;
+            if (n.isAttrNode) {
+                // 属性バッジ（エクスポート時は 1.45 倍スケールで中央配置）
+                const halfW = ((n.boxWidth || 100) * 1.45) / 2;
+                const halfH = ((n.boxHeight || 36) * 1.45) / 2;
+                padLeft = padRight = halfW + 8;
+                padTop = padBottom = halfH + 8;
+            } else {
+                // 単語ノード（円＋下部テキスト）
+                const r = (n.radius || 14) * 1.3;
+                const textHalfW = Math.max(16, ((n.label || n.id || '').length * 13) / 2 + 4);
+                padLeft = padRight = Math.max(r, textHalfW);
+                padTop = r + 4;
+                padBottom = r + 24; // テキストラベルはノード円の下側に配置される
+            }
+
+            if (n.x - padLeft < minX) minX = n.x - padLeft;
+            if (n.x + padRight > maxX) maxX = n.x + padRight;
+            if (n.y - padTop < minY) minY = n.y - padTop;
+            if (n.y + padBottom > maxY) maxY = n.y + padBottom;
         });
 
         const bboxW = Math.max(100, maxX - minX);
         const bboxH = Math.max(100, maxY - minY);
 
-        // 周囲マージン（エクスポート時の大文字バッジや凡例に配慮し安全マージンを確保）
-        const marginX = 55;
-        const marginTop = 58;
-        const marginBottom = 62;
+        // 周囲マージン（余白を最小化してグラフをキャンバスいっぱいに大きくフィット）
+        const marginX = 22;
+        const marginTop = 20;
+        const marginBottom = 22;
 
         const availW = targetW - marginX * 2;
         const availH = targetH - (marginTop + marginBottom);
