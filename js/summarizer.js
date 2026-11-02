@@ -172,7 +172,7 @@ const OpinionSummarizer = {
 
         // 特徴語のIDF算出
         featureWords.forEach(w => {
-            const df = (subcorpusStats.docFreq && subcorpusStats.docFreq[w]) ? subcorpusStats.docFreq[w] : 1;
+            const df = (subcorpusStats && subcorpusStats.docFreq && subcorpusStats.docFreq[w]) ? subcorpusStats.docFreq[w] : 1;
             idfMap.set(w, Math.log((D + 1) / (df + 0.5)) + 1);
         });
 
@@ -395,7 +395,7 @@ const OpinionSummarizer = {
 
             // 主な意見タイプの割り出し
             const sortedTypes = Object.entries(cl.opinionTypeCounts).sort((a, b) => b[1] - a[1]);
-            const primaryType = sortedTypes[0][0];
+            const primaryType = (sortedTypes && sortedTypes.length > 0 && sortedTypes[0]) ? sortedTypes[0][0] : 'neutral';
 
             topicSummaries.push({
                 topicId: cIdx + 1,

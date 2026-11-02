@@ -12,7 +12,6 @@
  */
 const ReportGenerator = {
     modalId: 'reportPreviewModal',
-    memoText: '',
 
     init() {
         this.bindEvents();
@@ -90,20 +89,6 @@ const ReportGenerator = {
             if (modal) {
                 modal.style.display = 'flex';
                 document.body.style.overflow = 'hidden'; // 背景スクロール固定
-            }
-
-            // メモ入力欄のリアルタイム反映イベント
-            const memoTextarea = document.getElementById('reportInputMemo');
-            const memoPrintView = document.getElementById('reportPrintMemo');
-            if (memoTextarea && memoPrintView) {
-                if (this.memoText) {
-                    memoTextarea.value = this.memoText;
-                    memoPrintView.textContent = this.memoText;
-                }
-                memoTextarea.addEventListener('input', (e) => {
-                    this.memoText = e.target.value;
-                    memoPrintView.textContent = e.target.value || '（特記事項なし）';
-                });
             }
 
         } catch (err) {

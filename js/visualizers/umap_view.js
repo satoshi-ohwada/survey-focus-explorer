@@ -1043,8 +1043,8 @@ const UmapVisualizer = {
         const availH = height - padY * 2;
 
         this.points.forEach(p => {
-            p.screenX = padX + ((p.rawX - minX) / rangeX) * availW;
-            p.screenY = padY + ((p.rawY - minY) / rangeY) * availH;
+            p.screenX = maxX === minX ? width / 2 : padX + ((p.rawX - minX) / rangeX) * availW;
+            p.screenY = maxY === minY ? height / 2 : padY + ((p.rawY - minY) / rangeY) * availH;
         });
     },
 

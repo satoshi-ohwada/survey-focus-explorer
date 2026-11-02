@@ -2865,8 +2865,9 @@ function renderSummaryDashboard() {
                 let repOpinionsHtml = '';
                 if (topic.representativeOpinions && topic.representativeOpinions.length > 0) {
                     const items = topic.representativeOpinions.slice(0, 3).map((op, idx) => {
-                        const cleanText = op.text.length > 80 ? op.text.substring(0, 80) + '…' : op.text;
-                        const attrPart = op.attribute ? `<span class="topic-rep-attr">👥 ${escapeHtml(op.attribute)}</span>` : '';
+                        const rawText = (op && op.text != null) ? String(op.text).trim() : '';
+                        const cleanText = rawText.length > 80 ? rawText.substring(0, 80) + '…' : rawText;
+                        const attrPart = (op && op.attribute) ? `<span class="topic-rep-attr">👥 ${escapeHtml(op.attribute)}</span>` : '';
                         return `
                             <div class="topic-rep-item">
                                 <div class="topic-rep-item-header">

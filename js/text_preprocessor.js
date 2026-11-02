@@ -406,9 +406,10 @@ const TextPreprocessor = {
         const docFreq = {};
 
         for (let i = 0; i < docCount; i++) {
-            const text = String(rawRows[i][textCol] || '');
+            const row = rawRows[i];
+            const text = (row && textCol && row[textCol] != null) ? String(row[textCol]) : '';
             totalChars += text.length;
-            const tokens = tokensPerDoc[i] || [];
+            const tokens = (tokensPerDoc && tokensPerDoc[i]) ? tokensPerDoc[i] : [];
             totalTokens += tokens.length;
             const seenInDoc = new Set();
             for (const t of tokens) {
