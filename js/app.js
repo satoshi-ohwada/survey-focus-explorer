@@ -2860,9 +2860,33 @@ function renderSummaryDashboard() {
                 card.className = 'topic-card';
 
                 const kwTags = topic.keywords.map(kw => `<span class="topic-keyword-tag">${escapeHtml(kw)}</span>`).join('');
-                const repText = (topic.representativeOpinions && topic.representativeOpinions.length > 0)
-                    ? `「${escapeHtml(topic.representativeOpinions[0].text.length > 75 ? topic.representativeOpinions[0].text.substring(0, 75) + '…' : topic.representativeOpinions[0].text)}」`
-                    : '代表意見なし';
+                
+                // 代表的な文例（複数件: 2〜3例）の生成
+                let repOpinionsHtml = '';
+                if (topic.representativeOpinions && topic.representativeOpinions.length > 0) {
+                    const items = topic.representativeOpinions.slice(0, 3).map((op, idx) => {
+                        const cleanText = op.text.length > 80 ? op.text.substring(0, 80) + '…' : op.text;
+                        const attrPart = op.attribute ? `<span class="topic-rep-attr">👥 ${escapeHtml(op.attribute)}</span>` : '';
+                        return `
+                            <div class="topic-rep-item">
+                                <div class="topic-rep-item-header">
+                                    <span class="topic-rep-item-num">文例 ${idx + 1}</span>
+                                    ${attrPart}
+                                </div>
+                                <div class="topic-rep-item-body">「${escapeHtml(cleanText)}」</div>
+                            </div>
+                        `;
+                    }).join('');
+
+                    repOpinionsHtml = `
+                        <div class="topic-rep-container">
+                            <div class="topic-rep-header-title">💬 代表的な文例（上位${Math.min(3, topic.representativeOpinions.length)}例）:</div>
+                            ${items}
+                        </div>
+                    `;
+                } else {
+                    repOpinionsHtml = `<div class="topic-rep-empty">代表意見なし</div>`;
+                }
 
                 card.innerHTML = `
                     <div>
@@ -2871,10 +2895,10 @@ function renderSummaryDashboard() {
                             <span class="topic-card-badge">${topic.docCount}件 (${topic.shareRate}%)</span>
                         </div>
                         <div class="topic-keywords-wrap">${kwTags}</div>
-                        <div class="topic-rep-text">${repText}</div>
+                        ${repOpinionsHtml}
                     </div>
                     <div class="topic-card-footer">
-                        <span>💬 クリックして該当の生の声を見る</span>
+                        <span>💬 クリックして全${topic.docCount}件の生の声を見る</span>
                         <span>🔍 ドリルダウン</span>
                     </div>
                 `;

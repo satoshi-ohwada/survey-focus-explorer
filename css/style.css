@@ -4089,6 +4089,74 @@ body {
     font-style: italic;
 }
 
+/* トピック別サマリーカード内の複数文例リスト */
+.topic-rep-container {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+}
+
+.topic-rep-header-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #64748B;
+    margin-bottom: 1px;
+}
+
+.topic-rep-item {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-left: 3px solid #6366F1;
+    border-radius: 5px;
+    padding: 7px 10px;
+    transition: all 0.15s ease;
+}
+
+.topic-rep-item:hover {
+    border-left-color: #4F46E5;
+    background: #F8FAFC;
+    box-shadow: 0 1px 4px rgba(99, 102, 241, 0.08);
+}
+
+.topic-rep-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 3px;
+}
+
+.topic-rep-item-num {
+    font-size: 10px;
+    font-weight: 700;
+    color: #4F46E5;
+    background: #EEF2FF;
+    padding: 1px 6px;
+    border-radius: 3px;
+}
+
+.topic-rep-attr {
+    font-size: 10.5px;
+    color: #64748B;
+    font-weight: 600;
+}
+
+.topic-rep-item-body {
+    font-size: 12.5px;
+    color: #334155;
+    line-height: 1.5;
+    font-style: italic;
+}
+
+.topic-rep-empty {
+    font-size: 12px;
+    color: #94A3B8;
+    padding: 8px 10px;
+    background: #FFFFFF;
+    border-radius: 5px;
+    font-style: italic;
+}
+
 .topic-card-footer {
     display: flex;
     justify-content: space-between;

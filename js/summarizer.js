@@ -386,12 +386,12 @@ const OpinionSummarizer = {
             wordScored.sort((a, b) => b.score - a.score);
             const topKeywords = wordScored.slice(0, 5).map(item => item.word);
 
-            // クラスタ内の代表文を1〜2件選出（セントロイド法）
+            // クラスタ内の代表文を2〜3件選出（セントロイド法）
             const clStats = {
                 wordList: wordScored.slice(0, 40).map(x => ({ text: x.word, count: x.count })),
                 docFreq: cl.docFreq
             };
-            const repOpinions = this.extractRepresentativeOpinions(cl.docs, clStats, 2);
+            const repOpinions = this.extractRepresentativeOpinions(cl.docs, clStats, 3);
 
             // 主な意見タイプの割り出し
             const sortedTypes = Object.entries(cl.opinionTypeCounts).sort((a, b) => b[1] - a[1]);
