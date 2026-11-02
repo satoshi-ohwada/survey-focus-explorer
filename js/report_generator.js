@@ -155,6 +155,8 @@ const ReportGenerator = {
                 const opt = {
                     resolvedTargetWord: AppState.resolvedTargetWord,
                     maxWords: AppState.networkMaxWords || 40,
+                    wordsPerAttr: 4, // レポート専用スリム化: A4枠に合わせて1属性あたり4語に厳選
+                    isExport: true,
                     spacingMode: AppState.networkSpacing || 'wide',
                     fontSize: AppState.networkFontSize || 'large',
                     customStopWords: AppState.customStopWords

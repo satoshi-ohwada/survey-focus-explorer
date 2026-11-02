@@ -405,14 +405,22 @@ const NetworkVisualizer = {
             return;
         }
 
-        // 上位最大8属性
-        const topAttrs = attrCategories.slice(0, 8);
+        // 上位属性（レポート出力時は過密防止のため上位最大6属性、画面表示時は最大8属性）
+        const isExport = options.isExport || false;
+        const maxAttrs = isExport ? 6 : 8;
+        const topAttrs = attrCategories.slice(0, maxAttrs);
 
         // 2. 単語集計と上位特徴語／頻度語の選出
         const targetLower = (targetKeyword || '').toLowerCase();
         const resolvedLower = (this.resolvedTargetWord || '').toLowerCase();
         const maxWordsSetting = options.maxWords || 40;
-        const wordsPerAttr = Math.max(5, Math.min(8, Math.round(maxWordsSetting / 6)));
+        // 1属性あたりの単語数:
+        // - options.wordsPerAttr の明示指定があれば最優先
+        // - レポート出力(isExport)時は 4語 にスリム化して余白と可読性を最大化
+        // - 画面表示時は 5〜6語（探索性を確保しつつ過密を防止）
+        const wordsPerAttr = options.wordsPerAttr
+            ? options.wordsPerAttr
+            : (isExport ? 4 : Math.max(4, Math.min(6, Math.round(maxWordsSetting / 7))));
 
         // 各属性および全体での単語出現文書数を集計
         const wordCountsByAttr = new Map();
@@ -1787,6 +1795,8 @@ const NetworkVisualizer = {
         try {
             this.renderAttrNetwork(matchedDocs, attrCol, targetRows, targetKeyword, {
                 ...options,
+                isExport: true,
+                wordsPerAttr: options.wordsPerAttr || 4, // レポート専用スリム化
                 attrMetric: metric
             });
             return this.getExportCanvas(targetW, targetH);
