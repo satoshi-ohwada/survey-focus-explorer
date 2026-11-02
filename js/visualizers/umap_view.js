@@ -1113,6 +1113,7 @@ const UmapVisualizer = {
         });
 
         this.clusterHulls = [];
+        this.clusters = [];
         clusterMap.forEach((pts, cIdx) => {
             if (pts.length === 0) return;
             const cx = pts.reduce((s, p) => s + p.screenX, 0) / pts.length;
@@ -1124,18 +1125,40 @@ const UmapVisualizer = {
                 if (d > maxR) maxR = d;
             });
 
-            // クラスタ内の代表単語（出現回数順トップ2）
-            const sortedWords = [...pts].sort((a, b) => (b.count || 0) - (a.count || 0));
-            const topKws = sortedWords.slice(0, 2).map(p => p.text);
+            // クラスタ内の代表単語
+            let topKws = [];
+            if (this.viewMode === 'docs') {
+                const wordFreq = {};
+                pts.forEach(p => {
+                    const docTokens = (p.rawDoc && p.rawDoc.tokens) ? p.rawDoc.tokens : (p.tokens || []);
+                    docTokens.forEach(t => {
+                        if (t && t.length >= 2) wordFreq[t] = (wordFreq[t] || 0) + 1;
+                    });
+                });
+                topKws = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 4).map(e => e[0]);
+            } else {
+                const sortedWords = [...pts].sort((a, b) => (b.count || 0) - (a.count || 0));
+                topKws = sortedWords.slice(0, 4).map(p => p.text);
+            }
+
+            const label = topKws.length > 0 ? `トピック ${cIdx + 1}: ${topKws.slice(0, 2).join('・')}` : `グループ ${cIdx + 1}`;
 
             this.clusterHulls.push({
                 cluster: cIdx,
                 cx: cx,
                 cy: cy,
                 radius: Math.max(38, Math.min(180, maxR + 24)),
-                label: topKws.length > 0 ? topKws.join('・') : `グループ ${cIdx + 1}`
+                label: topKws.length > 0 ? topKws.slice(0, 2).join('・') : `グループ ${cIdx + 1}`
+            });
+
+            this.clusters.push({
+                id: cIdx + 1,
+                label: label,
+                size: pts.length,
+                topWords: topKws
             });
         });
+        this.clusters.sort((a, b) => b.size - a.size);
     },
 
     renderFrame() {

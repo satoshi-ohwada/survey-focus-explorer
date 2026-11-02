@@ -410,17 +410,67 @@ const ReportGenerator = {
             };
         });
 
-        // 8. UMAPクラスタ傾向
+        // 8. UMAPクラスタ傾向（多段フォールバック付きで確実に取得）
         const clustersSummary = [];
-        if (UmapVisualizer && UmapVisualizer.clusters && UmapVisualizer.clusters.length > 0) {
+        // 優先1: UmapVisualizer.clusters から取得
+        if (typeof UmapVisualizer !== 'undefined' && UmapVisualizer.clusters && UmapVisualizer.clusters.length > 0) {
             UmapVisualizer.clusters.slice(0, 5).forEach((c, idx) => {
-                const topKw = (c.topWords || []).slice(0, 4).join(', ');
+                const topKw = Array.isArray(c.topWords) ? c.topWords.slice(0, 4).join(', ') : (c.topKw || '');
                 clustersSummary.push({
                     id: idx + 1,
                     label: c.label || `グループ ${idx + 1}`,
                     size: c.size || 0,
                     topKw: topKw || '（代表語彙なし）'
                 });
+            });
+        }
+        // 優先2: UmapVisualizer.points から動的にクラスタ集計（HDBSCAN/K-Means結果）
+        if (clustersSummary.length === 0 && typeof UmapVisualizer !== 'undefined' && UmapVisualizer.points && UmapVisualizer.points.length > 0) {
+            const clusterMap = new Map();
+            UmapVisualizer.points.forEach(p => {
+                const cid = (p.cluster != null && p.cluster >= 0) ? p.cluster : 0;
+                if (!clusterMap.has(cid)) clusterMap.set(cid, []);
+                clusterMap.get(cid).push(p);
+            });
+            clusterMap.forEach((pts, cid) => {
+                const wordFreq = {};
+                pts.forEach(p => {
+                    const tokens = (p.rawDoc && p.rawDoc.tokens) ? p.rawDoc.tokens : (p.tokens || []);
+                    tokens.forEach(t => {
+                        if (t && t.length >= 2) wordFreq[t] = (wordFreq[t] || 0) + 1;
+                    });
+                });
+                const topWords = Object.entries(wordFreq).sort((a, b) => b[1] - a[1]).slice(0, 4).map(e => e[0]);
+                const topKw = topWords.length > 0 ? topWords.join(', ') : (pts[0] && pts[0].text ? pts[0].text : '（代表語彙なし）');
+                const label = topWords.length > 0 ? `トピック ${cid + 1}: ${topWords.slice(0, 2).join('・')}` : `グループ ${cid + 1}`;
+                clustersSummary.push({
+                    id: cid + 1,
+                    label,
+                    size: pts.length,
+                    topKw
+                });
+            });
+            clustersSummary.sort((a, b) => b.size - a.size);
+        }
+        // 優先3: AppState.summaryData.topicSummaries から論点クラスタを活用
+        if (clustersSummary.length === 0 && AppState.summaryData && AppState.summaryData.topicSummaries && AppState.summaryData.topicSummaries.length > 0) {
+            AppState.summaryData.topicSummaries.slice(0, 4).forEach((t, idx) => {
+                clustersSummary.push({
+                    id: idx + 1,
+                    label: t.name ? t.name.replace(/^論点 \d+:\s*/, '') : `トピック ${idx + 1}`,
+                    size: t.docCount || 0,
+                    topKw: (t.keywords || []).slice(0, 4).join(', ') || '（代表語彙なし）'
+                });
+            });
+        }
+        // 優先4: 関連意見全体から単一グループとして集計（極端な小データでも必ず表示）
+        if (clustersSummary.length === 0 && matchedDocs.length > 0) {
+            const topKw = topWords.slice(0, 4).map(w => w.word).join(', ');
+            clustersSummary.push({
+                id: 1,
+                label: `全体グループ (共通関心)`,
+                size: matchedDocs.length,
+                topKw: topKw || '（代表語彙なし）'
             });
         }
 
