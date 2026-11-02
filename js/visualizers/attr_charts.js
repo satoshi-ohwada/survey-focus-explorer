@@ -12,62 +12,109 @@
  */
 const AttributeSorter = {
     ORDINAL_SCALES: [
-        // 1. 良い・悪い (5段階 / 3段階)
+        // 1. 変化・改善・悪化 (良くなっている〜悪くなっている)
+        {
+            name: 'change_better_worse',
+            levels: [
+                ['大幅に良くなっている', '非常に良くなっている', '大いに良くなっている', 'かなり良くなっている', '大幅に改善', '大きく改善'],
+                ['良くなっている', '改善している', 'よくなっている', '向上している'],
+                ['やや良くなっている', '少し良くなっている', '多少良くなっている', 'やや改善', '少し改善', 'やや向上'],
+                ['変わらない', '変化なし', '変化はない', 'あまり変わらない', '横ばい', '以前と変わらない', '前と変わらない', 'どちらともいえない', 'どちらでもない', '特段の変化なし'],
+                ['やや悪くなっている', '少し悪くなっている', '多少悪くなっている', 'やや悪化', '少し悪化', 'やや低下'],
+                ['悪くなっている', '悪化している', 'わるくなっている', '低下している'],
+                ['大幅に悪くなっている', '大いに悪くなっている', '非常に悪くなっている', 'かなり悪くなっている', '大幅に悪化', '大きく悪化']
+            ]
+        },
+        // 2. 良い・悪い (5段階 / 3段階)
         {
             name: 'good_bad',
             levels: [
                 ['大変良い', '非常に良い', 'とても良い', '極めて良い', 'かなり良い', '凄く良い', 'すごく良い'],
-                ['良い', 'よい', '良好', 'やや良い', 'まあまあ良い', '比較的良い'],
+                ['良い', 'よい', '良好'],
+                ['やや良い', 'まあまあ良い', '少し良い', '比較的良い'],
                 ['普通', 'どちらでもない', 'どちらともいえない', 'ふつう', '中立'],
                 ['やや悪い', 'あまり良くない', '少し悪い', '比較的悪い'],
-                ['悪い', 'わるい', '不良', 'とても悪い', '非常に悪い', '大変悪い', '極めて悪い']
+                ['悪い', 'わるい', '不良'],
+                ['とても悪い', '非常に悪い', '大変悪い', '極めて悪い']
             ]
         },
-        // 2. 満足・不満 (5段階 / 3段階)
+        // 3. 満足・不満 (5段階 / 3段階)
         {
             name: 'satisfaction',
             levels: [
                 ['大変満足', '非常に満足', 'とても満足', '極めて満足', 'かなり満足'],
-                ['満足', 'やや満足', 'まあまあ満足', 'おおむね満足'],
+                ['満足'],
+                ['やや満足', 'まあまあ満足', '少し満足', 'おおむね満足'],
                 ['どちらともいえない', 'どちらでもない', '普通', 'ふつう'],
-                ['やや不満', '少し不満'],
-                ['不満', '大変不満', '非常に不満', 'とても不満', '極めて不満']
+                ['やや不満', '少し不満', 'あまり満足していない'],
+                ['不満'],
+                ['大変不満', '非常に不満', 'とても不満', '極めて不満']
             ]
         },
-        // 3. 賛成・反対 (5段階)
+        // 4. 増減・数量変化
+        {
+            name: 'change_increase_decrease',
+            levels: [
+                ['大幅に増えている', '大幅に増加', '大幅に増えた'],
+                ['増えている', '増えた', '増加している', '増加した', '多くなっている', '多くなった'],
+                ['やや増えている', 'やや増えた', '少し増えた', 'やや増加', '少し増加', 'やや多くなった'],
+                ['変わらない', '変化なし', '変化はない', '横ばい', 'あまり変わらない', '以前と変わらない', '前と変わらない'],
+                ['やや減っている', 'やや減った', '少し減った', 'やや減少', '少し減少', 'やや少なくなった'],
+                ['減っている', '減った', '減少している', '減少した', '少なくなっている', '少なくなった'],
+                ['大幅に減っている', '大幅に減少', '大幅に減った']
+            ]
+        },
+        // 5. 利便性・使いやすさ変化
+        {
+            name: 'change_convenience',
+            levels: [
+                ['便利になった', '使いやすくなった', 'かなり便利になった'],
+                ['やや便利になった', '少し便利になった', '多少使いやすくなった'],
+                ['変わらない', '変化なし', '以前と変わらない'],
+                ['やや不便になった', '少し不便になった', '使いにくくなった'],
+                ['不便になった', 'かなり不便になった']
+            ]
+        },
+        // 6. 賛成・反対 (5段階)
         {
             name: 'agree_disagree',
             levels: [
                 ['強く賛成', '大いに賛成'],
-                ['賛成', 'やや賛成'],
+                ['賛成'],
+                ['やや賛成', '少し賛成'],
                 ['どちらでもない', 'どちらともいえない'],
                 ['やや反対', '少し反対'],
-                ['反対', '強く反対', '大いに反対']
+                ['反対'],
+                ['強く反対', '大いに反対']
             ]
         },
-        // 4. そう思う・そう思わない
+        // 7. そう思う・そう思わない
         {
             name: 'think_so',
             levels: [
                 ['強くそう思う', '非常にそう思う'],
-                ['そう思う', 'ややそう思う'],
+                ['そう思う'],
+                ['ややそう思う', '少しそう思う'],
                 ['どちらともいえない', 'どちらでもない'],
-                ['あまりそう思わない', 'ややそう思わない'],
-                ['そう思わない', '全くそう思わない', 'ぜんぜんそう思わない']
+                ['あまりそう思わない', 'ややそう思わない', '少しそう思わない'],
+                ['そう思わない'],
+                ['全くそう思わない', 'ぜんぜんそう思わない']
             ]
         },
-        // 5. 同意する・同意しない
+        // 8. 同意する・同意しない
         {
             name: 'consent',
             levels: [
                 ['強く同意する', '大いに同意する'],
-                ['同意する', 'やや同意する'],
+                ['同意する'],
+                ['やや同意する', '少し同意する'],
                 ['どちらでもない', 'どちらともいえない'],
                 ['あまり同意しない', 'やや同意しない'],
-                ['同意しない', '全く同意しない']
+                ['同意しない'],
+                ['全く同意しない']
             ]
         },
-        // 6. 感情・トーン
+        // 9. 感情・トーン
         {
             name: 'sentiment',
             levels: [
@@ -76,7 +123,7 @@ const AttributeSorter = {
                 ['否定', '否定的', 'ネガティブ', 'negative']
             ]
         },
-        // 7. 高・中・低
+        // 10. 高・中・低
         {
             name: 'high_mid_low',
             levels: [
@@ -85,7 +132,7 @@ const AttributeSorter = {
                 ['低', '低い', '低め', '下位']
             ]
         },
-        // 8. 大・中・小
+        // 11. 大・中・小
         {
             name: 'large_mid_small',
             levels: [
@@ -94,7 +141,7 @@ const AttributeSorter = {
                 ['小', '小さい']
             ]
         },
-        // 9. 成績・評定
+        // 12. 成績・評定
         {
             name: 'academic_grades',
             levels: [
@@ -105,7 +152,7 @@ const AttributeSorter = {
                 ['不可', 'D', 'd', 'F', 'f']
             ]
         },
-        // 10. Yes / No
+        // 13. Yes / No
         {
             name: 'yes_no',
             levels: [
@@ -113,7 +160,7 @@ const AttributeSorter = {
                 ['いいえ', 'no', 'false']
             ]
         },
-        // 11. 有無
+        // 14. 有無
         {
             name: 'presence',
             levels: [
@@ -121,7 +168,7 @@ const AttributeSorter = {
                 ['なし', '無', '利用なし', '経験なし']
             ]
         },
-        // 12. 頻度
+        // 15. 頻度
         {
             name: 'frequency',
             levels: [
@@ -132,7 +179,7 @@ const AttributeSorter = {
                 ['ほとんど利用しない', '利用しない', '使わない', '未利用']
             ]
         },
-        // 13. 性別（標準順）
+        // 16. 性別（標準順）
         {
             name: 'gender',
             levels: [
@@ -160,6 +207,39 @@ const AttributeSorter = {
             'その他', 'そのほか', '該当なし', 'na', 'n/a', 'none', 'null', 'undefined'
         ];
         return tailKeywords.some(k => s === k || s === `（${k}）` || s === `(${k})`);
+    },
+
+    /**
+     * カテゴリ文字列がスケール内のどのレベルに合致するかを判定（完全一致優先、次点で最長部分一致）
+     * @param {string} norm - 正規化済みカテゴリ文字列
+     * @param {object} scale - スケール定義
+     * @returns {number} レベルのインデックス（一致なしの場合は -1）
+     */
+    findLevelForCategory(norm, scale) {
+        if (!norm) return -1;
+        const n = norm.toLowerCase();
+        // 1. 完全一致（Exact Match）
+        for (let i = 0; i < scale.levels.length; i++) {
+            for (const syn of scale.levels[i]) {
+                if (syn.toLowerCase() === n) return i;
+            }
+        }
+        // 2. 最長部分一致（Longest Partial Match）
+        let bestLevel = -1;
+        let longestMatchLen = 0;
+        for (let i = 0; i < scale.levels.length; i++) {
+            for (const syn of scale.levels[i]) {
+                const s = syn.toLowerCase();
+                if (n.includes(s) || s.includes(n)) {
+                    const matchLen = Math.min(n.length, s.length);
+                    if (matchLen > longestMatchLen) {
+                        longestMatchLen = matchLen;
+                        bestLevel = i;
+                    }
+                }
+            }
+        }
+        return bestLevel;
     },
 
     extractNumericRank(category) {
@@ -197,12 +277,10 @@ const AttributeSorter = {
             const seenLevels = new Set();
             validItems.forEach(item => {
                 const norm = this.normalizeCategory(item.category != null ? item.category : item);
-                for (let i = 0; i < scale.levels.length; i++) {
-                    if (scale.levels[i].some(syn => syn.toLowerCase() === norm.toLowerCase() || norm.toLowerCase().includes(syn.toLowerCase()))) {
-                        matches++;
-                        seenLevels.add(i);
-                        break;
-                    }
+                const lvl = this.findLevelForCategory(norm, scale);
+                if (lvl >= 0) {
+                    matches++;
+                    seenLevels.add(lvl);
                 }
             });
             // 2つ以上の異なるレベルにマッチしていること（単一レベルのみの一致は誤検知防止）
@@ -254,17 +332,13 @@ const AttributeSorter = {
         });
         if (validItems.length <= 1) return items.slice();
 
-        // 1. スケール順序（評価・満足度・賛否など）
+        // 1. スケール順序（評価・満足度・賛否・変化など）
         const scale = this.detectScale(validItems);
         if (scale) {
             const getRank = (item) => {
                 const norm = this.normalizeCategory(item.category != null ? item.category : item);
-                for (let i = 0; i < scale.levels.length; i++) {
-                    if (scale.levels[i].some(syn => syn.toLowerCase() === norm.toLowerCase() || norm.toLowerCase().includes(syn.toLowerCase()))) {
-                        return i;
-                    }
-                }
-                return 999;
+                const lvl = this.findLevelForCategory(norm, scale);
+                return lvl >= 0 ? lvl : 999;
             };
             validItems.sort((a, b) => getRank(a) - getRank(b));
             return validItems.concat(tailItems);
