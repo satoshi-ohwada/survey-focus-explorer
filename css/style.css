@@ -2316,15 +2316,26 @@ body {
     border-radius: 3px;
 }
 
+/* レポート各セクション（項目1〜8） */
+.report-section {
+    margin-top: 10px;
+    display: flex;
+    flex-direction: column;
+}
+
+.report-section:first-of-type {
+    margin-top: 4px;
+}
+
 /* セクションタイトル */
 .report-sec-title {
     font-size: 11px;
     font-weight: 700;
     color: #0F172A;
-    border-left: 3px solid #2563EB;
-    padding-left: 6px;
+    border-left: 3.5px solid #2563EB;
+    padding-left: 7px;
     margin-bottom: 5px;
-    line-height: 1.2;
+    line-height: 1.25;
 }
 
 .report-sub-title {
@@ -2912,16 +2923,19 @@ body {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
+    flex: 1;
     margin-bottom: 3px;
 }
 
 .report-type-rep-col {
     background: #FFFFFF;
-    border: 1px solid #E2E8F0;
+    border: 1px solid #CBD5E1;
     border-radius: 4px;
     padding: 4px 6px;
     display: flex;
     flex-direction: column;
+    height: 100%;
+    box-sizing: border-box;
 }
 
 .report-type-rep-head {
@@ -2932,6 +2946,7 @@ body {
     margin-bottom: 3px;
     padding-bottom: 2px;
     border-bottom: 1px solid #F1F5F9;
+    flex-shrink: 0;
 }
 
 .report-type-rep-title {
@@ -2949,7 +2964,9 @@ body {
 .report-type-rep-body {
     display: flex;
     flex-direction: column;
-    gap: 2.5px;
+    justify-content: space-between;
+    gap: 3px;
+    flex: 1;
 }
 
 .report-type-rep-empty {
@@ -2963,7 +2980,11 @@ body {
     background: #F8FAFC;
     border-radius: 3px;
     padding: 2.5px 5px;
-    border: 1px solid #F1F5F9;
+    border: 1px solid #E2E8F0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .report-type-rep-meta {

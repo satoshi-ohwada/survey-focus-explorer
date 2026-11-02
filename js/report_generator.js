@@ -806,17 +806,17 @@ const ReportGenerator = {
                 } else {
                     itemsHtml = c.list.map(rep => {
                         let text = rep.doc.text ? rep.doc.text.trim() : '';
-                        if (text.length > 46) text = text.substring(0, 46) + '…';
+                        if (text.length > 55) text = text.substring(0, 55) + '…';
                         const attrText = rep.doc.attribute ? `<span class="report-type-rep-attr">[${this.escape(rep.doc.attribute)}]</span>` : '';
                         const scoreBadge = rep.doc.relevanceScore ? `<span class="report-type-rep-score">適合度 ${rep.doc.relevanceScore}%</span>` : '';
                         return `
-                            <div class="report-type-rep-item" style="padding: 2px 4px; margin-bottom: 2px;">
+                            <div class="report-type-rep-item">
                                 <div class="report-type-rep-meta">
                                     <span class="report-type-rep-rank ${c.type}">#${rep.rank}</span>
                                     ${attrText}
                                     ${scoreBadge}
                                 </div>
-                                <div class="report-type-rep-quote" style="font-size: 7.2px; line-height: 1.25;">「${this.escape(text)}」</div>
+                                <div class="report-type-rep-quote">「${this.escape(text)}」</div>
                             </div>
                         `;
                     }).join('');
@@ -1060,7 +1060,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (1) 母集団の姿（投入データ全体の規模 ＆ 構成） -->
-                <div class="report-section">
+                <div class="report-section" style="margin-top: 4px;">
                     <div class="report-sec-title">📁 1. 母集団の姿（投入データ全体の規模 ＆ 構成）</div>
                     <div class="report-condition-bar" style="margin-bottom: 2px;">
                         <div class="report-condition-item">
@@ -1087,7 +1087,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (2) 対象の絞り込み（フィルター・品詞・キーワード抽出条件） -->
-                <div class="report-section" style="margin-top: 3.5px;">
+                <div class="report-section" style="margin-top: 10px;">
                     <div class="report-sec-title">🔍 2. 対象の絞り込み（フィルター・品詞・キーワード条件）</div>
                     <div class="report-kw-detail-box">
                         <!-- 絞り込み条件（列フィルター、ノイズ除外、解析品詞） -->
@@ -1129,7 +1129,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (3) 絞り込んだあとの姿（分析対象意見群の規模 ＆ 構成） -->
-                <div class="report-section" style="margin-top: 3.5px;">
+                <div class="report-section" style="margin-top: 10px;">
                     <div class="report-sec-title">📌 3. 絞り込んだあとの姿（分析対象意見群の規模 ＆ 構成）</div>
                     <div class="report-kpi-grid">
                         <div class="report-kpi-card">
@@ -1163,7 +1163,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (4) 要約サマリー（集約概要と代表意見） -->
-                <div class="report-section" style="margin-top: 3.5px; flex: 1; display: flex; flex-direction: column;">
+                <div class="report-section" style="margin-top: 10px; flex: 1; display: flex; flex-direction: column;">
                     <div class="report-sec-title">💡 4. 要約サマリー（集約概要 ＆ 代表意見） [対象: 🎯「${this.escape(data.targetKeyword)}」]</div>
                     
                     <!-- 意見タイプ自動3分類基準の解説ボックス（コンパクト化） -->
@@ -1176,7 +1176,7 @@ const ReportGenerator = {
                     </div>
 
                     ${summaryTypeBarHtml}
-                    <div style="flex: 1; margin-top: 2.5px;">
+                    <div style="flex: 1; display: flex; flex-direction: column; margin-top: 3px;">
                         ${typeRepHtml}
                     </div>
                 </div>
@@ -1209,7 +1209,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (5) 【全体状況】語彙・共起構造（ワードクラウド ＆ 全体共起ネットワーク） -->
-                <div class="report-section" style="margin-bottom: 5px;">
+                <div class="report-section" style="margin-top: 4px; margin-bottom: 3px;">
                     <div class="report-sec-title">
                         <span>🌐 5. 【全体状況】語彙・話題構造（ワードクラウド ＆ 全体共起ネットワーク） [属性毎ではない全体状況 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
@@ -1258,7 +1258,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (6) 【全体状況】頻出・特異語彙 ＆ 意見分布構造（UMAP） -->
-                <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="report-section" style="margin-top: 11px; flex: 1; display: flex; flex-direction: column;">
                     <div class="report-sec-title">
                         <span>📊 6. 【全体状況】頻出・特異語彙 ＆ 意見分布構造（UMAP） [属性毎ではない全体状況 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
@@ -1334,7 +1334,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (7) 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） -->
-                <div class="report-section" style="margin-bottom: 5px;">
+                <div class="report-section" style="margin-top: 4px; margin-bottom: 4px;">
                     <div class="report-sec-title">
                         <span>👥 7. 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
@@ -1342,7 +1342,7 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (8) 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表的な意見 -->
-                <div class="report-section" style="flex: 1; display: flex; flex-direction: column;">
+                <div class="report-section" style="margin-top: 11px; flex: 1; display: flex; flex-direction: column;">
                     <div class="report-sec-title">
                         <span>📈 8. 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表意見 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
