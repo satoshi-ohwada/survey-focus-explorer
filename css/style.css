@@ -2931,7 +2931,7 @@ body {
     background: #FFFFFF;
     border: 1px solid #CBD5E1;
     border-radius: 4px;
-    padding: 4px 6px;
+    padding: 3px 5px;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -2943,8 +2943,8 @@ body {
     justify-content: space-between;
     align-items: center;
     padding-left: 4px;
-    margin-bottom: 3px;
-    padding-bottom: 2px;
+    margin-bottom: 2px;
+    padding-bottom: 1.5px;
     border-bottom: 1px solid #F1F5F9;
     flex-shrink: 0;
 }
@@ -2965,7 +2965,7 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 3px;
+    gap: 2px;
     flex: 1;
 }
 
@@ -2979,7 +2979,7 @@ body {
 .report-type-rep-item {
     background: #F8FAFC;
     border-radius: 3px;
-    padding: 2.5px 5px;
+    padding: 2px 4px;
     border: 1px solid #E2E8F0;
     flex: 1;
     display: flex;
@@ -2991,7 +2991,7 @@ body {
     display: flex;
     align-items: center;
     gap: 4px;
-    margin-bottom: 1px;
+    margin-bottom: 0.5px;
 }
 
 .report-type-rep-rank {
@@ -3032,8 +3032,8 @@ body {
 }
 
 .report-type-rep-quote {
-    font-size: 7.5px;
-    line-height: 1.35;
+    font-size: 7.2px;
+    line-height: 1.3;
     color: #334155;
     word-break: break-all;
 }

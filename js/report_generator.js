@@ -767,7 +767,7 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 5. 意見タイプ別 代表的な生の声（3カラム・各最大3選） ---
+        // --- 5. 意見タイプ別 代表的な生の声（3カラム・各最大5選） ---
         let typeRepHtml = '';
         if (data.repOpinionsByType) {
             const rbt = data.repOpinionsByType;
@@ -779,7 +779,7 @@ const ReportGenerator = {
                     label: '困りごと・課題',
                     icon: '🔴',
                     color: '#e11d48',
-                    list: (rbt.issue || []).slice(0, 3),
+                    list: (rbt.issue || []).slice(0, 5),
                     total: ots.issueCount || 0
                 },
                 {
@@ -787,7 +787,7 @@ const ReportGenerator = {
                     label: '要望・改善提案',
                     icon: '🔵',
                     color: '#0284c7',
-                    list: (rbt.request || []).slice(0, 3),
+                    list: (rbt.request || []).slice(0, 5),
                     total: ots.requestCount || 0
                 },
                 {
@@ -795,7 +795,7 @@ const ReportGenerator = {
                     label: '肯定・満足',
                     icon: '🟢',
                     color: '#10b981',
-                    list: (rbt.positive || []).slice(0, 3),
+                    list: (rbt.positive || []).slice(0, 5),
                     total: ots.positiveCount || 0
                 }
             ];
@@ -807,7 +807,7 @@ const ReportGenerator = {
                 } else {
                     itemsHtml = c.list.map(rep => {
                         let text = rep.doc.text ? rep.doc.text.trim() : '';
-                        if (text.length > 55) text = text.substring(0, 55) + '…';
+                        if (text.length > 50) text = text.substring(0, 50) + '…';
                         const attrText = rep.doc.attribute ? `<span class="report-type-rep-attr">[${this.escape(rep.doc.attribute)}]</span>` : '';
                         const scoreBadge = rep.doc.relevanceScore ? `<span class="report-type-rep-score">適合度 ${rep.doc.relevanceScore}%</span>` : '';
                         return `
