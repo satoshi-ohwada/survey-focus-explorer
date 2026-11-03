@@ -315,9 +315,9 @@ const ReportGenerator = {
             attrDistMatched.sort((a, b) => b.count - a.count);
         }
 
-        // 4. 頻出単語 Top 15
+        // 4. 頻出単語 Top 20
         const wordList = (AppState.subcorpusStats && AppState.subcorpusStats.wordList) ? AppState.subcorpusStats.wordList : [];
-        const topWords = wordList.slice(0, 15).map((w, idx) => {
+        const topWords = wordList.slice(0, 20).map((w, idx) => {
             const rate = totalMatched > 0 ? ((w.count / totalMatched) * 100).toFixed(1) : '0.0';
             return {
                 rank: idx + 1,
@@ -857,13 +857,13 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 6. 頻出単語テーブル行 (Top 15: 全体状況) ---
-        const topWordsRows = data.topWords.slice(0, 15).map(w => `
+        // --- 6. 頻出単語テーブル行 (Top 20: 全体状況) ---
+        const topWordsRows = data.topWords.slice(0, 20).map(w => `
             <tr>
-                <td style="text-align: center; font-weight: 700; color: #475569; padding: 1.5px 3px;">${w.rank}</td>
-                <td style="font-weight: 600; color: #1e293b; padding: 1.5px 3px;">${this.escape(w.word)}</td>
-                <td style="text-align: right; color: #334155; padding: 1.5px 3px;">${w.count.toLocaleString()} 件</td>
-                <td style="text-align: right; color: #2563eb; font-weight: 600; padding: 1.5px 3px;">${w.rate}%</td>
+                <td style="text-align: center; font-weight: 700; color: #475569; padding: 1.2px 3px;">${w.rank}</td>
+                <td style="font-weight: 600; color: #1e293b; padding: 1.2px 3px;">${this.escape(w.word)}</td>
+                <td style="text-align: right; color: #334155; padding: 1.2px 3px;">${w.count.toLocaleString()} 件</td>
+                <td style="text-align: right; color: #2563eb; font-weight: 600; padding: 1.2px 3px;">${w.rate}%</td>
             </tr>
         `).join('');
 
@@ -1265,20 +1265,20 @@ const ReportGenerator = {
                     </div>
 
                     <div class="report-dual-grid" style="grid-template-columns: 0.88fr 1.12fr; flex: 1;">
-                        <!-- 左: 頻出単語表 (Top 15) ＆ 全体比特異語 -->
+                        <!-- 左: 頻出単語表 (Top 20) ＆ 全体比特異語 -->
                         <div class="report-card" style="justify-content: space-between;">
                             <div>
                                 <div class="report-card-title">
-                                    <span>📊 6-A. 意見全体の頻出単語 Top 15 ＆ 全体比特異語</span>
+                                    <span>📊 6-A. 意見全体の頻出単語 Top 20 ＆ 全体比特異語</span>
                                     <span class="report-card-sub-tag">全体状況</span>
                                 </div>
                                 <table class="report-table" style="font-size: 8px;">
                                     <thead>
                                         <tr>
-                                            <th style="width: 26px; text-align: center; padding: 2px 3px;">順位</th>
-                                            <th style="padding: 2px 3px;">抽出単語</th>
-                                            <th style="width: 50px; text-align: right; padding: 2px 3px;">出現件数</th>
-                                            <th style="width: 44px; text-align: right; padding: 2px 3px;">出現率</th>
+                                            <th style="width: 26px; text-align: center; padding: 1.5px 3px;">順位</th>
+                                            <th style="padding: 1.5px 3px;">抽出単語</th>
+                                            <th style="width: 50px; text-align: right; padding: 1.5px 3px;">出現件数</th>
+                                            <th style="width: 44px; text-align: right; padding: 1.5px 3px;">出現率</th>
                                         </tr>
                                     </thead>
                                     <tbody>
