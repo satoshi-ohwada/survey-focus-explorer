@@ -177,6 +177,7 @@ const ReportGenerator = {
                 const optW = {
                     resolvedTargetWord: AppState.resolvedTargetWord,
                     maxWords: AppState.networkMaxWords || 40,
+                    isExport: true,
                     spacingMode: AppState.networkSpacing || 'wide',
                     fontSize: AppState.networkFontSize || 'large',
                     colorMode: AppState.networkColorMode || 'community'

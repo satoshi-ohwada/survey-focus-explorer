@@ -218,6 +218,7 @@ const NetworkVisualizer = {
         if (this.animId) cancelAnimationFrame(this.animId);
 
         this.networkMode = 'word';
+        this.isExport = options.isExport || false;
         this.targetKeyword = targetKeyword;
         this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
         this.activeRelatedWords = activeRelatedWords || [];
@@ -358,6 +359,7 @@ const NetworkVisualizer = {
         if (this.animId) cancelAnimationFrame(this.animId);
 
         this.networkMode = 'attr';
+        this.isExport = options.isExport || false;
         this.targetKeyword = targetKeyword;
         this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
         this.onWordClick = options.onWordClick;
@@ -576,8 +578,30 @@ const NetworkVisualizer = {
             const cosP = sgnCos * Math.pow(Math.abs(cosVal), 2 / pSuper);
             const sinP = sgnSin * Math.pow(Math.abs(sinVal), 2 / pSuper);
 
-            const px = centerX + maxRx * cosP;
-            const py = centerY + maxRy * sinP;
+            let px = centerX + maxRx * cosP;
+            let py = centerY + maxRy * sinP;
+
+            // 左上タイトルバッジおよび右上凡例との干渉回避（属性ノードがバッジ下に潜り込むのを物理的に防止）
+            const titleSafeW = width * (isExport ? 0.44 : 0.38);
+            const titleSafeH = height * (isExport ? 0.16 : 0.13);
+            if (px - m.boxWidth / 2 < titleSafeW && py - m.boxHeight / 2 < titleSafeH) {
+                if (px < width * 0.22) {
+                    py = Math.max(py, titleSafeH + m.boxHeight / 2 + 10);
+                } else {
+                    px = Math.max(px, titleSafeW + m.boxWidth / 2 + 10);
+                }
+            }
+
+            const legSafeW = width * (isExport ? 0.28 : 0.24);
+            const legSafeH = height * (isExport ? 0.14 : 0.11);
+            if (px + m.boxWidth / 2 > width - legSafeW && py - m.boxHeight / 2 < legSafeH) {
+                if (px > width * 0.78) {
+                    py = Math.max(py, legSafeH + m.boxHeight / 2 + 10);
+                } else {
+                    px = Math.min(px, width - legSafeW - m.boxWidth / 2 - 10);
+                }
+            }
+
             const colorObj = this.ATTR_PALETTE[idx % this.ATTR_PALETTE.length];
 
             const attrNode = {
@@ -641,8 +665,8 @@ const NetworkVisualizer = {
             const tanY = dirX;
 
             const halfW = (an.boxWidth || 100) / 2;
-            // 属性ピルバッジの縁から内側に適度かつ十分なクリアランス
-            const baseInward = halfW * 0.35 + 68 * spacingFactor;
+            // 属性ピルバッジの縁から内側に適度かつ十分なクリアランス（エクスポート時は短縮して凝縮）
+            const baseInward = halfW * 0.30 + (isExport ? 38 : 68) * spacingFactor;
 
             uWords.forEach((word, idx) => {
                 const row = idx % 2; // 2列千鳥配置で縦横の広がりをバランスよく分散
@@ -650,8 +674,8 @@ const NetworkVisualizer = {
                 const colCount = Math.ceil(count / 2);
                 const offsetCol = (col - (colCount - 1) / 2);
 
-                const spreadTan = offsetCol * (48 * spacingFactor);
-                const spreadRad = baseInward + row * (46 * spacingFactor);
+                const spreadTan = offsetCol * ((isExport ? 36 : 48) * spacingFactor);
+                const spreadRad = baseInward + row * ((isExport ? 34 : 46) * spacingFactor);
 
                 const posX = an.x + dirX * spreadRad + tanX * spreadTan;
                 const posY = an.y + dirY * spreadRad + tanY * spreadTan;
@@ -782,10 +806,17 @@ const NetworkVisualizer = {
         const centerX = width / 2;
         const centerY = height / 2;
 
+        const isExp = this.isExport || false;
         const spacingFactor = this.spacingMode === 'widest' ? 1.25 : (this.spacingMode === 'wide' ? 1.12 : 1.0);
 
         const attrNodes = this.nodes.filter(n => n.isAttrNode);
         const wordNodes = this.nodes.filter(n => !n.isAttrNode);
+
+        // タイトルバッジおよび凡例領域の不可侵境界
+        const titleSafeW = width * (isExp ? 0.44 : 0.38);
+        const titleSafeH = height * (isExp ? 0.16 : 0.13);
+        const legSafeW = width * (isExp ? 0.28 : 0.24);
+        const legSafeH = height * (isExp ? 0.14 : 0.11);
 
         for (let iter = 0; iter < iterations; iter++) {
             const alpha = 1.0 - (iter / iterations);
@@ -808,8 +839,8 @@ const NetworkVisualizer = {
             }
 
             // 2. 単語ノード同士のテキスト重なり防止（安全クランプ付き反発で四隅への爆発的吹き飛びを防止）
-            const minDistX = 80 * spacingFactor;
-            const minDistY = 52 * spacingFactor;
+            const minDistX = (isExp ? 58 : 80) * spacingFactor;
+            const minDistY = (isExp ? 38 : 52) * spacingFactor;
 
             for (let i = 0; i < wordNodes.length; i++) {
                 const w1 = wordNodes[i];
@@ -840,8 +871,8 @@ const NetworkVisualizer = {
                     const dx = wn.x - an.x;
                     const dy = wn.y - an.y;
 
-                    const safeW = (an.boxWidth / 2) + (wn.radius || 14) + 48;
-                    const safeH = (an.boxHeight / 2) + (wn.radius || 14) + 48;
+                    const safeW = (an.boxWidth / 2) + (wn.radius || 14) + (isExp ? 34 : 48);
+                    const safeH = (an.boxHeight / 2) + (wn.radius || 14) + (isExp ? 34 : 48);
 
                     const absX = Math.abs(dx);
                     const absY = Math.abs(dy);
@@ -863,8 +894,30 @@ const NetworkVisualizer = {
                 }
             }
 
+            // 3.5. タイトルバッジおよび凡例領域に対する不可侵押し出し（単語がバッジの下に潜り込むのを防止）
+            for (const wn of wordNodes) {
+                // 左上タイトルバッジ回避
+                if (wn.x < titleSafeW + 16 && wn.y < titleSafeH + 16) {
+                    const penX = Math.max(0, titleSafeW + 16 - wn.x);
+                    const penY = Math.max(0, titleSafeH + 16 - wn.y);
+                    wn.vx += penX * 0.16 * alpha;
+                    wn.vy += penY * 0.16 * alpha;
+                    wn.x += penX * 0.14;
+                    wn.y += penY * 0.14;
+                }
+                // 右上凡例回避
+                if (wn.x > width - legSafeW - 16 && wn.y < legSafeH + 16) {
+                    const penX = Math.max(0, wn.x - (width - legSafeW - 16));
+                    const penY = Math.max(0, legSafeH + 16 - wn.y);
+                    wn.vx -= penX * 0.16 * alpha;
+                    wn.vy += penY * 0.16 * alpha;
+                    wn.x -= penX * 0.14;
+                    wn.y += penY * 0.14;
+                }
+            }
+
             // 4. バネの力（エッジ引力）
-            // 固有語はバッジ近傍の扇形に留める適正目標長、共通語は中央へ伸びる目標長
+            // レポート出力時はエッジ目標長を短縮して小さなカードでも引き締まるよう最適化
             for (const edge of this.edges) {
                 const s = edge.source; // 属性ノード
                 const t = edge.target; // 単語ノード
@@ -872,9 +925,11 @@ const NetworkVisualizer = {
                 const dy = t.y - s.y;
                 const dist = Math.hypot(dx, dy) || 1;
 
-                const baseWordClearance = (s.boxWidth / 2) + 55;
-                const targetLen = t.isShared ? (230 * spacingFactor) : (Math.max(baseWordClearance, s.boxWidth * 0.35 + 82) * spacingFactor);
-                const springForce = (dist - targetLen) * (t.isShared ? 0.05 : 0.04) * alpha;
+                const baseWordClearance = (s.boxWidth / 2) + (isExp ? 36 : 55);
+                const targetLen = t.isShared
+                    ? ((isExp ? 135 : 230) * spacingFactor)
+                    : (Math.max(baseWordClearance, s.boxWidth * 0.30 + (isExp ? 46 : 82)) * spacingFactor);
+                const springForce = (dist - targetLen) * (t.isShared ? (isExp ? 0.07 : 0.05) : 0.04) * alpha;
 
                 t.vx -= (dx / dist) * springForce;
                 t.vy -= (dy / dist) * springForce;
@@ -1035,13 +1090,38 @@ const NetworkVisualizer = {
         const centerX = width / 2;
         const centerY = height / 2;
 
-        // 間隔設定に基づく物理定数
+        const isExp = this.isExport || false;
+
+        // 間隔設定に基づく物理定数（レポート出力時は小さな領域でも引き締まるよう短縮設定）
         const spacingParams = {
-            normal: { baseLen: 120, kRepel: 8000, minPadding: 35, gravity: 0.005 },
-            wide:   { baseLen: 175, kRepel: 16000, minPadding: 50, gravity: 0.003 },
-            widest: { baseLen: 240, kRepel: 26000, minPadding: 70, gravity: 0.002 }
+            normal: {
+                baseLen: isExp ? 72 : 120,
+                kRepel: isExp ? 5200 : 8000,
+                minPadding: isExp ? 24 : 35,
+                gravity: isExp ? 0.008 : 0.005
+            },
+            wide: {
+                baseLen: isExp ? 88 : 175,
+                kRepel: isExp ? 8200 : 16000,
+                minPadding: isExp ? 32 : 50,
+                gravity: isExp ? 0.006 : 0.003
+            },
+            widest: {
+                baseLen: isExp ? 115 : 240,
+                kRepel: isExp ? 12500 : 26000,
+                minPadding: isExp ? 42 : 70,
+                gravity: isExp ? 0.004 : 0.002
+            }
         };
         const p = spacingParams[this.spacingMode] || spacingParams.wide;
+
+        // タイトルバッジおよび凡例領域の不可侵安全境界（シミュレーション座標系）
+        const hasTitle = !!this.targetKeyword;
+        const titleSafeW = hasTitle ? (width * (isExp ? 0.40 : 0.35)) : 0;
+        const titleSafeH = hasTitle ? (height * (isExp ? 0.13 : 0.10)) : 0;
+        const legendSafeW = width * (isExp ? 0.60 : 0.55);
+        const legendSafeH = height * (isExp ? 0.12 : 0.09);
+        const legendSafeY = height - legendSafeH;
 
         for (let s = 0; s < steps; s++) {
             // 1. 反発力 (Repulsion) - 距離の2乗反比例
@@ -1068,7 +1148,7 @@ const NetworkVisualizer = {
             }
 
             // 2. 引力 (Spring Attraction) - エッジ接続
-            const springK = 0.035;
+            const springK = isExp ? 0.045 : 0.035;
             this.edges.forEach(e => {
                 let dx = e.target.x - e.source.x;
                 let dy = e.target.y - e.source.y;
@@ -1088,10 +1168,34 @@ const NetworkVisualizer = {
 
             // 3. 中心重力 (Center Gravity) & 速度更新
             this.nodes.forEach(n => {
-                // ターゲットノード（中東情勢など中心語）を中心へ強固に引き寄せて中心に安定化
+                // ターゲットノードを中心へ強固に引き寄せて中心に安定化
                 const g = n.isTarget ? p.gravity * 4.0 : p.gravity;
                 n.vx += (centerX - n.x) * g;
                 n.vy += (centerY - n.y) * g;
+
+                // 左上タイトルバッジとの干渉回避押し出し
+                if (hasTitle && n.x < titleSafeW + n.radius && n.y < titleSafeH + n.radius) {
+                    const penX = Math.max(0, titleSafeW + n.radius - n.x);
+                    const penY = Math.max(0, titleSafeH + n.radius - n.y);
+                    n.vx += penX * 0.12;
+                    n.vy += penY * 0.12;
+                    if (n.fx == null) {
+                        n.x += penX * 0.14;
+                        n.y += penY * 0.14;
+                    }
+                }
+
+                // 左下凡例との干渉回避押し出し
+                if (n.x < legendSafeW + n.radius && n.y > legendSafeY - n.radius) {
+                    const penX = Math.max(0, legendSafeW + n.radius - n.x);
+                    const penY = Math.max(0, n.y - (legendSafeY - n.radius));
+                    n.vx += penX * 0.08;
+                    n.vy -= penY * 0.08;
+                    if (n.fx == null) {
+                        n.x += penX * 0.10;
+                        n.y -= penY * 0.10;
+                    }
+                }
 
                 // 速度減衰 (Damping)
                 n.vx *= 0.85;
@@ -1630,14 +1734,14 @@ const NetworkVisualizer = {
 
         const titleScale = isExport ? 1.7 : 1.0;
 
-        // (1) 左上タイトルバッジ
+        // (1) 左上タイトルバッジ（スリム化しノードへの被りを最小化）
         ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
         ctx.strokeStyle = '#CBD5E1';
         ctx.lineWidth = isExport ? 1.8 : 1;
-        const badgeW = isExport ? 540 : 340;
-        const badgeH = isExport ? 82 : 54;
-        const padX = isExport ? 20 : 14;
-        const padY = isExport ? 18 : 14;
+        const badgeW = isExport ? 460 : 330;
+        const badgeH = isExport ? 70 : 52;
+        const padX = isExport ? 18 : 14;
+        const padY = isExport ? 16 : 14;
         ctx.beginPath();
         if (ctx.roundRect) {
             ctx.roundRect(padX, padY, badgeW, badgeH, isExport ? 8 : 6);
@@ -1648,23 +1752,23 @@ const NetworkVisualizer = {
         ctx.stroke();
 
         ctx.fillStyle = '#1E293B';
-        ctx.font = isExport ? 'bold 20px sans-serif' : 'bold 12.5px sans-serif';
+        ctx.font = isExport ? 'bold 18px sans-serif' : 'bold 12.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         const kwPart = this.targetKeyword ? ` [対象: 🎯${this.targetKeyword}]` : '';
-        ctx.fillText(`👥 属性別 結びつき (${this.attrColName || '属性'})${kwPart}`, padX + (isExport ? 14 : 8), padY + (isExport ? 8 : 5));
+        ctx.fillText(`👥 属性別 結びつき (${this.attrColName || '属性'})${kwPart}`, padX + (isExport ? 12 : 8), padY + (isExport ? 7 : 5));
 
         const metricBadge = this.attrMetric === 'distinct' ? '🎯 特徴度重視（特有語）' : '📊 頻度重視（高頻度語）';
         ctx.fillStyle = this.attrMetric === 'distinct' ? '#2563EB' : '#475569';
-        ctx.font = isExport ? 'bold 17px sans-serif' : 'bold 11px sans-serif';
-        ctx.fillText(`選出基準: ${metricBadge}`, padX + (isExport ? 14 : 8), padY + (isExport ? 32 : 20));
+        ctx.font = isExport ? 'bold 14.5px sans-serif' : 'bold 11px sans-serif';
+        ctx.fillText(`選出基準: ${metricBadge}`, padX + (isExport ? 12 : 8), padY + (isExport ? 28 : 20));
 
         ctx.fillStyle = '#64748B';
-        ctx.font = isExport ? '14px sans-serif' : '9.5px sans-serif';
+        ctx.font = isExport ? '12px sans-serif' : '9.5px sans-serif';
         const subGuide = this.attrMetric === 'distinct'
             ? '※ 外側は他属性と比べて突出して使われた特有語、中央は複数属性共通の特有語'
             : '※ 中央は複数属性の共通話題、外側は属性ごとの高頻度語';
-        ctx.fillText(subGuide, padX + (isExport ? 14 : 8), padY + (isExport ? 55 : 34));
+        ctx.fillText(subGuide, padX + (isExport ? 12 : 8), padY + (isExport ? 48 : 34));
 
         // (2) 右上凡例
         ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
@@ -1787,8 +1891,41 @@ const NetworkVisualizer = {
         const targetCenterX = targetW / 2;
         const targetCenterY = marginTop + availH / 2;
 
-        const autoPanX = targetCenterX - bboxCenterX * autoScale;
-        const autoPanY = targetCenterY - bboxCenterY * autoScale;
+        let autoPanX = targetCenterX - bboxCenterX * autoScale;
+        let autoPanY = targetCenterY - bboxCenterY * autoScale;
+
+        // 【重要】タイトルバッジとの重なり防止ガード
+        // ノードがスクリーン座標系において左上タイトルバッジ領域に侵入している場合、安全に押し出し
+        const isAttr = this.networkMode === 'attr';
+        const titleBadgeW = isAttr ? 480 : (this.targetKeyword ? 380 : 0);
+        const titleBadgeH = isAttr ? 88 : (this.targetKeyword ? 52 : 0);
+
+        if (titleBadgeW > 0 && titleBadgeH > 0) {
+            let maxOverlapX = 0;
+            let maxOverlapY = 0;
+            this.nodes.forEach(n => {
+                const sx = n.x * autoScale + autoPanX;
+                const sy = n.y * autoScale + autoPanY;
+                const nodeR = (n.isAttrNode ? (n.boxWidth * 1.45 / 2) : 22) + 10;
+                if (sx - nodeR < titleBadgeW && sy - nodeR < titleBadgeH) {
+                    const ox = (titleBadgeW + nodeR) - sx;
+                    const oy = (titleBadgeH + nodeR) - sy;
+                    if (ox > 0 && oy > 0) {
+                        if (ox < oy) {
+                            if (ox > maxOverlapX) maxOverlapX = ox;
+                        } else {
+                            if (oy > maxOverlapY) maxOverlapY = oy;
+                        }
+                    }
+                }
+            });
+
+            if (maxOverlapY > 0 && maxOverlapY < 120) {
+                autoPanY += maxOverlapY;
+            } else if (maxOverlapX > 0 && maxOverlapX < 140) {
+                autoPanX += maxOverlapX;
+            }
+        }
 
         // オフスクリーンキャンバスに白背景で描画
         const exportCanvas = document.createElement('canvas');
@@ -1868,7 +2005,10 @@ const NetworkVisualizer = {
         const prevResolved = this.resolvedTargetWord;
 
         try {
-            this.render(wordList, coocCounts, targetKeyword, activeRelatedWords, options);
+            this.render(wordList, coocCounts, targetKeyword, activeRelatedWords, {
+                ...options,
+                isExport: true
+            });
             return this.getExportCanvas(targetW, targetH);
         } finally {
             this.networkMode = prevMode;
@@ -1892,15 +2032,15 @@ const NetworkVisualizer = {
     drawLegend(ctx, w, h, isExport = false) {
         ctx.save();
 
-        // (1) 左上タイトルバッジ（対象キーワード明記）
+        // (1) 左上タイトルバッジ（対象キーワード明記・スリム化でノードへの被りを防止）
         if (this.targetKeyword) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
             ctx.strokeStyle = '#CBD5E1';
             ctx.lineWidth = isExport ? 1.8 : 1;
             const kwLabel = `🌐 単語共起ネットワーク [対象: 🎯${this.targetKeyword}]`;
-            ctx.font = isExport ? 'bold 19px sans-serif' : 'bold 12px sans-serif';
-            const badgeW = Math.max(isExport ? 360 : 220, ctx.measureText(kwLabel).width + (isExport ? 32 : 22));
-            const badgeH = isExport ? 42 : 28;
+            ctx.font = isExport ? 'bold 17px sans-serif' : 'bold 12px sans-serif';
+            const badgeW = Math.max(isExport ? 320 : 220, ctx.measureText(kwLabel).width + (isExport ? 28 : 22));
+            const badgeH = isExport ? 36 : 26;
             ctx.beginPath();
             if (ctx.roundRect) {
                 ctx.roundRect(14, 14, badgeW, badgeH, isExport ? 8 : 6);
@@ -1913,7 +2053,7 @@ const NetworkVisualizer = {
             ctx.fillStyle = '#1E293B';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(kwLabel, isExport ? 26 : 22, 14 + badgeH / 2);
+            ctx.fillText(kwLabel, isExport ? 24 : 22, 14 + badgeH / 2);
         }
 
         ctx.font = isExport ? 'bold 15px sans-serif' : '10.5px sans-serif';
