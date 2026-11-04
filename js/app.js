@@ -1804,8 +1804,8 @@ function deleteSelectedRows() {
  * デモデータのロード
  */
 function loadDemoData() {
-    if (typeof DEMO_SURVEY_DATA === 'undefined') return;
-    const headers = ['id', '年代', '自由記述'];
+    if (typeof DEMO_SURVEY_DATA === 'undefined' || DEMO_SURVEY_DATA.length === 0) return;
+    const headers = Object.keys(DEMO_SURVEY_DATA[0]);
     // デモ実行時は例として「物価高」を設定して分析を即座に体験可能にする
     document.getElementById('inputTargetKeyword').value = '物価高';
     AppState.targetKeyword = '物価高';
