@@ -205,10 +205,18 @@ const NetworkVisualizer = {
     isTargetNode(id) {
         if (!id) return false;
         const idLower = id.toLowerCase();
-        const tLower = (this.targetKeyword || '').toLowerCase();
-        const rLower = (this.resolvedTargetWord || '').toLowerCase();
-        if (idLower === tLower || idLower === rLower) return true;
-        if (tLower && (idLower.includes(tLower) || tLower.includes(idLower))) return true;
+        const tKeywords = (this.targetKeywords && this.targetKeywords.length > 0)
+            ? this.targetKeywords
+            : (this.targetKeyword ? [this.targetKeyword] : []);
+        const rKeywords = (this.resolvedTargetWords && this.resolvedTargetWords.length > 0)
+            ? this.resolvedTargetWords
+            : (this.resolvedTargetWord ? [this.resolvedTargetWord] : []);
+        const allTargets = Array.from(new Set([...tKeywords, ...rKeywords])).map(k => (k || '').toLowerCase()).filter(Boolean);
+
+        for (const tl of allTargets) {
+            if (idLower === tl) return true;
+            if (idLower.includes(tl) || tl.includes(idLower)) return true;
+        }
         return false;
     },
 
@@ -227,7 +235,9 @@ const NetworkVisualizer = {
         this.networkMode = 'word';
         this.isExport = options.isExport || false;
         this.targetKeyword = targetKeyword;
+        this.targetKeywords = options.targetKeywords || (typeof AssociationEngine !== 'undefined' ? AssociationEngine.parseKeywords(targetKeyword) : [targetKeyword]);
         this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        this.resolvedTargetWords = options.resolvedTargetWords || [this.resolvedTargetWord];
         this.activeRelatedWords = activeRelatedWords || [];
         this.onWordClick = options.onWordClick;
         this.spacingMode = options.spacingMode || 'wide'; // 'normal' | 'wide' | 'widest'
@@ -303,16 +313,21 @@ const NetworkVisualizer = {
             connectedNodes.add(e.targetId);
         });
 
-        // ターゲットキーワードおよび解決された代表複合語は必ずノードに含める
+        // ターゲットキーワード群および解決された代表複合語は必ずノードに含める
+        const targetsToEnsure = Array.from(new Set([
+            ...(this.targetKeywords || []),
+            this.targetKeyword,
+            this.resolvedTargetWord,
+            ...(this.resolvedTargetWords || [])
+        ])).filter(Boolean);
+
         let targetAdded = false;
-        if (wordSet.has(this.resolvedTargetWord)) {
-            connectedNodes.add(this.resolvedTargetWord);
-            targetAdded = true;
-        }
-        if (wordSet.has(this.targetKeyword)) {
-            connectedNodes.add(this.targetKeyword);
-            targetAdded = true;
-        }
+        targetsToEnsure.forEach(tw => {
+            if (wordSet.has(tw)) {
+                connectedNodes.add(tw);
+                targetAdded = true;
+            }
+        });
         if (!targetAdded) {
             const match = topWords.find(w => this.isTargetNode(w.text));
             if (match) {

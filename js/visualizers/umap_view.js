@@ -163,10 +163,18 @@ const UmapVisualizer = {
     isTargetWord(word) {
         if (!word) return false;
         const wLower = word.toLowerCase();
-        const tLower = (this.targetKeyword || '').toLowerCase();
-        const rLower = (this.resolvedTargetWord || '').toLowerCase();
-        if (wLower === tLower || wLower === rLower) return true;
-        if (tLower && (wLower.includes(tLower) || tLower.includes(wLower))) return true;
+        const tKeywords = (this.targetKeywords && this.targetKeywords.length > 0)
+            ? this.targetKeywords
+            : (this.targetKeyword ? [this.targetKeyword] : []);
+        const rKeywords = (this.resolvedTargetWords && this.resolvedTargetWords.length > 0)
+            ? this.resolvedTargetWords
+            : (this.resolvedTargetWord ? [this.resolvedTargetWord] : []);
+        const allTargets = Array.from(new Set([...tKeywords, ...rKeywords])).map(k => (k || '').toLowerCase()).filter(Boolean);
+
+        for (const tl of allTargets) {
+            if (wLower === tl) return true;
+            if (wLower.includes(tl) || tl.includes(wLower)) return true;
+        }
         return false;
     },
 
@@ -185,7 +193,9 @@ const UmapVisualizer = {
         if (!this.canvas) return;
         this.viewMode = mode || 'words';
         this.targetKeyword = targetKeyword;
+        this.targetKeywords = options.targetKeywords || (typeof AssociationEngine !== 'undefined' ? AssociationEngine.parseKeywords(targetKeyword) : [targetKeyword]);
         this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        this.resolvedTargetWords = options.resolvedTargetWords || [this.resolvedTargetWord];
         this.activeRelatedWords = activeRelatedWords || [];
         this.onPointClick = options.onPointClick;
         this.spreadMode = options.spreadMode || 'wide'; // 'normal' | 'wide' | 'widest'
@@ -257,9 +267,15 @@ const UmapVisualizer = {
         const maxWords = options.maxWords || 50;
         let topWords = wordList.slice(0, maxWords).map(w => w.text);
 
-        // 代表ターゲット語（中東情勢など）およびキーワードがもしwordListにあれば、topWordsに確実に含める
-        const targetToEnsure = [this.resolvedTargetWord, this.targetKeyword].filter(w => w && wordList.some(item => item.text === w));
-        for (const tw of targetToEnsure) {
+        // 指定キーワード群（中東、イラン、イスラエル等）および代表語がもしwordListにあれば、topWordsに確実に含める
+        const targetsToEnsure = Array.from(new Set([
+            ...(this.targetKeywords || []),
+            this.targetKeyword,
+            this.resolvedTargetWord,
+            ...(this.resolvedTargetWords || [])
+        ])).filter(w => w && wordList.some(item => item.text === w));
+
+        for (const tw of targetsToEnsure) {
             if (!topWords.includes(tw)) {
                 if (topWords.length >= maxWords) topWords.pop();
                 topWords.unshift(tw);

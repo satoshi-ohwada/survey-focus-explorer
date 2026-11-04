@@ -15,7 +15,10 @@ const AppState = {
     
     // キーワード ＆ 関連語
     targetKeyword: '',
+    targetKeywords: [], // 複数キーワード指定（OR探索）時の各単語配列
+    keywordDocCounts: {}, // 各キーワード個別の該当件数
     resolvedTargetWord: '', // 複合語（例: 中東情勢）自動判定による中心代表語
+    resolvedTargetWords: [], // 各キーワードごとの代表語配列
     relatedWords: [], // [{ word, score, coocCount, docCount, checked }]
     
     // 抽出結果
@@ -1867,15 +1870,20 @@ async function runFocusAnalysis() {
         return;
     }
     AppState.targetKeyword = kw;
+    AppState.targetKeywords = AssociationEngine.parseKeywords(kw);
+
+    const kwDisplay = AppState.targetKeywords.length > 1
+        ? `${AppState.targetKeywords.join(', ')}（複数OR指定: 計${AppState.targetKeywords.length}語）`
+        : kw;
 
     // 実行中表示の開始（ステップ 1: 準備）
-    setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, '準備中', '辞書設定および形態素解析器の準備をしています...', 15);
+    setAnalysisLoading(true, `🚀 注目キーワード「${kwDisplay}」を分析中...`, '準備中', '辞書設定および形態素解析器の準備をしています...', 15);
     await new Promise(r => setTimeout(r, 40));
 
     try {
         // 1. Kuromoji が未完了の場合は待機を試みる
         if (!TextPreprocessor.tokenizer) {
-            setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 1/4', '形態素解析辞書（Kuromoji）をロード中...', 25);
+            setAnalysisLoading(true, `🚀 注目キーワード「${kwDisplay}」を分析中...`, 'ステップ 1/4', '形態素解析辞書（Kuromoji）をロード中...', 25);
             await new Promise(r => setTimeout(r, 40));
             try {
                 await TextPreprocessor.init('lib/kuromoji/dict/');
@@ -1900,7 +1908,7 @@ async function runFocusAnalysis() {
         }
 
         if (!AppState.isTokenized || !AppState.tokensPerDoc || AppState.tokensPerDoc.length !== targetRows.length) {
-            setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 2/4', `全回答文（${targetRows.length.toLocaleString()}件）の形態素解析・単語分解を実行中...`, 45);
+            setAnalysisLoading(true, `🚀 注目キーワード「${kwDisplay}」を分析中...`, 'ステップ 2/4', `全回答文（${targetRows.length.toLocaleString()}件）の形態素解析・単語分解を実行中...`, 45);
             await new Promise(r => setTimeout(r, 40));
 
             const texts = targetRows.map(r => String(r[AppState.textCol] || ''));
@@ -1910,7 +1918,7 @@ async function runFocusAnalysis() {
         }
 
         // 4. キーワード関連語の算出
-        setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 3/4', '指定キーワードとの文脈共起・関連度スコアを算出中...', 70);
+        setAnalysisLoading(true, `🚀 注目キーワード「${kwDisplay}」を分析中...`, 'ステップ 3/4', '指定キーワードとの文脈共起・関連度スコアを算出中...', 70);
         await new Promise(r => setTimeout(r, 40));
 
         const res = AssociationEngine.findRelatedWords(
@@ -1926,17 +1934,20 @@ async function runFocusAnalysis() {
         }
 
         AppState.resolvedTargetWord = res.resolvedTargetWord || AppState.targetKeyword;
+        AppState.resolvedTargetWords = res.resolvedTargetWords || [AppState.resolvedTargetWord];
+        AppState.targetKeywords = res.targetKeywords || AppState.targetKeywords;
+        AppState.keywordDocCounts = res.keywordDocCounts || {};
         AppState.relatedWords = res.relatedWords || [];
 
         // 5. 関連語チップの描画
         renderRelatedChips();
 
         // 6. 該当意見のフィルタリング ＆ 可視化描画
-        setAnalysisLoading(true, `🚀 注目キーワード「${kw}」を分析中...`, 'ステップ 4/4', '関連意見の抽出・トーン分類・集約サマリーを生成中...', 90);
+        setAnalysisLoading(true, `🚀 注目キーワード「${kwDisplay}」を分析中...`, 'ステップ 4/4', '関連意見の抽出・トーン分類・集約サマリーを生成中...', 90);
         await new Promise(r => setTimeout(r, 40));
 
         executeFilteringAndRender();
-        setAnalysisLoading(true, `🚀 注目キーワード「${kw}」分析完了`, '完了', 'サマリーと各種可視化を描画しました', 100);
+        setAnalysisLoading(true, `🚀 注目キーワード「${kwDisplay}」分析完了`, '完了', 'サマリーと各種可視化を描画しました', 100);
     } catch (err) {
         console.error('Focus analysis error:', err);
         alert('分析処理中にエラーが発生しました: ' + err.message);
@@ -1952,8 +1963,22 @@ function renderRelatedChips() {
     const container = document.getElementById('relatedChipsContainer');
     container.innerHTML = '';
 
-    // 複合語の自動判定により代表中心語が設定された場合、案内バッジを先頭に表示
-    if (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword) {
+    // 複数キーワード指定時の案内バッジ（各キーワードごとのヒット件数内訳）
+    if (AppState.targetKeywords && AppState.targetKeywords.length > 1) {
+        const multiBadge = document.createElement('div');
+        multiBadge.className = 'multi-keywords-badge';
+        multiBadge.style.cssText = 'background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; font-size: 13px; color: #1e40af; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;';
+        const breakdown = AppState.targetKeywords.map(k => {
+            const count = AppState.keywordDocCounts ? (AppState.keywordDocCounts[k] || 0) : 0;
+            return `<strong>${escapeHtml(k)}</strong> (${count.toLocaleString()}件)`;
+        }).join('、');
+        multiBadge.innerHTML = `
+            <span>🎯</span>
+            <span>複数キーワード指定中 (OR結合): ${breakdown}</span>
+        `;
+        container.appendChild(multiBadge);
+    } else if (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword) {
+        // 単一キーワードで複合語が自動解決された場合
         const infoBadge = document.createElement('div');
         infoBadge.className = 'resolved-target-badge';
         infoBadge.style.cssText = 'background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; padding: 6px 12px; margin-bottom: 8px; font-size: 13px; color: #9f1239; display: flex; align-items: center; gap: 8px;';
@@ -2025,7 +2050,9 @@ function executeFilteringAndRender(showNotice = false) {
         activeRelated,
         AppState.tokensPerDoc,
         {
+            targetKeywords: AppState.targetKeywords,
             resolvedTargetWord: AppState.resolvedTargetWord,
+            resolvedTargetWords: AppState.resolvedTargetWords,
             matchMode: AppState.matchMode,
             extractUnit: AppState.extractUnit
         }
@@ -2042,7 +2069,9 @@ function executeFilteringAndRender(showNotice = false) {
         80,
         {
             targetKeyword: AppState.targetKeyword,
-            resolvedTargetWord: AppState.resolvedTargetWord
+            targetKeywords: AppState.targetKeywords,
+            resolvedTargetWord: AppState.resolvedTargetWord,
+            resolvedTargetWords: AppState.resolvedTargetWords
         }
     );
 
@@ -2146,7 +2175,11 @@ function generateSummaryData() {
             AppState.relatedWords,
             AppState.subcorpusStats,
             AppState.matchMode,
-            AppState.extractUnit
+            AppState.extractUnit,
+            {
+                targetKeywords: AppState.targetKeywords,
+                keywordDocCounts: AppState.keywordDocCounts
+            }
         )
         : null;
 
@@ -2341,7 +2374,9 @@ function updateWordCloud() {
         AppState.targetKeyword,
         activeRelated,
         {
+            targetKeywords: AppState.targetKeywords,
             resolvedTargetWord: AppState.resolvedTargetWord,
+            resolvedTargetWords: AppState.resolvedTargetWords,
             rankingMethod: AppState.cloudRanking,
             maxWords: AppState.cloudMaxWords,
             shape: AppState.cloudShape,
@@ -2374,7 +2409,9 @@ function updateNetwork() {
             targetRows,
             AppState.targetKeyword,
             {
+                targetKeywords: AppState.targetKeywords,
                 resolvedTargetWord: AppState.resolvedTargetWord,
+                resolvedTargetWords: AppState.resolvedTargetWords,
                 maxWords: AppState.networkMaxWords,
                 spacingMode: AppState.networkSpacing,
                 fontSize: AppState.networkFontSize,
@@ -2398,7 +2435,9 @@ function updateNetwork() {
             AppState.targetKeyword,
             activeRelated,
             {
+                targetKeywords: AppState.targetKeywords,
                 resolvedTargetWord: AppState.resolvedTargetWord,
+                resolvedTargetWords: AppState.resolvedTargetWords,
                 maxWords: AppState.networkMaxWords,
                 spacingMode: AppState.networkSpacing,
                 fontSize: AppState.networkFontSize,
@@ -2427,7 +2466,9 @@ function updateUmap() {
         AppState.targetKeyword,
         activeRelated,
         {
+            targetKeywords: AppState.targetKeywords,
             resolvedTargetWord: AppState.resolvedTargetWord,
+            resolvedTargetWords: AppState.resolvedTargetWords,
             maxWords: 50,
             spreadMode: AppState.umapSpread,
             fontSize: AppState.umapFontSize,
@@ -2712,13 +2753,23 @@ function renderSummaryDashboard() {
 
         let includedWordsHtml = '';
         if (inc) {
-            const targetBadge = `
-                <span class="included-word-pill target" title="指定注目キーワード（該当意見: ${inc.targetCount}件）">
-                    🎯 <strong>${escapeHtml(inc.targetKeyword)}</strong>
-                    ${inc.targetCount > 0 ? `<span class="pill-cnt">${inc.targetCount}件</span>` : ''}
-                </span>
-            `;
-            const resolvedBadge = (inc.resolvedWord && inc.resolvedWord !== inc.targetKeyword) ? `
+            let targetBadge = '';
+            if (inc.targetKeywords && inc.targetKeywords.length > 1) {
+                targetBadge = (inc.keywordBreakdown || inc.targetKeywords.map(k => ({ keyword: k, count: 0 }))).map(kb => `
+                    <span class="included-word-pill target" title="指定注目キーワード（該当意見: ${kb.count}件）">
+                        🎯 <strong>${escapeHtml(kb.keyword)}</strong>
+                        ${kb.count > 0 ? `<span class="pill-cnt">${kb.count}件</span>` : ''}
+                    </span>
+                `).join('');
+            } else {
+                targetBadge = `
+                    <span class="included-word-pill target" title="指定注目キーワード（該当意見: ${inc.targetCount}件）">
+                        🎯 <strong>${escapeHtml(inc.targetKeyword)}</strong>
+                        ${inc.targetCount > 0 ? `<span class="pill-cnt">${inc.targetCount}件</span>` : ''}
+                    </span>
+                `;
+            }
+            const resolvedBadge = (inc.resolvedWord && inc.resolvedWord !== inc.targetKeyword && (!inc.targetKeywords || inc.targetKeywords.length === 1)) ? `
                 <span class="included-word-pill resolved" title="中心代表語（複合語自動判定 / 該当意見: ${inc.resolvedCount}件）">
                     🔹 <strong>${escapeHtml(inc.resolvedWord)}</strong>
                     ${inc.resolvedCount > 0 ? `<span class="pill-cnt">${inc.resolvedCount}件</span>` : ''}
@@ -2998,18 +3049,33 @@ function renderSummaryDashboard() {
  */
 function formatHighlightedText(rawText) {
     let highlighted = escapeHtml(rawText);
-    const targetLower = (AppState.targetKeyword || '').toLowerCase();
-    const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
-    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word.toLowerCase());
 
-    if (AppState.resolvedTargetWord && AppState.resolvedTargetWord !== AppState.targetKeyword) {
-        const regR = new RegExp(escapeRegExp(AppState.resolvedTargetWord), 'gi');
-        highlighted = highlighted.replace(regR, m => `<span class="hl-target">${m}</span>`);
-    }
-    if (AppState.targetKeyword) {
-        const regT = new RegExp(escapeRegExp(AppState.targetKeyword), 'gi');
-        highlighted = highlighted.replace(regT, m => `<span class="hl-target">${m}</span>`);
-    }
+    // 注目キーワード群（複数OR指定対応）および代表中心語
+    const targetKeywords = (AppState.targetKeywords && AppState.targetKeywords.length > 0)
+        ? AppState.targetKeywords
+        : (typeof AssociationEngine !== 'undefined' ? AssociationEngine.parseKeywords(AppState.targetKeyword) : [AppState.targetKeyword]);
+    const resolvedWords = (AppState.resolvedTargetWords && AppState.resolvedTargetWords.length > 0)
+        ? AppState.resolvedTargetWords
+        : (AppState.resolvedTargetWord ? [AppState.resolvedTargetWord] : []);
+
+    const allTargets = Array.from(new Set([
+        ...targetKeywords,
+        ...resolvedWords,
+        AppState.targetKeyword
+    ])).map(s => String(s || '').trim()).filter(Boolean);
+
+    // 長い語句から先に置換して部分一致の誤置換を防止
+    allTargets.sort((a, b) => b.length - a.length);
+    allTargets.forEach(tw => {
+        if (tw) {
+            const regT = new RegExp(escapeRegExp(tw), 'gi');
+            highlighted = highlighted.replace(regT, m => `<span class="hl-target">${m}</span>`);
+        }
+    });
+
+    // 選択された関連語
+    const activeRelated = AppState.relatedWords.filter(r => r.checked).map(r => r.word).filter(Boolean);
+    activeRelated.sort((a, b) => b.length - a.length);
     activeRelated.forEach(rw => {
         if (rw) {
             const regRel = new RegExp(escapeRegExp(rw), 'gi');

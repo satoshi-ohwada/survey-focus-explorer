@@ -5,19 +5,51 @@
  */
 const AssociationEngine = {
     /**
-     * 指定キーワードに対する関連性の高い単語（共起語・文脈語）を探索・算出する
+     * ユーザー入力文字列（または配列）からキーワードの配列を安全に抽出・正規化する
+     * カンマ（,）、読点（、）、改行、パイプで分割し、カンマ等がない場合は空白でも分割する
+     * @param {string|Array<string>} targetKeyword 
+     * @returns {Array<string>} 重複を除去したキーワード配列
+     */
+    parseKeywords(targetKeyword) {
+        if (!targetKeyword) return [];
+        if (Array.isArray(targetKeyword)) {
+            return Array.from(new Set(targetKeyword.map(s => String(s || '').trim()).filter(Boolean)));
+        }
+        const raw = String(targetKeyword).trim();
+        if (!raw) return [];
+
+        // カンマ、読点、改行、パイプで分割
+        let parts = raw.split(/[,、|\n]/).map(s => s.trim()).filter(Boolean);
+
+        // カンマや読点が含まれず1語扱いになっており、かつ半角/全角スペースが含まれている場合
+        if (parts.length === 1 && /[\s　]/.test(parts[0])) {
+            const spaceParts = parts[0].split(/[\s　]+/).map(s => s.trim()).filter(Boolean);
+            if (spaceParts.length > 1) {
+                parts = spaceParts;
+            }
+        }
+        return Array.from(new Set(parts));
+    },
+
+    /**
+     * 指定キーワード（単一または複数OR指定）に対する関連性の高い単語（共起語・文脈語）を探索・算出する
      * @param {Array<Array<string>>} tokensPerDoc - 各文書（回答）の形態素トークン配列
      * @param {Array<object>} rawRows - 元のアンケート行データ
      * @param {string} textCol - 自由記述列名
-     * @param {string} targetKeyword - ユーザー指定キーワード
+     * @param {string|Array<string>} targetKeyword - ユーザー指定キーワード（「中東, イラン, イスラエル」等も可）
      * @param {object} options - オプション設定
-     * @returns {object} { targetKeyword, matchedTargetDocCount, relatedWords, allDocCount }
+     * @returns {object} { targetKeyword, targetKeywords, matchedTargetDocCount, relatedWords, allDocCount, ... }
      */
     findRelatedWords(tokensPerDoc, rawRows, textCol, targetKeyword, options = {}) {
-        const cleanKeyword = (targetKeyword || '').trim();
-        if (!cleanKeyword) {
+        const keywords = this.parseKeywords(targetKeyword);
+        const cleanKeyword = Array.isArray(targetKeyword)
+            ? targetKeyword.join(', ')
+            : String(targetKeyword || '').trim();
+
+        if (keywords.length === 0) {
             return {
                 targetKeyword: '',
+                targetKeywords: [],
                 matchedTargetDocCount: 0,
                 relatedWords: [],
                 allDocCount: rawRows.length,
@@ -48,63 +80,80 @@ const AssociationEngine = {
             }
         }
 
-        // 2. ターゲットキーワードを含む文書のインデックス集合を特定
+        // 2. ターゲットキーワード（各単語）を含む文書のインデックス集合を特定
         // 形態素トークンにおける完全一致、および複合語（例: "中東" に対する "中東情勢"）の探索
-        const lowerKeyword = cleanKeyword.toLowerCase();
-        const exactTokenExists = wordDocMap.has(cleanKeyword);
-        let targetDocSet = wordDocMap.get(cleanKeyword) || new Set();
+        const targetDocSet = new Set();
+        const keywordDocCounts = {};
+        const resolvedMap = {};
+        const compoundMap = {};
+        const allCompoundCandidates = [];
 
-        // キーワードを部分一致で含む複合語トークンの探索（例: "中東" に対して "中東情勢" "中東問題" 等）
-        const compoundCandidates = [];
-        for (const [w, docSet] of wordDocMap.entries()) {
-            const wLower = w.toLowerCase();
-            if (wLower !== lowerKeyword && (wLower.includes(lowerKeyword) || lowerKeyword.includes(wLower))) {
-                compoundCandidates.push({ word: w, count: wordFreq.get(w) || 0, docCount: docSet.size });
-            }
-        }
-        compoundCandidates.sort((a, b) => b.count - a.count || b.docCount - a.docCount);
+        for (const kw of keywords) {
+            const kwLower = kw.toLowerCase();
+            const exactExists = wordDocMap.has(kw);
+            const kwDocSet = new Set(wordDocMap.get(kw) || []);
 
-        // 代表ターゲット語（中心語）の解決:
-        // トークンに完全一致がない場合、最も出現頻度が高い複合語（例: "中東情勢"）を中心語として自動解決
-        let resolvedTargetWord = cleanKeyword;
-        if (!exactTokenExists && compoundCandidates.length > 0) {
-            resolvedTargetWord = compoundCandidates[0].word;
-        }
-
-        // もし形態素トークンに完全一致しない場合、複合語の文書集合および原文テキスト部分一致で補完
-        if (targetDocSet.size === 0) {
-            targetDocSet = new Set();
-            // 代表複合語の文書を追加
-            if (wordDocMap.has(resolvedTargetWord)) {
-                for (const idx of wordDocMap.get(resolvedTargetWord)) {
-                    targetDocSet.add(idx);
+            // キーワードを部分一致で含む複合語トークンの探索（例: "中東" に対して "中東情勢" "中東問題" 等）
+            const compoundCandidates = [];
+            for (const [w, docSet] of wordDocMap.entries()) {
+                const wLower = w.toLowerCase();
+                if (wLower !== kwLower && (wLower.includes(kwLower) || kwLower.includes(wLower))) {
+                    compoundCandidates.push({ word: w, count: wordFreq.get(w) || 0, docCount: docSet.size });
                 }
             }
-            // 他の複合語の文書も追加
-            for (const cand of compoundCandidates) {
-                const cSet = wordDocMap.get(cand.word);
-                if (cSet) {
-                    for (const idx of cSet) targetDocSet.add(idx);
+            compoundCandidates.sort((a, b) => b.count - a.count || b.docCount - a.docCount);
+            compoundMap[kw] = compoundCandidates.map(c => c.word);
+            compoundCandidates.forEach(c => allCompoundCandidates.push(c));
+
+            // 代表ターゲット語（中心語）の解決:
+            // トークンに完全一致がない場合、最も出現頻度が高い複合語を中心語として自動解決
+            let resolvedKw = kw;
+            if (!exactExists && compoundCandidates.length > 0) {
+                resolvedKw = compoundCandidates[0].word;
+            }
+            resolvedMap[kw] = resolvedKw;
+
+            // もし形態素トークンに完全一致しない場合、複合語の文書集合および原文テキスト部分一致で補完
+            if (kwDocSet.size === 0) {
+                if (wordDocMap.has(resolvedKw)) {
+                    for (const idx of wordDocMap.get(resolvedKw)) kwDocSet.add(idx);
+                }
+                for (const cand of compoundCandidates) {
+                    const cSet = wordDocMap.get(cand.word);
+                    if (cSet) {
+                        for (const idx of cSet) kwDocSet.add(idx);
+                    }
+                }
+                for (let i = 0; i < N; i++) {
+                    const text = String(rawRows[i][textCol] || '').toLowerCase();
+                    if (text.includes(kwLower)) {
+                        kwDocSet.add(i);
+                    }
                 }
             }
-            // 原文テキストでの部分一致検索
-            for (let i = 0; i < N; i++) {
-                const text = String(rawRows[i][textCol] || '').toLowerCase();
-                if (text.includes(lowerKeyword)) {
-                    targetDocSet.add(i);
-                }
+
+            keywordDocCounts[kw] = kwDocSet.size;
+            for (const idx of kwDocSet) {
+                targetDocSet.add(idx);
             }
         }
+
+        const resolvedTargetWords = Array.from(new Set(Object.values(resolvedMap)));
+        const resolvedTargetWord = (keywords.length === 1) ? resolvedMap[keywords[0]] : cleanKeyword;
 
         const targetDocCount = targetDocSet.size;
         if (targetDocCount === 0) {
+            const kwDisplay = keywords.map(k => `「${k}」`).join('・');
             return {
                 targetKeyword: cleanKeyword,
+                targetKeywords: keywords,
                 resolvedTargetWord: resolvedTargetWord,
+                resolvedTargetWords: resolvedTargetWords,
+                keywordDocCounts: keywordDocCounts,
                 matchedTargetDocCount: 0,
                 relatedWords: [],
                 allDocCount: N,
-                warning: `キーワード「${cleanKeyword}」を含む回答が見つかりませんでした。`
+                warning: `指定キーワード ${kwDisplay} のいずれも含む回答が見つかりませんでした。`
             };
         }
 
@@ -114,10 +163,11 @@ const AssociationEngine = {
 
         // 関連語から除外する自単語・代表語セット（中心語そのものが関連語一覧に混ざるのを防止）
         // ※「大雪」「雪道」などの派生語・複合語は重要な関連語であるため除外しない
-        const targetWordVariants = new Set([
-            cleanKeyword.toLowerCase(),
-            resolvedTargetWord.toLowerCase()
-        ]);
+        const targetWordVariants = new Set();
+        for (const kw of keywords) {
+            targetWordVariants.add(kw.toLowerCase());
+            if (resolvedMap[kw]) targetWordVariants.add(resolvedMap[kw].toLowerCase());
+        }
 
         for (const [w, docSet] of wordDocMap.entries()) {
             const wLower = w.toLowerCase();
@@ -126,7 +176,7 @@ const AssociationEngine = {
 
             const isKanji = /^[\p{Script=Han}]$/u.test(w);
             const isAlphaNum = /^[A-Za-z0-9]+$/.test(w);
-            const isTarget = (wLower === cleanKeyword.toLowerCase() || wLower === resolvedTargetWord.toLowerCase());
+            const isTarget = targetWordVariants.has(wLower);
             if (w.length <= 1 && !isKanji && !isAlphaNum && !isTarget) continue; // 漢字・英数以外の1文字記号・ひらがな等はスキップ
 
             // 共起文書数の計算
@@ -191,9 +241,12 @@ const AssociationEngine = {
 
         return {
             targetKeyword: cleanKeyword,
+            targetKeywords: keywords,
             resolvedTargetWord: resolvedTargetWord,
-            hasExactToken: exactTokenExists,
-            compoundCandidates: compoundCandidates.map(c => c.word),
+            resolvedTargetWords: resolvedTargetWords,
+            keywordDocCounts: keywordDocCounts,
+            hasExactToken: keywords.every(kw => wordDocMap.has(kw)),
+            compoundCandidates: allCompoundCandidates.map(c => c.word),
             matchedTargetDocCount: targetDocCount,
             relatedWords: relatedWords,
             allDocCount: N
@@ -205,26 +258,31 @@ const AssociationEngine = {
      * @param {Array<object>} rawRows - 元のアンケート行配列
      * @param {string} textCol - 自由記述列名
      * @param {string} attrCol - 属性列名（任意）
-     * @param {string} targetKeyword - ユーザー指定キーワード
+     * @param {string|Array<string>} targetKeyword - ユーザー指定キーワード
      * @param {Array<string>} activeRelatedWords - ユーザーがチェックした関連語の配列
      * @param {Array<Array<string>>} tokensPerDoc - 各行の形態素トークン配列
-     * @param {object} options - オプション (extractUnit: 'doc' | 'sentence')
+     * @param {object} options - オプション (extractUnit, targetKeywords, resolvedTargetWords など)
      * @returns {object} フィルタリング結果
      */
     filterMatchedOpinions(rawRows, textCol, attrCol, targetKeyword, activeRelatedWords, tokensPerDoc, options = {}) {
-        const resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        const targetKeywords = (options.targetKeywords && options.targetKeywords.length > 0)
+            ? options.targetKeywords
+            : this.parseKeywords(targetKeyword);
+        const resolvedTargetWords = options.resolvedTargetWords || (options.resolvedTargetWord ? [options.resolvedTargetWord] : targetKeywords);
+        const resolvedTargetWord = options.resolvedTargetWord || (targetKeywords.length === 1 ? targetKeywords[0] : '');
         const matchMode = options.matchMode || 'or'; // 'or' | 'and'
         const extractUnit = options.extractUnit || 'doc'; // 'doc' | 'sentence'
 
-        // ターゲットキーワード、代表ターゲット複合語、およびチェックされた関連語
-        const searchWords = [targetKeyword, resolvedTargetWord, ...activeRelatedWords].filter(w => w && w.trim());
+        // ターゲットキーワード群、代表ターゲット複合語群、およびチェックされた関連語
+        const searchWords = [...targetKeywords, ...resolvedTargetWords, ...activeRelatedWords].filter(w => w && w.trim());
         const uniqueSearchWords = Array.from(new Set(searchWords));
         const searchWordSet = new Set(uniqueSearchWords.map(w => w.toLowerCase()));
 
         const matchedDocs = [];
         const N = rawRows.length;
-        const targetLower = (targetKeyword || '').toLowerCase();
-        const resolvedLower = (resolvedTargetWord || '').toLowerCase();
+        const targetLowers = targetKeywords.map(k => k.toLowerCase());
+        const resolvedLowers = resolvedTargetWords.map(r => r.toLowerCase());
+        const allTargetLowers = Array.from(new Set([...targetLowers, ...resolvedLowers]));
         const activeRelatedLowerSet = new Set((activeRelatedWords || []).map(w => w.toLowerCase()));
 
         for (let i = 0; i < N; i++) {
@@ -243,14 +301,14 @@ const AssociationEngine = {
             }
 
             if (hits.length > 0) {
-                // キーワードそのもの、解決された代表語、またはキーワードを含む複合語が含まれているか判定
+                // 指定キーワードのいずれか、または解決された代表語、またはキーワードを含む複合語が含まれているか判定
                 const hasKeyword = hits.some(h => {
                     const hLower = h.toLowerCase();
-                    return hLower === targetLower || hLower === resolvedLower || (targetLower && hLower.includes(targetLower));
-                }) || lowerText.includes(targetLower) || lowerText.includes(resolvedLower) ||
+                    return allTargetLowers.some(tl => hLower === tl || (tl && (hLower.includes(tl) || tl.includes(hLower))));
+                }) || allTargetLowers.some(tl => lowerText.includes(tl)) ||
                    tokens.some(t => {
                        const tLower = t.toLowerCase();
-                       return tLower === targetLower || tLower === resolvedLower || (targetLower && tLower.includes(targetLower));
+                       return allTargetLowers.some(tl => tLower === tl || (tl && (tLower.includes(tl) || tl.includes(tLower))));
                    });
 
                 const hasRelatedWord = hits.some(h => activeRelatedLowerSet.has(h.toLowerCase()));
@@ -264,7 +322,7 @@ const AssociationEngine = {
                         isMatch = hasKeyword;
                     }
                 } else {
-                    // OR条件（現行）
+                    // OR条件
                     isMatch = true;
                 }
 
@@ -312,7 +370,10 @@ const AssociationEngine = {
 
         // 適合度スコアおよび意見タイプ（トーン）の付与（OpinionSummarizerが存在する場合）
         if (typeof OpinionSummarizer !== 'undefined' && OpinionSummarizer.assignRelevanceScores) {
-            OpinionSummarizer.assignRelevanceScores(matchedDocs, targetKeyword, resolvedTargetWord, activeRelatedWords);
+            OpinionSummarizer.assignRelevanceScores(matchedDocs, targetKeyword, resolvedTargetWord, activeRelatedWords, {
+                targetKeywords: targetKeywords,
+                resolvedTargetWords: resolvedTargetWords
+            });
         }
 
         return {
@@ -320,6 +381,7 @@ const AssociationEngine = {
             matchedCount: matchedDocs.length,
             matchRate: N > 0 ? (matchedDocs.length / N) * 100 : 0,
             searchWords: uniqueSearchWords,
+            targetKeywords: targetKeywords,
             matchedDocs: matchedDocs,
             matchMode: matchMode,
             extractUnit: extractUnit
@@ -348,7 +410,17 @@ const AssociationEngine = {
         }
 
         const targetKeyword = options.targetKeyword || '';
-        const resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        const targetKeywords = (options.targetKeywords && options.targetKeywords.length > 0)
+            ? options.targetKeywords
+            : this.parseKeywords(targetKeyword);
+        const resolvedTargetWord = options.resolvedTargetWord || (targetKeywords.length === 1 ? targetKeywords[0] : targetKeyword);
+        const resolvedTargetWords = options.resolvedTargetWords || [resolvedTargetWord];
+
+        const targetWordsSet = new Set([
+            ...targetKeywords.map(k => k.toLowerCase()),
+            resolvedTargetWord.toLowerCase(),
+            ...resolvedTargetWords.map(r => r.toLowerCase())
+        ]);
 
         const wordCounts = {};
         const docFreq = {};
@@ -362,7 +434,7 @@ const AssociationEngine = {
                 if (stopWords.has(w)) continue;
                 const isKanji = /^[\p{Script=Han}]$/u.test(w);
                 const isAlphaNum = /^[A-Za-z0-9]+$/.test(w);
-                const isTarget = (w.toLowerCase() === targetKeyword.toLowerCase() || w.toLowerCase() === resolvedTargetWord.toLowerCase());
+                const isTarget = targetWordsSet.has(w.toLowerCase());
                 if (w.length <= 1 && !isKanji && !isAlphaNum && !isTarget) continue;
 
                 wordCounts[w] = (wordCounts[w] || 0) + 1;
@@ -390,8 +462,13 @@ const AssociationEngine = {
         // 頻度降順ソート
         wordEntries.sort((a, b) => b.count - a.count);
 
-        // 代表ターゲット語およびキーワードがもし集計内に存在すれば、上位リストに確実に残す
-        const targetsToKeep = [resolvedTargetWord, targetKeyword].filter(w => w && wordCounts[w]);
+        // 指定キーワード群および解決代表語がもし集計内に存在すれば、上位リストに確実に残す
+        const targetsToKeep = Array.from(new Set([
+            ...targetKeywords,
+            resolvedTargetWord,
+            ...resolvedTargetWords
+        ])).filter(w => w && wordCounts[w]);
+
         let topWords = wordEntries.slice(0, maxWords);
         for (const tw of targetsToKeep) {
             if (!topWords.some(item => item.text === tw)) {

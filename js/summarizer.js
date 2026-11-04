@@ -71,13 +71,18 @@ const OpinionSummarizer = {
     /**
      * 各意見文に適合度スコア（Relevance Score）を付与する
      * @param {Array<object>} matchedDocs - 抽出された回答文配列
-     * @param {string} targetKeyword - 指定キーワード
+     * @param {string|Array<string>} targetKeyword - 指定キーワード（複数キーワード可）
      * @param {string} resolvedTargetWord - 代表ターゲット複合語
      * @param {Array<string>} activeRelatedWords - 選択された関連語
+     * @param {object} options - オプション (targetKeywords, resolvedTargetWords など)
      */
-    assignRelevanceScores(matchedDocs, targetKeyword, resolvedTargetWord, activeRelatedWords) {
-        const targetLower = (targetKeyword || '').toLowerCase();
-        const resolvedLower = (resolvedTargetWord || '').toLowerCase();
+    assignRelevanceScores(matchedDocs, targetKeyword, resolvedTargetWord, activeRelatedWords, options = {}) {
+        const targetKeywords = (options.targetKeywords && options.targetKeywords.length > 0)
+            ? options.targetKeywords
+            : (typeof AssociationEngine !== 'undefined' && AssociationEngine.parseKeywords ? AssociationEngine.parseKeywords(targetKeyword) : [targetKeyword]);
+        const targetLowers = targetKeywords.map(k => (k || '').toLowerCase());
+        const resolvedLowers = (options.resolvedTargetWords || (resolvedTargetWord ? [resolvedTargetWord] : [])).map(r => (r || '').toLowerCase());
+        const allTargetLowers = Array.from(new Set([...targetLowers, ...resolvedLowers])).filter(Boolean);
         const relatedSet = new Set((activeRelatedWords || []).map(w => w.toLowerCase()));
 
         for (const doc of matchedDocs) {
@@ -85,15 +90,17 @@ const OpinionSummarizer = {
             const tokens = doc.tokens || [];
             let score = 0;
 
-            // 1. キーワードそのものを含むか (+10点)
+            // 1. 指定キーワード群のいずれかを含むか (+10点、複数語ヒットならボーナス加点)
             let hasKw = false;
-            if (targetLower && (text.includes(targetLower) || tokens.some(t => t.toLowerCase() === targetLower))) {
-                score += 10;
-                hasKw = true;
+            let hitTargetCount = 0;
+            for (const tl of allTargetLowers) {
+                if (text.includes(tl) || tokens.some(t => t.toLowerCase() === tl)) {
+                    hasKw = true;
+                    hitTargetCount++;
+                }
             }
-            if (resolvedLower && resolvedLower !== targetLower && (text.includes(resolvedLower) || tokens.some(t => t.toLowerCase() === resolvedLower))) {
-                score += 8;
-                hasKw = true;
+            if (hasKw) {
+                score += 10 + Math.min(6, (hitTargetCount - 1) * 3);
             }
 
             // 2. 関連語の含有種類数 (+3点/種)
@@ -111,7 +118,7 @@ const OpinionSummarizer = {
             let hitTokenCount = 0;
             tokens.forEach(t => {
                 const tLower = t.toLowerCase();
-                if (tLower === targetLower || tLower === resolvedLower || relatedSet.has(tLower)) {
+                if (allTargetLowers.some(tl => tLower === tl || tl.includes(tLower) || tLower.includes(tl)) || relatedSet.has(tLower)) {
                     hitTokenCount++;
                 }
             });
@@ -479,8 +486,23 @@ const OpinionSummarizer = {
      * @param {string} extractUnit - 'doc' | 'sentence'
      * @returns {object} 集計・例示データ
      */
-    buildIncludedWordsSummary(filterResult, targetKeyword, resolvedTargetWord, relatedWordsList = [], subcorpusStats = null, matchMode = 'or', extractUnit = 'doc') {
+    /**
+     * 抽出意見群に含まれた単語の内訳・集計（サマリー表示用）を構築
+     * @param {object} filterResult - 抽出結果
+     * @param {string|Array<string>} targetKeyword - 指定キーワード
+     * @param {string} resolvedTargetWord - 代表ターゲット複合語
+     * @param {Array<string|object>} relatedWordsList - 関連語リスト
+     * @param {object} subcorpusStats - サブコーパス統計
+     * @param {string} matchMode - 'or' | 'and'
+     * @param {string} extractUnit - 'doc' | 'sentence'
+     * @param {object} options - 追加オプション (targetKeywords, keywordDocCounts など)
+     * @returns {object} 集計・例示データ
+     */
+    buildIncludedWordsSummary(filterResult, targetKeyword, resolvedTargetWord, relatedWordsList = [], subcorpusStats = null, matchMode = 'or', extractUnit = 'doc', options = {}) {
         const target = targetKeyword || '';
+        const targetKeywords = (options.targetKeywords && options.targetKeywords.length > 0)
+            ? options.targetKeywords
+            : (typeof AssociationEngine !== 'undefined' && AssociationEngine.parseKeywords ? AssociationEngine.parseKeywords(targetKeyword) : [target]);
         const resolved = resolvedTargetWord || '';
         
         // チェックされている関連語
@@ -503,6 +525,13 @@ const OpinionSummarizer = {
             });
         });
 
+        // キーワード別のヒット件数
+        const keywordDocCounts = options.keywordDocCounts || {};
+        const keywordBreakdown = targetKeywords.map(kw => ({
+            keyword: kw,
+            count: keywordDocCounts[kw] || hitDocCounts[kw] || 0
+        }));
+
         // 関連意見として含めた単語のリスト（件数付き）
         let wordItems = [];
         if (activeRelated.length > 0) {
@@ -519,13 +548,13 @@ const OpinionSummarizer = {
         } else {
             // 関連語が未選択（キーワード単体抽出）の場合：意見群で共起する上位単語を例示
             const topWords = (subcorpusStats && subcorpusStats.wordList) ? subcorpusStats.wordList : [];
-            const targetLower = target.toLowerCase();
+            const targetLowers = new Set(targetKeywords.map(k => k.toLowerCase()));
             const resolvedLower = resolved.toLowerCase();
             
             topWords.forEach(wItem => {
                 const w = wItem.text;
                 const wLower = w.toLowerCase();
-                if (wLower !== targetLower && wLower !== resolvedLower && !targetLower.includes(wLower)) {
+                if (!targetLowers.has(wLower) && wLower !== resolvedLower && !targetKeywords.some(k => k.toLowerCase().includes(wLower))) {
                     wordItems.push({
                         word: w,
                         type: 'cooc',
@@ -542,13 +571,15 @@ const OpinionSummarizer = {
 
         return {
             targetKeyword: target,
+            targetKeywords: targetKeywords,
+            keywordBreakdown: keywordBreakdown,
             targetCount: targetCount,
             resolvedWord: resolved,
             resolvedCount: resolvedCount,
             activeRelatedCount: activeRelated.length,
             hasActiveRelated: activeRelated.length > 0,
             wordItems: wordItems,
-            totalIncludedWordsCount: 1 + (resolved && resolved !== target ? 1 : 0) + activeRelated.length,
+            totalIncludedWordsCount: targetKeywords.length + (resolved && resolved !== target ? 1 : 0) + activeRelated.length,
             matchMode: matchMode || 'or',
             extractUnit: extractUnit || 'doc',
             matchModeLabel: matchMode === 'and' ? 'AND (キーワード必須＋関連語)' : 'OR (キーワード または 関連語)',
@@ -577,9 +608,17 @@ const OpinionSummarizer = {
         const lines = [];
         const today = new Date().toISOString().split('T')[0];
 
+        const targetKeywords = (includedWordsSummary && includedWordsSummary.targetKeywords && includedWordsSummary.targetKeywords.length > 0)
+            ? includedWordsSummary.targetKeywords
+            : (typeof AssociationEngine !== 'undefined' && AssociationEngine.parseKeywords ? AssociationEngine.parseKeywords(targetKeyword) : [targetKeyword]);
+
+        const kwTitlePart = targetKeywords.length > 1
+            ? `${targetKeywords.join(', ')}（複数OR指定: 計${targetKeywords.length}語）`
+            : `${targetKeyword}${resolvedTargetWord && resolvedTargetWord !== targetKeyword ? `（中心代表語: ${resolvedTargetWord}）` : ''}`;
+
         lines.push(`# キーワード連想＆意見深掘り 要約レポート`);
         lines.push(`- **作成日**: ${today}`);
-        lines.push(`- **注目キーワード**: ${targetKeyword}${resolvedTargetWord && resolvedTargetWord !== targetKeyword ? `（中心代表語: ${resolvedTargetWord}）` : ''}`);
+        lines.push(`- **注目キーワード**: ${kwTitlePart}`);
         lines.push(`- **該当意見数**: ${filterResult.matchedCount.toLocaleString()} 件 / 全 ${filterResult.totalDocs.toLocaleString()} 件（該当率: ${filterResult.matchRate.toFixed(1)}%）`);
         
         if (includedWordsSummary) {
@@ -593,10 +632,20 @@ const OpinionSummarizer = {
         lines.push(`## 1. 関連意見の集約概要 ＆ 抽出対象単語`);
         if (includedWordsSummary) {
             const inc = includedWordsSummary;
-            const targetHit = inc.targetCount > 0 ? ` (${inc.targetCount}件)` : '';
-            const resHit = (inc.resolvedWord && inc.resolvedWord !== inc.targetKeyword)
-                ? `- **中心代表語**: \`${inc.resolvedWord}\`${inc.resolvedCount > 0 ? ` (${inc.resolvedCount}件)` : ''}\n`
-                : '';
+            if (inc.targetKeywords && inc.targetKeywords.length > 1) {
+                const kwListStr = (inc.keywordBreakdown && inc.keywordBreakdown.length > 0)
+                    ? inc.keywordBreakdown.map(kb => `\`${kb.keyword}\`${kb.count > 0 ? ` (${kb.count}件)` : ''}`).join(', ')
+                    : inc.targetKeywords.map(k => `\`${k}\``).join(', ');
+                lines.push(`- **注目キーワード群 (OR探索)**: ${kwListStr}`);
+            } else {
+                const targetHit = inc.targetCount > 0 ? ` (${inc.targetCount}件)` : '';
+                const resHit = (inc.resolvedWord && inc.resolvedWord !== inc.targetKeyword)
+                    ? `- **中心代表語**: \`${inc.resolvedWord}\`${inc.resolvedCount > 0 ? ` (${inc.resolvedCount}件)` : ''}\n`
+                    : '';
+                lines.push(`- **注目キーワード**: \`${inc.targetKeyword}\`${targetHit}`);
+                if (resHit) lines.push(resHit.trimEnd());
+            }
+
             const wordsList = inc.wordItems && inc.wordItems.length > 0
                 ? inc.wordItems.map(w => `\`${w.word}\`${w.count > 0 ? `(${w.count}件)` : ''}`).join(', ')
                 : '（関連語指定なし）';
@@ -604,8 +653,6 @@ const OpinionSummarizer = {
                 ? `関連意見として含めた単語例（採用関連語 計${inc.activeRelatedCount}語中）:`
                 : `関連意見として共起・頻出する上位単語例:`;
 
-            lines.push(`- **注目キーワード**: \`${inc.targetKeyword}\`${targetHit}`);
-            if (resHit) lines.push(resHit.trimEnd());
             lines.push(`- **${wordsHeader}**\n  ${wordsList}`);
             lines.push(``);
         }

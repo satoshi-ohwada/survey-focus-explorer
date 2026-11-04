@@ -89,14 +89,20 @@ const WordCloudVisualizer = {
         const { list } = this.calculateFontSizes(filtered, width, height, rankingMethod, shape);
 
         this.resolvedTargetWord = options.resolvedTargetWord || targetKeyword;
+        this.targetKeywords = options.targetKeywords || (typeof AssociationEngine !== 'undefined' ? AssociationEngine.parseKeywords(targetKeyword) : [targetKeyword]);
+        const targetsLower = Array.from(new Set([
+            ...(this.targetKeywords || []),
+            this.targetKeyword,
+            this.resolvedTargetWord
+        ])).map(k => (k || '').toLowerCase()).filter(Boolean);
+
         const relatedSet = new Set(this.activeRelatedWords.map(w => w.toLowerCase()));
-        const targetLower = (this.targetKeyword || '').toLowerCase();
-        const resolvedLower = (this.resolvedTargetWord || '').toLowerCase();
 
         // 単語の色分けルール
         const colorCallback = (word) => {
             const lower = word.toLowerCase();
-            if (lower === targetLower || lower === resolvedLower || (targetLower && (lower.includes(targetLower) || targetLower.includes(lower)))) {
+            const isTarget = targetsLower.some(tl => lower === tl || (tl && (lower.includes(tl) || tl.includes(lower))));
+            if (isTarget) {
                 return '#e11d48'; // 注目キーワード / 代表複合語: 鮮やかなローズレッド
             }
             if (relatedSet.has(lower)) {
