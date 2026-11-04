@@ -23,6 +23,14 @@ const UmapVisualizer = {
     targetKeyword: '',
     activeRelatedWords: [],
     onPointClick: null,
+    lastParamsKey: null,
+
+    clearCache() {
+        this.lastParamsKey = null;
+        this.points = [];
+        this.clusters = [];
+        this.clusterHulls = [];
+    },
 
     init(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -204,10 +212,38 @@ const UmapVisualizer = {
         this.panX = (width * (1 - this.scale)) / 2;
         this.panY = (height * (1 - this.scale)) / 2;
 
+        // キャッシュキーの構築（パラメータ・データに変更がなければ重いUMAP最適化・クラスタリングをスキップ）
+        const isExport = options.isExport || false;
+        const cacheKey = JSON.stringify({
+            mode: this.viewMode,
+            targetKeyword: this.targetKeyword,
+            resolvedTargetWord: this.resolvedTargetWord,
+            spreadMode: this.spreadMode,
+            fontSize: this.fontSize,
+            clusteringMethod: this.clusteringMethod,
+            minClusterSize: this.minClusterSize,
+            maxWords: options.maxWords || 50,
+            docCount: matchedDocs ? matchedDocs.length : 0,
+            wordCount: wordList ? wordList.length : 0,
+            wordTop: wordList && wordList.length > 0 ? wordList.slice(0, 3).map(w => `${w.text}:${w.count}`).join(',') : '',
+            activeRelated: (this.activeRelatedWords || []).slice().sort().join(','),
+            width: width,
+            height: height
+        });
+
+        if (!isExport && this.lastParamsKey === cacheKey && this.points && this.points.length > 0) {
+            this.renderFrame();
+            return;
+        }
+
         if (this.viewMode === 'words') {
             this.computeWordUMAP(wordList, coocCounts, docFreq, matchedDocs, width, height, options);
         } else {
             this.computeDocUMAP(matchedDocs, wordList, width, height, options);
+        }
+
+        if (!isExport) {
+            this.lastParamsKey = cacheKey;
         }
 
         this.renderFrame();
@@ -358,20 +394,35 @@ const UmapVisualizer = {
 
     /**
      * 意見（回答文）ごとのUMAP次元削減
+     * メモリ枯渇・フリーズ防止のため最大250件にスマートサンプリング（適合度重視）
      */
     computeDocUMAP(matchedDocs, wordList, width, height, options) {
-        const D = matchedDocs.length;
-        if (D === 0) {
+        if (!matchedDocs || matchedDocs.length === 0) {
             this.points = [];
+            this.isSampledDocs = false;
             return;
         }
+
+        // 意見マップの最大描画数（メモリ肥大化・過密重なり・計算フリーズの防止）
+        const MAX_DOC_POINTS = 250;
+        let targetDocs = matchedDocs;
+        this.isSampledDocs = false;
+
+        if (matchedDocs.length > MAX_DOC_POINTS) {
+            this.isSampledDocs = true;
+            // 適合度スコアの高い代表意見を優先して最大250件に選定
+            const sorted = [...matchedDocs].sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
+            targetDocs = sorted.slice(0, MAX_DOC_POINTS);
+        }
+
+        const D = targetDocs.length;
 
         // 上位語による文書ベクトル (TF-IDF)
         const featureWords = wordList.slice(0, 50).map(w => w.text);
         const wordIndex = new Map(featureWords.map((w, idx) => [w, idx]));
         const F = featureWords.length;
 
-        const docVectors = matchedDocs.map(doc => {
+        const docVectors = targetDocs.map(doc => {
             const vec = new Float64Array(F);
             const tokens = doc.tokens || [];
             tokens.forEach(t => {
@@ -388,7 +439,7 @@ const UmapVisualizer = {
             return vec;
         });
 
-        // 文書間コサイン距離行列
+        // 文書間コサイン距離行列 (最大 250x250)
         const dist = Array.from({ length: D }, () => new Float64Array(D));
         for (let i = 0; i < D; i++) {
             for (let j = i + 1; j < D; j++) {
@@ -402,7 +453,7 @@ const UmapVisualizer = {
 
         const Y = this.runUMAPCore(dist, D, docVectors);
 
-        this.points = matchedDocs.map((doc, i) => {
+        this.points = targetDocs.map((doc, i) => {
             const shortText = doc.text.length > 25 ? doc.text.substring(0, 25) + '…' : doc.text;
             return {
                 id: `doc_${i}`,

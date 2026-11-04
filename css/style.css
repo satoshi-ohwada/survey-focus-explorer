@@ -1664,31 +1664,98 @@ body {
     height: 100%;
 }
 
-/* 全画面時の閉じるボタン */
-.btn-exit-fullscreen {
+/* 全画面表示時の上部フローティングツールバー（タイトル ＆ アクション群） */
+.fullscreen-topbar {
+    display: none;
     position: absolute;
     top: 14px;
-    right: 14px;
+    left: 20px;
+    right: 20px;
     z-index: 10000;
-    background: rgba(15, 23, 42, 0.85);
+    align-items: center;
+    justify-content: space-between;
+    pointer-events: none; /* コンテナ背景は透過 */
+}
+
+.canvas-container.size-fullscreen .fullscreen-topbar {
+    display: flex !important;
+}
+
+.fullscreen-topbar-title {
+    pointer-events: auto;
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
     color: #FFFFFF;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 14px;
+    padding: 7px 16px;
+    border-radius: 8px;
     font-size: 13px;
     font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+.fullscreen-topbar-title .fullscreen-chart-badge {
+    background: #2563eb;
+    color: #ffffff;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+.fullscreen-topbar-title .fullscreen-chart-title {
+    color: #f1f5f9;
+}
+
+.fullscreen-topbar-actions {
+    pointer-events: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.btn-fullscreen-action {
+    background: rgba(15, 23, 42, 0.88);
+    backdrop-filter: blur(8px);
+    color: #FFFFFF;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 600;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transition: background 0.15s;
-    display: none;
-}
-.btn-exit-fullscreen:hover {
-    background: rgba(15, 23, 42, 1);
-}
-.canvas-container.size-fullscreen .btn-exit-fullscreen {
+    transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+.btn-fullscreen-action:hover {
+    background: rgba(30, 41, 59, 0.95);
+    border-color: rgba(255, 255, 255, 0.35);
+    transform: translateY(-1px);
+}
+
+.btn-fullscreen-action.btn-fullscreen-copy {
+    background: #2563eb;
+    border-color: #3b82f6;
+}
+
+.btn-fullscreen-action.btn-fullscreen-copy:hover {
+    background: #1d4ed8;
+}
+
+.btn-fullscreen-action.btn-exit-fullscreen {
+    background: rgba(220, 38, 38, 0.88);
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
+.btn-fullscreen-action.btn-exit-fullscreen:hover {
+    background: #b91c1c;
 }
 
 /* 意見（生の声）カードリスト */
@@ -3333,6 +3400,11 @@ body {
     display: none !important;
 }
 
+/* 単一グラフ印刷用コンテナ（画面上は非表示） */
+.single-chart-print-container {
+    display: none;
+}
+
 /* --------------------------------------------------------------------------
    印刷・PDF出力用スタイル (@media print)
    -------------------------------------------------------------------------- */
@@ -3364,8 +3436,118 @@ body {
     #toastNotification,
     #helpModal,
     .report-modal-bar,
+    .fullscreen-topbar,
+    .btn-exit-fullscreen,
     .no-print {
         display: none !important;
+    }
+
+    /* 通常のレポート印刷時: 単体印刷コンテナは非表示 */
+    body:not(.printing-single-chart) #singleChartPrintContainer {
+        display: none !important;
+    }
+
+    /* ==========================================================================
+       単一グラフ印刷モード (body.printing-single-chart)
+       ========================================================================== */
+    body.printing-single-chart .report-modal-overlay {
+        display: none !important;
+    }
+
+    body.printing-single-chart #singleChartPrintContainer {
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        width: 100% !important;
+        height: 275mm !important;
+        max-height: 278mm !important;
+        padding: 4mm 0 !important;
+        margin: 0 auto !important;
+        box-sizing: border-box !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        overflow: hidden !important;
+    }
+
+    body.printing-single-chart .single-print-header {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: flex-end !important;
+        border-bottom: 2px solid #1e293b !important;
+        padding-bottom: 6px !important;
+        margin-bottom: 8px !important;
+        flex-shrink: 0 !important;
+    }
+
+    body.printing-single-chart .single-print-title {
+        font-size: 19px !important;
+        font-weight: 700 !important;
+        color: #0f172a !important;
+        margin: 0 0 4px 0 !important;
+        line-height: 1.2 !important;
+    }
+
+    body.printing-single-chart .single-print-meta {
+        font-size: 11px !important;
+        color: #475569 !important;
+        line-height: 1.4 !important;
+    }
+
+    body.printing-single-chart .single-print-condition {
+        font-size: 11px !important;
+        color: #1e40af !important;
+        background: #f0f7ff !important;
+        border: 1px solid #bfdbfe !important;
+        border-radius: 4px !important;
+        padding: 2.5px 8px !important;
+        margin-top: 4px !important;
+        display: inline-block !important;
+        font-weight: 600 !important;
+        line-height: 1.3 !important;
+    }
+
+    body.printing-single-chart .single-print-app-logo {
+        font-size: 12px !important;
+        font-weight: 800 !important;
+        letter-spacing: 1px !important;
+        color: #2563eb !important;
+        white-space: nowrap !important;
+    }
+
+    body.printing-single-chart .single-print-body {
+        flex: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        overflow: hidden !important;
+        padding: 4px 0 !important;
+    }
+
+    body.printing-single-chart .single-print-img {
+        max-width: 100% !important;
+        max-height: 220mm !important;
+        width: auto !important;
+        height: auto !important;
+        aspect-ratio: 4 / 3 !important;
+        object-fit: contain !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 4px !important;
+        box-shadow: none !important;
+        display: block !important;
+        margin: auto !important;
+    }
+
+    body.printing-single-chart .single-print-footer {
+        display: flex !important;
+        justify-content: space-between !important;
+        font-size: 10px !important;
+        color: #94a3b8 !important;
+        border-top: 1px solid #cbd5e1 !important;
+        padding-top: 4px !important;
+        margin-top: 6px !important;
+        flex-shrink: 0 !important;
     }
 
     /* レポートモーダルの全画面解除・インライン展開 */

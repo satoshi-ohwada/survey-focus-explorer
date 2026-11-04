@@ -691,10 +691,33 @@ function setupUIEvents() {
         });
     });
 
-    // Escキーでの全画面解除
+    // 全画面表示内のアクションボタン群（画像保存・Officeコピー・印刷）
+    document.querySelectorAll('.btn-fullscreen-save').forEach(btn => {
+        btn.addEventListener('click', () => {
+            exportChart(AppState.activeTab, 'download');
+        });
+    });
+    document.querySelectorAll('.btn-fullscreen-copy').forEach(btn => {
+        btn.addEventListener('click', () => {
+            exportChart(AppState.activeTab, 'copy');
+        });
+    });
+    document.querySelectorAll('.btn-fullscreen-print').forEach(btn => {
+        btn.addEventListener('click', () => {
+            printSingleChart(AppState.activeTab);
+        });
+    });
+
+    // Escキーでの全画面解除 ＆ Ctrl+P での単体グラフ印刷
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && AppState.canvasSizeMode === 'fullscreen') {
             setCanvasSizeMode('standard');
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+            if (AppState.canvasSizeMode === 'fullscreen') {
+                e.preventDefault();
+                printSingleChart(AppState.activeTab);
+            }
         }
     });
 
@@ -778,20 +801,6 @@ function setupUIEvents() {
     bindExport('btnCopyUmapImage', 'umap', 'copy');
     bindExport('btnSaveAttrImage', 'attr', 'download');
     bindExport('btnCopyAttrImage', 'attr', 'copy');
-
-    // ツールバー右側の統一画像保存 ＆ Officeコピーボタン
-    const btnSaveChart = document.getElementById('btnSaveCurrentChart');
-    if (btnSaveChart) {
-        btnSaveChart.addEventListener('click', () => {
-            exportChart(AppState.activeTab, 'download');
-        });
-    }
-    const btnCopyChart = document.getElementById('btnCopyCurrentChart');
-    if (btnCopyChart) {
-        btnCopyChart.addEventListener('click', () => {
-            exportChart(AppState.activeTab, 'copy');
-        });
-    }
 
     // ツールバー右端の「表示中の図を保存」ボタン（後方互換）
     const btnSaveCurrent = document.getElementById('btnSaveImage');
@@ -1988,9 +1997,19 @@ function renderRelatedChips() {
 }
 
 /**
+ * 各可視化エンジンのキャッシュをクリアする
+ */
+function clearVisualizerCaches() {
+    if (typeof WordCloudVisualizer !== 'undefined' && WordCloudVisualizer.clearCache) WordCloudVisualizer.clearCache();
+    if (typeof NetworkVisualizer !== 'undefined' && NetworkVisualizer.clearCache) NetworkVisualizer.clearCache();
+    if (typeof UmapVisualizer !== 'undefined' && UmapVisualizer.clearCache) UmapVisualizer.clearCache();
+}
+
+/**
  * 対象意見の抽出 ＆ 描画
  */
 function executeFilteringAndRender(showNotice = false) {
+    clearVisualizerCaches();
     if (showNotice && typeof showToast === 'function') {
         showToast('⏳ 抽出条件を反映し、意見集約を更新中...');
     }
@@ -2276,8 +2295,6 @@ function switchTab(tabName) {
     // ツールバー右側のアクションコントロールの切り替え
     const actSummary = document.getElementById('actionSummaryCtrl');
     if (actSummary) actSummary.style.display = (tabName === 'summary') ? 'flex' : 'none';
-    const actCharts = document.getElementById('actionChartsCtrl');
-    if (actCharts) actCharts.style.display = isChartTab ? 'flex' : 'none';
     const actOpinions = document.getElementById('actionOpinionsCtrl');
     if (actOpinions) actOpinions.style.display = (tabName === 'opinions') ? 'flex' : 'none';
 
@@ -2286,6 +2303,11 @@ function switchTab(tabName) {
     if (viewSizeEl) viewSizeEl.style.display = isChartTab ? 'inline-flex' : 'none';
     const btnFullscreen = document.getElementById('btnToggleFullscreen');
     if (btnFullscreen) btnFullscreen.style.display = isChartTab ? 'inline-flex' : 'none';
+
+    // 全画面表示中の場合は上部タイトルの表示内容も更新
+    if (AppState.canvasSizeMode === 'fullscreen') {
+        updateFullscreenTitles();
+    }
 
     // 切り替え時にDOMサイズ確定を待って正確なコンテナ寸法で描画
     requestAnimationFrame(() => {
@@ -3000,8 +3022,13 @@ function formatHighlightedText(rawText) {
 /**
  * 生の声（回答文）一覧の描画（ソート・タイプフィルタ・適合度バッジ対応）
  */
+/**
+ * 生の声（回答文）一覧の描画（ソート・タイプフィルタ・適合度バッジ対応）
+ * メモリ節約＆高速描画のため、初期表示50件＋スクロール遅延追記（無限スクロール）を採用
+ */
 function renderOpinionsList(filterKeyword = '') {
     const container = document.getElementById('opinionsListContainer');
+    if (!container) return;
     container.innerHTML = '';
 
     if (!AppState.filterResult || !AppState.filterResult.matchedDocs.length) {
@@ -3072,49 +3099,117 @@ function renderOpinionsList(filterKeyword = '') {
     const targetLower = (AppState.targetKeyword || '').toLowerCase();
     const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
 
-    docs.forEach(d => {
-        const card = document.createElement('div');
-        card.className = 'opinion-card';
+    // 4. 遅延描画（DOMノード肥大化防止＆初期表示の高速化）
+    const CHUNK_SIZE = 50;
+    let renderedCount = 0;
 
-        // マッチしたタグ（キーワード、代表語、関連語の色分け）
-        const tagsHtml = d.matchedWords.map(w => {
-            const wLower = w.toLowerCase();
-            const isTarget = wLower === targetLower || wLower === resolvedLower || (targetLower && wLower.includes(targetLower));
-            return `<span class="${isTarget ? 'tag-target' : 'tag-related'}">${escapeHtml(w)}</span>`;
-        }).join('');
+    // カード一覧格納用ラッパー
+    const cardsWrapper = document.createElement('div');
+    cardsWrapper.className = 'opinions-cards-wrapper';
+    container.appendChild(cardsWrapper);
 
-        // 意見タイプバッジ
-        const typeObj = d.opinionType || { type: 'neutral', label: 'その他', icon: '⚪' };
-        const typeBadge = `<span class="opinion-type-badge type-${typeObj.type}">${typeObj.icon} ${typeObj.label}</span>`;
+    // 追加読み込みコントロール
+    const loadMoreArea = document.createElement('div');
+    loadMoreArea.className = 'opinions-load-more-area';
+    loadMoreArea.style.cssText = 'text-align: center; padding: 16px 0 24px; display: none;';
+    container.appendChild(loadMoreArea);
 
-        // 適合度スコアバッジ
-        const scoreBadge = (d.relevanceScore !== undefined)
-            ? `<span class="opinion-score-badge">適合度: ${d.relevanceScore}%</span>`
-            : '';
+    function renderNextChunk() {
+        const nextBatch = docs.slice(renderedCount, renderedCount + CHUNK_SIZE);
+        if (nextBatch.length === 0) {
+            loadMoreArea.style.display = 'none';
+            return;
+        }
 
-        // 属性バッジ
-        const attrBadge = d.attribute ? `<span class="opinion-badge-attr">${escapeHtml(d.attribute)}</span>` : '';
+        const fragment = document.createDocumentFragment();
+        nextBatch.forEach(d => {
+            const card = document.createElement('div');
+            card.className = 'opinion-card';
 
-        // 文単位抽出の場合、フォーカス案内
-        const unitNotice = (AppState.extractUnit === 'sentence' && d.focusedSentences && d.focusedSentences.length > 0)
-            ? `<small style="color: #0284c7; font-size: 11px; margin-left: 6px;">[抽出文表示]</small>`
-            : '';
+            const tagsHtml = d.matchedWords.map(w => {
+                const wLower = w.toLowerCase();
+                const isTarget = wLower === targetLower || wLower === resolvedLower || (targetLower && wLower.includes(targetLower));
+                return `<span class="${isTarget ? 'tag-target' : 'tag-related'}">${escapeHtml(w)}</span>`;
+            }).join('');
 
-        card.innerHTML = `
-            <div class="opinion-meta">
-                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                    <div class="opinion-matched-tags">${tagsHtml}</div>
-                    ${typeBadge}
-                    ${attrBadge}
-                    ${unitNotice}
+            const typeObj = d.opinionType || { type: 'neutral', label: 'その他', icon: '⚪' };
+            const typeBadge = `<span class="opinion-type-badge type-${typeObj.type}">${typeObj.icon} ${typeObj.label}</span>`;
+
+            const scoreBadge = (d.relevanceScore !== undefined)
+                ? `<span class="opinion-score-badge">適合度: ${d.relevanceScore}%</span>`
+                : '';
+
+            const attrBadge = d.attribute ? `<span class="opinion-badge-attr">${escapeHtml(d.attribute)}</span>` : '';
+
+            const unitNotice = (AppState.extractUnit === 'sentence' && d.focusedSentences && d.focusedSentences.length > 0)
+                ? `<small style="color: #0284c7; font-size: 11px; margin-left: 6px;">[抽出文表示]</small>`
+                : '';
+
+            card.innerHTML = `
+                <div class="opinion-meta">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <div class="opinion-matched-tags">${tagsHtml}</div>
+                        ${typeBadge}
+                        ${attrBadge}
+                        ${unitNotice}
+                    </div>
+                    ${scoreBadge}
                 </div>
-                ${scoreBadge}
-            </div>
-            <div class="opinion-text">${formatHighlightedText(d.text)}</div>
-        `;
+                <div class="opinion-text">${formatHighlightedText(d.text)}</div>
+            `;
+            fragment.appendChild(card);
+        });
 
-        container.appendChild(card);
-    });
+        cardsWrapper.appendChild(fragment);
+        renderedCount += nextBatch.length;
+
+        // 残りがある場合はボタン・センチネルを更新
+        if (renderedCount < docs.length) {
+            const remaining = docs.length - renderedCount;
+            loadMoreArea.style.display = 'block';
+            loadMoreArea.innerHTML = `
+                <div style="font-size: 12px; color: #64748b; margin-bottom: 8px;">
+                    表示中: <b>${renderedCount}</b> / 全 <b>${docs.length}</b> 件
+                </div>
+                <button type="button" id="btnLoadMoreOpinions" class="btn btn-sm btn-secondary" style="padding: 6px 20px; font-weight: 600;">
+                    さらに読み込む (残り ${remaining} 件)
+                </button>
+            `;
+            const btn = document.getElementById('btnLoadMoreOpinions');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    renderNextChunk();
+                });
+            }
+        } else {
+            loadMoreArea.style.display = 'block';
+            loadMoreArea.innerHTML = `
+                <div style="font-size: 12px; color: #94a3b8; padding: 8px 0;">
+                    全 <b>${docs.length}</b> 件の意見をすべて表示しました
+                </div>
+            `;
+        }
+    }
+
+    // 初回チャンクを描画
+    renderNextChunk();
+
+    // IntersectionObserverによる自動追記（スクロールが末尾に近づいたときに自動ロード）
+    if (typeof IntersectionObserver !== 'undefined') {
+        if (container._opinionsObserver) {
+            container._opinionsObserver.disconnect();
+        }
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && renderedCount < docs.length) {
+                    renderNextChunk();
+                }
+            });
+        }, { root: container, rootMargin: '120px' });
+
+        observer.observe(loadMoreArea);
+        container._opinionsObserver = observer;
+    }
 }
 
 /**
@@ -3271,22 +3366,48 @@ async function exportChart(type, action = 'download') {
         const targetW = 1200;
         const targetH = 900;
 
-        if (action === 'download') {
-            Plotly.downloadImage('attrChartContainer', {
-                format: 'png',
-                width: targetW,
-                height: targetH,
-                filename: baseTitle
-            });
-            showToast(`💾「${baseTitle}.png」(4:3・1200x900) を保存しました`);
-        } else {
-            // クリップボードへコピー
-            try {
-                const dataUrl = await Plotly.toImage('attrChartContainer', {
+        let dataUrl = null;
+        try {
+            // 画面表示と同一の文字サイズ感を忠実に再現する高解像度エクスポート
+            if (typeof AttrChartVisualizer !== 'undefined' && typeof AttrChartVisualizer.getExportImage === 'function') {
+                const targetRows = (typeof getFilteredRows === 'function') ? getFilteredRows() : (AppState.rawRows || []);
+                const matchedDocs = (AppState.filterResult && AppState.filterResult.matchedDocs) ? AppState.filterResult.matchedDocs : [];
+                const isFiltered = targetRows.length < (AppState.rawRows || []).length;
+                dataUrl = await AttrChartVisualizer.getExportImage(
+                    targetRows,
+                    matchedDocs,
+                    AppState.attrCol,
+                    AppState.targetKeyword,
+                    { isFiltered, calcMode: AppState.attrCalcMode || 'rate' },
+                    targetW,
+                    targetH
+                );
+            }
+
+            // フォールバック
+            if (!dataUrl) {
+                dataUrl = await Plotly.toImage('attrChartContainer', {
                     format: 'png',
                     width: targetW,
                     height: targetH
                 });
+            }
+
+            if (!dataUrl) {
+                showToast('⚠️ 属性グラフの画像生成に失敗しました');
+                return;
+            }
+
+            if (action === 'download') {
+                const link = document.createElement('a');
+                link.download = `${baseTitle}.png`;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast(`💾「${baseTitle}.png」(4:3・1200x900) を保存しました`);
+            } else {
+                // クリップボードへコピー
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
                 if (navigator.clipboard && window.ClipboardItem) {
@@ -3295,10 +3416,10 @@ async function exportChart(type, action = 'download') {
                 } else {
                     showToast('⚠️ お使いのブラウザは画像の直接コピーに非対応です。画像保存をご利用ください。');
                 }
-            } catch (err) {
-                console.error('Plotly copy error:', err);
-                showToast('⚠️ クリップボードへの画像コピーに失敗しました');
             }
+        } catch (err) {
+            console.error('Plotly export error:', err);
+            showToast('⚠️ 属性グラフの画像出力に失敗しました');
         }
         return;
     }
@@ -3385,6 +3506,253 @@ function saveCurrentImage() {
 }
 
 /**
+ * 現在の図の作成条件（パラメータ・集計基準・選出語数等）を文字列として取得
+ * @param {'cloud' | 'network' | 'umap' | 'attr'} type
+ * @returns {string} 作成条件の説明文字列
+ */
+function getChartConditions(type) {
+    if (type === 'cloud') {
+        const rankEl = document.getElementById('selectCloudRanking');
+        const rankVal = rankEl ? rankEl.value : 'count';
+        const rankText = (rankVal === 'tfidf') ? '特徴度（TF-IDF）順' : '出現頻度順';
+
+        const wordsEl = document.getElementById('selectCloudMaxWords');
+        const wordsVal = wordsEl ? wordsEl.value : '60';
+
+        const shapeEl = document.getElementById('selectCloudShape');
+        const shapeVal = shapeEl ? shapeEl.value : 'circle';
+        const shapeText = (shapeVal === 'square') ? '矩形（長方形）' : '雲形（楕円）';
+
+        return `作成条件: ${rankText} ｜ 上位${wordsVal}語 ｜ 形状: ${shapeText}`;
+    }
+
+    if (type === 'network') {
+        const wordsEl = document.getElementById('selectNetworkMaxWords');
+        const wordsVal = wordsEl ? wordsEl.value : '40';
+
+        if (AppState.networkTargetMode === 'attr') {
+            const attrCol = AppState.attrCol || '属性';
+            const metricText = (AppState.networkAttrMetric === 'freq')
+                ? '頻度重視（共通基本語）'
+                : '特徴度重視（属性特有の独自関心）';
+            return `作成条件: 属性結びつき [整理属性: 👥「${attrCol}」] ｜ 単語選出: ${metricText} ｜ 上位${wordsVal}語`;
+        } else {
+            const colorEl = document.getElementById('selectNetworkColorMode');
+            const colorVal = colorEl ? colorEl.value : 'community';
+            const colorText = (colorVal === 'role') ? '役割別（中心語/関連語/共起語）' : '話題グループ別（コミュニティ検出）';
+            return `作成条件: 全体の話題構造（単語共起関係） ｜ 上位${wordsVal}語 ｜ 色分け: ${colorText}`;
+        }
+    }
+
+    if (type === 'umap') {
+        const modeEl = document.getElementById('selectUmapMode');
+        const modeVal = modeEl ? modeEl.value : 'words';
+        const modeText = (modeVal === 'docs') ? '意見マップ（発言内容の類似度）' : '単語マップ（文脈上の使われ方の類似度）';
+
+        const clusterEl = document.getElementById('selectUmapClustering');
+        const clusterVal = clusterEl ? clusterEl.value : 'hdbscan';
+        const clusterText = (clusterVal === 'kmeans') ? 'k-means' : 'HDBSCAN（密度ベース自動判定）';
+
+        const minSizeEl = document.getElementById('selectUmapMinClusterSize');
+        const minSizeVal = (minSizeEl && minSizeEl.value !== 'auto') ? `${minSizeEl.value}件` : '自動';
+
+        return `作成条件: ${modeText} ｜ クラスタリング: ${clusterText}（最小クラスタ: ${minSizeVal}）`;
+    }
+
+    if (type === 'attr') {
+        const attrCol = AppState.attrCol || '属性';
+        const calcText = (AppState.attrCalcMode === 'share')
+            ? '構成比（関連意見全体の内訳 %）'
+            : '言及率（各属性グループ内の関心度 %）';
+        return `作成条件: 整理属性: 👥「${attrCol}」 ｜ 集計基準: ${calcText} ｜ 自然順序ソート（時系列・順序尺度）`;
+    }
+
+    return '';
+}
+
+/**
+ * 全画面表示時の上部バーに現在の図のタイトルとバッジを反映
+ */
+function updateFullscreenTitles() {
+    const kw = AppState.targetKeyword || '全体';
+    const cond = getChartConditions(AppState.activeTab);
+    const shortCond = cond ? ` (${cond.replace(/^作成条件:\s*/, '')})` : '';
+
+    const titles = {
+        cloud: { badge: 'ワードクラウド', text: `頻出語彙分析 [キーワード: 🎯「${kw}」]${shortCond}` },
+        network: {
+            badge: '共起ネットワーク',
+            text: (AppState.networkTargetMode === 'attr')
+                ? `属性別 結びつきネットワーク [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]${shortCond}`
+                : `語彙の結びつき・話題構造 [キーワード: 🎯「${kw}」]${shortCond}`
+        },
+        umap: { badge: 'UMAP散布図', text: `文脈クラスタリング・意見分布構造 [キーワード: 🎯「${kw}」]${shortCond}` },
+        attr: { badge: '属性クロス集計', text: `属性別言及傾向 [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]${shortCond}` }
+    };
+    const info = titles[AppState.activeTab] || { badge: '分析図', text: `[キーワード: 🎯「${kw}」]` };
+    document.querySelectorAll('.fullscreen-chart-badge').forEach(el => el.textContent = info.badge);
+    document.querySelectorAll('.fullscreen-chart-title').forEach(el => el.textContent = info.text);
+}
+
+/**
+ * 個別の分析図を単体印刷・PDF保存（用紙フィット・高解像度出力）
+ * 全画面表示中・通常表示中の両方から呼び出し可能
+ * @param {'cloud' | 'network' | 'umap' | 'attr'} [chartType]
+ */
+async function printSingleChart(chartType) {
+    const type = chartType || AppState.activeTab;
+    if (!['cloud', 'network', 'umap', 'attr'].includes(type)) {
+        showToast('⚠️ 印刷対象の図を選択してください');
+        return;
+    }
+
+    showToast('⏳ 印刷用高解像度データを生成中...');
+
+    // 1. 高解像度画像データの取得 (1600x1200)
+    const targetW = 1600;
+    const targetH = 1200;
+    let dataUrl = null;
+
+    try {
+        if (type === 'attr') {
+            const container = document.getElementById('attrChartContainer');
+            if (!container || !container.data || container.data.length === 0) {
+                showToast('⚠️ 印刷可能な属性グラフがありません');
+                return;
+            }
+            if (typeof AttrChartVisualizer !== 'undefined' && typeof AttrChartVisualizer.getExportImage === 'function') {
+                const targetRows = (typeof getFilteredRows === 'function') ? getFilteredRows() : (AppState.rawRows || []);
+                const matchedDocs = (AppState.filterResult && AppState.filterResult.matchedDocs) ? AppState.filterResult.matchedDocs : [];
+                const isFiltered = targetRows.length < (AppState.rawRows || []).length;
+                dataUrl = await AttrChartVisualizer.getExportImage(
+                    targetRows,
+                    matchedDocs,
+                    AppState.attrCol,
+                    AppState.targetKeyword,
+                    { isFiltered, calcMode: AppState.attrCalcMode || 'rate' },
+                    targetW,
+                    targetH
+                );
+            }
+            if (!dataUrl) {
+                dataUrl = await Plotly.toImage('attrChartContainer', {
+                    format: 'png',
+                    width: targetW,
+                    height: targetH
+                });
+            }
+        } else if (type === 'network' && typeof NetworkVisualizer.getExportCanvas === 'function') {
+            const canvas = NetworkVisualizer.getExportCanvas(targetW, targetH);
+            if (canvas) dataUrl = canvas.toDataURL('image/png');
+        } else if (type === 'umap' && typeof UmapVisualizer.getExportCanvas === 'function') {
+            const canvas = UmapVisualizer.getExportCanvas(targetW, targetH);
+            if (canvas) dataUrl = canvas.toDataURL('image/png');
+        } else if (type === 'cloud' && typeof WordCloudVisualizer.getExportCanvas === 'function') {
+            const canvas = await WordCloudVisualizer.getExportCanvas(targetW, targetH);
+            if (canvas) dataUrl = canvas.toDataURL('image/png');
+        }
+
+        // フォールバック
+        if (!dataUrl) {
+            let srcCanvas = null;
+            if (type === 'cloud') srcCanvas = document.getElementById('cloudCanvas');
+            else if (type === 'network') srcCanvas = document.getElementById('networkCanvas');
+            else if (type === 'umap') srcCanvas = document.getElementById('umapCanvas');
+
+            if (srcCanvas && srcCanvas.width > 0 && srcCanvas.height > 0) {
+                const offCanvas = document.createElement('canvas');
+                offCanvas.width = targetW;
+                offCanvas.height = targetH;
+                const ctx = offCanvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, targetW, targetH);
+                const scale = Math.min((targetW - 40) / srcCanvas.width, (targetH - 40) / srcCanvas.height);
+                const drawW = srcCanvas.width * scale;
+                const drawH = srcCanvas.height * scale;
+                ctx.drawImage(srcCanvas, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
+                dataUrl = offCanvas.toDataURL('image/png');
+            }
+        }
+
+        if (!dataUrl) {
+            showToast('⚠️ 印刷用画像の生成に失敗しました');
+            return;
+        }
+
+        // 2. タイトル＆メタ情報＆作成条件の設定
+        const kw = AppState.targetKeyword || '全体';
+        const typeNames = {
+            cloud: 'ワードクラウド（頻出語彙・重要度分析）',
+            network: (AppState.networkTargetMode === 'attr')
+                ? `属性別共起ネットワーク（${AppState.networkAttrMetric === 'distinct' ? '特徴語重視' : '頻度重視'}） [整理属性: 👥「${AppState.attrCol || '属性'}」]`
+                : '共起ネットワーク（語彙の結びつき・話題構造分析）',
+            umap: 'UMAP散布図（文脈クラスタリング・意見分布構造）',
+            attr: `属性別クロス集計 [整理属性: 👥「${AppState.attrCol || '属性'}」]`
+        };
+        const titleText = typeNames[type] || '分析図';
+
+        const printTitleEl = document.getElementById('singlePrintTitle');
+        const printMetaEl = document.getElementById('singlePrintMeta');
+        const printCondEl = document.getElementById('singlePrintCondition');
+        const printImgEl = document.getElementById('singlePrintImg');
+        const printDateEl = document.getElementById('singlePrintFooterDate');
+        const printInfoEl = document.getElementById('singlePrintFooterInfo');
+
+        if (printTitleEl) printTitleEl.textContent = titleText;
+        if (printMetaEl) {
+            const countInfo = AppState.filterResult
+                ? `該当意見数: ${AppState.filterResult.matchedCount.toLocaleString()}件 / 母集団${AppState.filterResult.totalDocs.toLocaleString()}件 (カバー率: ${AppState.filterResult.matchRate}%)`
+                : '';
+            printMetaEl.textContent = `対象キーワード: 🎯「${kw}」 | ${countInfo}`;
+        }
+        if (printCondEl) {
+            const conditionText = getChartConditions(type);
+            printCondEl.textContent = conditionText;
+            printCondEl.style.display = conditionText ? 'inline-block' : 'none';
+        }
+        if (printImgEl) printImgEl.src = dataUrl;
+        if (printDateEl) {
+            const now = new Date();
+            printDateEl.textContent = `出力日時: ${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+        if (printInfoEl) {
+            printInfoEl.textContent = `Survey Focus Explorer - 単一グラフ出力 (4:3 高解像度・用紙フィット)`;
+        }
+
+        // 3. body に印刷用クラスを付与して印刷ダイアログを起動
+        document.body.classList.add('printing-single-chart');
+
+        const cleanupPrint = () => {
+            document.body.classList.remove('printing-single-chart');
+            window.removeEventListener('afterprint', cleanupPrint);
+        };
+        window.addEventListener('afterprint', cleanupPrint);
+
+        const startPrint = () => {
+            requestAnimationFrame(() => {
+                window.print();
+            });
+        };
+
+        if (printImgEl.complete) {
+            startPrint();
+        } else {
+            printImgEl.onload = startPrint;
+        }
+
+        // 万一 afterprint が発火しない場合のフォールバックタイマー
+        setTimeout(() => {
+            document.body.classList.remove('printing-single-chart');
+        }, 5000);
+
+    } catch (err) {
+        console.error('printSingleChart error:', err);
+        showToast('⚠️ 印刷処理中にエラーが発生しました');
+        document.body.classList.remove('printing-single-chart');
+    }
+}
+
+/**
  * トースト通知を表示
  * @param {string} message
  * @param {number} [duration=3000]
@@ -3453,9 +3821,10 @@ function setCanvasSizeMode(sizeMode) {
         btnFullscreen.classList.toggle('btn-primary', sizeMode === 'fullscreen');
     }
 
-    // 全画面時のスクロール制御
+    // 全画面時のスクロール制御 ＆ タイトル更新
     if (sizeMode === 'fullscreen') {
         document.body.style.overflow = 'hidden';
+        updateFullscreenTitles();
     } else {
         document.body.style.overflow = '';
     }
