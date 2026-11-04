@@ -864,19 +864,6 @@
                         <span id="copySummaryToast" style="display: none; color: #15803d; font-size: 12px; font-weight: 600;">✓ コピー完了</span>
                     </div>
 
-                    <!-- 図タブ共通（クラウド、ネットワーク、UMAP、属性）用アクション -->
-                    <div id="actionChartsCtrl" style="display: none; align-items: center; gap: 6px;">
-                        <button type="button" id="btnSaveCurrentChart" class="btn btn-sm" title="表示中の図を白背景PNG画像として保存 (Word/PowerPoint向け 1200x900)">
-                            📷 画像保存 (PNG)
-                        </button>
-                        <button type="button" id="btnCopyCurrentChart" class="btn btn-sm btn-primary" title="クリップボードに画像をコピーしてWordやPowerPointに直接貼り付け [Ctrl+V]">
-                            📋 Officeへコピー
-                        </button>
-                        <button type="button" id="btnPrintCurrentChart" class="btn btn-sm" title="表示中の図を用紙にフィットして単独印刷・PDF保存">
-                            🖨️ 印刷
-                        </button>
-                    </div>
-
                     <!-- 生の声一覧用アクション -->
                     <div id="actionOpinionsCtrl" style="display: none; align-items: center; gap: 6px;">
                         <button type="button" id="btnExportMatchedCsv" class="btn btn-sm" title="抽出された意見一覧をCSV形式でダウンロード">
@@ -1224,6 +1211,7 @@
             <div class="single-print-title-area">
                 <h2 id="singlePrintTitle" class="single-print-title">分析図</h2>
                 <div id="singlePrintMeta" class="single-print-meta">対象キーワード: 全体</div>
+                <div id="singlePrintCondition" class="single-print-condition">作成条件: 特徴度（TF-IDF）順 ｜ 上位60語 ｜ 形状: 雲形</div>
             </div>
             <div class="single-print-app-logo">SURVEY FOCUS EXPLORER</div>
         </div>

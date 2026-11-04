@@ -3495,6 +3495,19 @@ body {
         line-height: 1.4 !important;
     }
 
+    body.printing-single-chart .single-print-condition {
+        font-size: 11px !important;
+        color: #1e40af !important;
+        background: #f0f7ff !important;
+        border: 1px solid #bfdbfe !important;
+        border-radius: 4px !important;
+        padding: 2.5px 8px !important;
+        margin-top: 4px !important;
+        display: inline-block !important;
+        font-weight: 600 !important;
+        line-height: 1.3 !important;
+    }
+
     body.printing-single-chart .single-print-app-logo {
         font-size: 12px !important;
         font-weight: 800 !important;

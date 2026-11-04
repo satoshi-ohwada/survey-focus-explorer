@@ -802,26 +802,6 @@ function setupUIEvents() {
     bindExport('btnSaveAttrImage', 'attr', 'download');
     bindExport('btnCopyAttrImage', 'attr', 'copy');
 
-    // ツールバー右側の統一画像保存 ＆ Officeコピー ＆ 印刷ボタン
-    const btnSaveChart = document.getElementById('btnSaveCurrentChart');
-    if (btnSaveChart) {
-        btnSaveChart.addEventListener('click', () => {
-            exportChart(AppState.activeTab, 'download');
-        });
-    }
-    const btnCopyChart = document.getElementById('btnCopyCurrentChart');
-    if (btnCopyChart) {
-        btnCopyChart.addEventListener('click', () => {
-            exportChart(AppState.activeTab, 'copy');
-        });
-    }
-    const btnPrintCurrent = document.getElementById('btnPrintCurrentChart');
-    if (btnPrintCurrent) {
-        btnPrintCurrent.addEventListener('click', () => {
-            printSingleChart(AppState.activeTab);
-        });
-    }
-
     // ツールバー右端の「表示中の図を保存」ボタン（後方互換）
     const btnSaveCurrent = document.getElementById('btnSaveImage');
     if (btnSaveCurrent) {
@@ -2305,8 +2285,6 @@ function switchTab(tabName) {
     // ツールバー右側のアクションコントロールの切り替え
     const actSummary = document.getElementById('actionSummaryCtrl');
     if (actSummary) actSummary.style.display = (tabName === 'summary') ? 'flex' : 'none';
-    const actCharts = document.getElementById('actionChartsCtrl');
-    if (actCharts) actCharts.style.display = isChartTab ? 'flex' : 'none';
     const actOpinions = document.getElementById('actionOpinionsCtrl');
     if (actOpinions) actOpinions.style.display = (tabName === 'opinions') ? 'flex' : 'none';
 
@@ -3419,20 +3397,88 @@ function saveCurrentImage() {
 }
 
 /**
+ * 現在の図の作成条件（パラメータ・集計基準・選出語数等）を文字列として取得
+ * @param {'cloud' | 'network' | 'umap' | 'attr'} type
+ * @returns {string} 作成条件の説明文字列
+ */
+function getChartConditions(type) {
+    if (type === 'cloud') {
+        const rankEl = document.getElementById('selectCloudRanking');
+        const rankVal = rankEl ? rankEl.value : 'count';
+        const rankText = (rankVal === 'tfidf') ? '特徴度（TF-IDF）順' : '出現頻度順';
+
+        const wordsEl = document.getElementById('selectCloudMaxWords');
+        const wordsVal = wordsEl ? wordsEl.value : '60';
+
+        const shapeEl = document.getElementById('selectCloudShape');
+        const shapeVal = shapeEl ? shapeEl.value : 'circle';
+        const shapeText = (shapeVal === 'square') ? '矩形（長方形）' : '雲形（楕円）';
+
+        return `作成条件: ${rankText} ｜ 上位${wordsVal}語 ｜ 形状: ${shapeText}`;
+    }
+
+    if (type === 'network') {
+        const wordsEl = document.getElementById('selectNetworkMaxWords');
+        const wordsVal = wordsEl ? wordsEl.value : '40';
+
+        if (AppState.networkTargetMode === 'attr') {
+            const attrCol = AppState.attrCol || '属性';
+            const metricText = (AppState.networkAttrMetric === 'freq')
+                ? '頻度重視（共通基本語）'
+                : '特徴度重視（属性特有の独自関心）';
+            return `作成条件: 属性結びつき [整理属性: 👥「${attrCol}」] ｜ 単語選出: ${metricText} ｜ 上位${wordsVal}語`;
+        } else {
+            const colorEl = document.getElementById('selectNetworkColorMode');
+            const colorVal = colorEl ? colorEl.value : 'community';
+            const colorText = (colorVal === 'role') ? '役割別（中心語/関連語/共起語）' : '話題グループ別（コミュニティ検出）';
+            return `作成条件: 全体の話題構造（単語共起関係） ｜ 上位${wordsVal}語 ｜ 色分け: ${colorText}`;
+        }
+    }
+
+    if (type === 'umap') {
+        const modeEl = document.getElementById('selectUmapMode');
+        const modeVal = modeEl ? modeEl.value : 'words';
+        const modeText = (modeVal === 'docs') ? '意見マップ（発言内容の類似度）' : '単語マップ（文脈上の使われ方の類似度）';
+
+        const clusterEl = document.getElementById('selectUmapClustering');
+        const clusterVal = clusterEl ? clusterEl.value : 'hdbscan';
+        const clusterText = (clusterVal === 'kmeans') ? 'k-means' : 'HDBSCAN（密度ベース自動判定）';
+
+        const minSizeEl = document.getElementById('selectUmapMinClusterSize');
+        const minSizeVal = (minSizeEl && minSizeEl.value !== 'auto') ? `${minSizeEl.value}件` : '自動';
+
+        return `作成条件: ${modeText} ｜ クラスタリング: ${clusterText}（最小クラスタ: ${minSizeVal}）`;
+    }
+
+    if (type === 'attr') {
+        const attrCol = AppState.attrCol || '属性';
+        const calcText = (AppState.attrCalcMode === 'share')
+            ? '構成比（関連意見全体の内訳 %）'
+            : '言及率（各属性グループ内の関心度 %）';
+        return `作成条件: 整理属性: 👥「${attrCol}」 ｜ 集計基準: ${calcText} ｜ 自然順序ソート（時系列・順序尺度）`;
+    }
+
+    return '';
+}
+
+/**
  * 全画面表示時の上部バーに現在の図のタイトルとバッジを反映
  */
 function updateFullscreenTitles() {
     const kw = AppState.targetKeyword || '全体';
+    const cond = getChartConditions(AppState.activeTab);
+    const shortCond = cond ? ` (${cond.replace(/^作成条件:\s*/, '')})` : '';
+
     const titles = {
-        cloud: { badge: 'ワードクラウド', text: `頻出語彙分析 [キーワード: 🎯「${kw}」]` },
+        cloud: { badge: 'ワードクラウド', text: `頻出語彙分析 [キーワード: 🎯「${kw}」]${shortCond}` },
         network: {
             badge: '共起ネットワーク',
             text: (AppState.networkTargetMode === 'attr')
-                ? `属性別 結びつきネットワーク（${AppState.networkAttrMetric === 'distinct' ? '特徴語重視' : '頻度重視'}） [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]`
-                : `語彙の結びつき・話題構造 [キーワード: 🎯「${kw}」]`
+                ? `属性別 結びつきネットワーク [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]${shortCond}`
+                : `語彙の結びつき・話題構造 [キーワード: 🎯「${kw}」]${shortCond}`
         },
-        umap: { badge: 'UMAP散布図', text: `文脈クラスタリング・意見分布構造 [キーワード: 🎯「${kw}」]` },
-        attr: { badge: '属性クロス集計', text: `属性別言及傾向 [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]` }
+        umap: { badge: 'UMAP散布図', text: `文脈クラスタリング・意見分布構造 [キーワード: 🎯「${kw}」]${shortCond}` },
+        attr: { badge: '属性クロス集計', text: `属性別言及傾向 [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]${shortCond}` }
     };
     const info = titles[AppState.activeTab] || { badge: '分析図', text: `[キーワード: 🎯「${kw}」]` };
     document.querySelectorAll('.fullscreen-chart-badge').forEach(el => el.textContent = info.badge);
@@ -3508,7 +3554,7 @@ async function printSingleChart(chartType) {
             return;
         }
 
-        // 2. タイトル＆メタ情報の設定
+        // 2. タイトル＆メタ情報＆作成条件の設定
         const kw = AppState.targetKeyword || '全体';
         const typeNames = {
             cloud: 'ワードクラウド（頻出語彙・重要度分析）',
@@ -3522,6 +3568,7 @@ async function printSingleChart(chartType) {
 
         const printTitleEl = document.getElementById('singlePrintTitle');
         const printMetaEl = document.getElementById('singlePrintMeta');
+        const printCondEl = document.getElementById('singlePrintCondition');
         const printImgEl = document.getElementById('singlePrintImg');
         const printDateEl = document.getElementById('singlePrintFooterDate');
         const printInfoEl = document.getElementById('singlePrintFooterInfo');
@@ -3532,6 +3579,11 @@ async function printSingleChart(chartType) {
                 ? `該当意見数: ${AppState.filterResult.matchedCount.toLocaleString()}件 / 母集団${AppState.filterResult.totalDocs.toLocaleString()}件 (カバー率: ${AppState.filterResult.matchRate}%)`
                 : '';
             printMetaEl.textContent = `対象キーワード: 🎯「${kw}」 | ${countInfo}`;
+        }
+        if (printCondEl) {
+            const conditionText = getChartConditions(type);
+            printCondEl.textContent = conditionText;
+            printCondEl.style.display = conditionText ? 'inline-block' : 'none';
         }
         if (printImgEl) printImgEl.src = dataUrl;
         if (printDateEl) {
