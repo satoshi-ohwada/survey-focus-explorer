@@ -872,6 +872,9 @@
                         <button type="button" id="btnCopyCurrentChart" class="btn btn-sm btn-primary" title="クリップボードに画像をコピーしてWordやPowerPointに直接貼り付け [Ctrl+V]">
                             📋 Officeへコピー
                         </button>
+                        <button type="button" id="btnPrintCurrentChart" class="btn btn-sm" title="表示中の図を用紙にフィットして単独印刷・PDF保存">
+                            🖨️ 印刷
+                        </button>
                     </div>
 
                     <!-- 生の声一覧用アクション -->
@@ -944,28 +947,104 @@
             <!-- 1. ワードクラウドタブ -->
             <div id="tabContentCloud" class="tab-content" style="display: none;">
                 <div class="canvas-container size-standard" id="cloudCanvasContainer">
-                    <button type="button" class="btn-exit-fullscreen">✕ 全画面を終了 [Esc]</button>
+                    <div class="fullscreen-topbar">
+                        <div class="fullscreen-topbar-title">
+                            <span class="fullscreen-chart-badge">ワードクラウド</span>
+                            <span class="fullscreen-chart-title">頻出語彙分析</span>
+                        </div>
+                        <div class="fullscreen-topbar-actions">
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-save" title="この図を高解像度PNG画像として保存 (1200x900)">
+                                📷 画像保存
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-copy" title="クリップボードに画像をコピーしてWordやPowerPointに貼り付け">
+                                📋 Officeへコピー
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-print" title="この図を用紙にフィットして単独印刷・PDF保存">
+                                🖨️ 印刷
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-exit-fullscreen" title="全画面表示を終了 [Esc]">
+                                ✕ 全画面を終了
+                            </button>
+                        </div>
+                    </div>
                     <canvas id="cloudCanvas"></canvas>
                 </div>
             </div>
 
             <div id="tabContentNetwork" class="tab-content" style="display: none;">
                 <div class="canvas-container size-standard" id="networkCanvasContainer">
-                    <button type="button" class="btn-exit-fullscreen">✕ 全画面を終了 [Esc]</button>
+                    <div class="fullscreen-topbar">
+                        <div class="fullscreen-topbar-title">
+                            <span class="fullscreen-chart-badge">共起ネットワーク</span>
+                            <span class="fullscreen-chart-title">話題構造・結びつき</span>
+                        </div>
+                        <div class="fullscreen-topbar-actions">
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-save" title="この図を高解像度PNG画像として保存 (1200x900)">
+                                📷 画像保存
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-copy" title="クリップボードに画像をコピーしてWordやPowerPointに貼り付け">
+                                📋 Officeへコピー
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-print" title="この図を用紙にフィットして単独印刷・PDF保存">
+                                🖨️ 印刷
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-exit-fullscreen" title="全画面表示を終了 [Esc]">
+                                ✕ 全画面を終了
+                            </button>
+                        </div>
+                    </div>
                     <canvas id="networkCanvas"></canvas>
                 </div>
             </div>
 
             <div id="tabContentUmap" class="tab-content" style="display: none;">
                 <div class="canvas-container size-standard" id="umapCanvasContainer">
-                    <button type="button" class="btn-exit-fullscreen">✕ 全画面を終了 [Esc]</button>
+                    <div class="fullscreen-topbar">
+                        <div class="fullscreen-topbar-title">
+                            <span class="fullscreen-chart-badge">UMAP散布図</span>
+                            <span class="fullscreen-chart-title">文脈クラスタリング</span>
+                        </div>
+                        <div class="fullscreen-topbar-actions">
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-save" title="この図を高解像度PNG画像として保存 (1200x900)">
+                                📷 画像保存
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-copy" title="クリップボードに画像をコピーしてWordやPowerPointに貼り付け">
+                                📋 Officeへコピー
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-print" title="この図を用紙にフィットして単独印刷・PDF保存">
+                                🖨️ 印刷
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-exit-fullscreen" title="全画面表示を終了 [Esc]">
+                                ✕ 全画面を終了
+                            </button>
+                        </div>
+                    </div>
                     <canvas id="umapCanvas"></canvas>
                 </div>
             </div>
 
             <div id="tabContentAttr" class="tab-content" style="display: none;">
                 <div class="canvas-container size-standard" id="attrCanvasContainer">
-                    <button type="button" class="btn-exit-fullscreen">✕ 全画面を終了 [Esc]</button>
+                    <div class="fullscreen-topbar">
+                        <div class="fullscreen-topbar-title">
+                            <span class="fullscreen-chart-badge">属性クロス集計</span>
+                            <span class="fullscreen-chart-title">属性別言及傾向</span>
+                        </div>
+                        <div class="fullscreen-topbar-actions">
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-save" title="この図を高解像度PNG画像として保存 (1200x900)">
+                                📷 画像保存
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-copy" title="クリップボードに画像をコピーしてWordやPowerPointに貼り付け">
+                                📋 Officeへコピー
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-fullscreen-print" title="この図を用紙にフィットして単独印刷・PDF保存">
+                                🖨️ 印刷
+                            </button>
+                            <button type="button" class="btn-fullscreen-action btn-exit-fullscreen" title="全画面表示を終了 [Esc]">
+                                ✕ 全画面を終了
+                            </button>
+                        </div>
+                    </div>
                     <div id="attrChartContainer" style="width: 100%; height: 100%;"></div>
                 </div>
             </div>
@@ -1136,6 +1215,24 @@
         </div>
         <div class="report-modal-body">
             <div id="reportPagesContainer"></div>
+        </div>
+    </div>
+
+    <!-- 単一グラフ印刷専用コンテナ（ブラウザ印刷・PDF保存用・画面上非表示） -->
+    <div id="singleChartPrintContainer" class="single-chart-print-container" style="display: none;">
+        <div class="single-print-header">
+            <div class="single-print-title-area">
+                <h2 id="singlePrintTitle" class="single-print-title">分析図</h2>
+                <div id="singlePrintMeta" class="single-print-meta">対象キーワード: 全体</div>
+            </div>
+            <div class="single-print-app-logo">SURVEY FOCUS EXPLORER</div>
+        </div>
+        <div class="single-print-body">
+            <img id="singlePrintImg" class="single-print-img" alt="分析図">
+        </div>
+        <div class="single-print-footer">
+            <span id="singlePrintFooterInfo">抽出意見分析レポート</span>
+            <span id="singlePrintFooterDate"></span>
         </div>
     </div>
 

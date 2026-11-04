@@ -691,10 +691,33 @@ function setupUIEvents() {
         });
     });
 
-    // Escキーでの全画面解除
+    // 全画面表示内のアクションボタン群（画像保存・Officeコピー・印刷）
+    document.querySelectorAll('.btn-fullscreen-save').forEach(btn => {
+        btn.addEventListener('click', () => {
+            exportChart(AppState.activeTab, 'download');
+        });
+    });
+    document.querySelectorAll('.btn-fullscreen-copy').forEach(btn => {
+        btn.addEventListener('click', () => {
+            exportChart(AppState.activeTab, 'copy');
+        });
+    });
+    document.querySelectorAll('.btn-fullscreen-print').forEach(btn => {
+        btn.addEventListener('click', () => {
+            printSingleChart(AppState.activeTab);
+        });
+    });
+
+    // Escキーでの全画面解除 ＆ Ctrl+P での単体グラフ印刷
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && AppState.canvasSizeMode === 'fullscreen') {
             setCanvasSizeMode('standard');
+        }
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+            if (AppState.canvasSizeMode === 'fullscreen') {
+                e.preventDefault();
+                printSingleChart(AppState.activeTab);
+            }
         }
     });
 
@@ -779,7 +802,7 @@ function setupUIEvents() {
     bindExport('btnSaveAttrImage', 'attr', 'download');
     bindExport('btnCopyAttrImage', 'attr', 'copy');
 
-    // ツールバー右側の統一画像保存 ＆ Officeコピーボタン
+    // ツールバー右側の統一画像保存 ＆ Officeコピー ＆ 印刷ボタン
     const btnSaveChart = document.getElementById('btnSaveCurrentChart');
     if (btnSaveChart) {
         btnSaveChart.addEventListener('click', () => {
@@ -790,6 +813,12 @@ function setupUIEvents() {
     if (btnCopyChart) {
         btnCopyChart.addEventListener('click', () => {
             exportChart(AppState.activeTab, 'copy');
+        });
+    }
+    const btnPrintCurrent = document.getElementById('btnPrintCurrentChart');
+    if (btnPrintCurrent) {
+        btnPrintCurrent.addEventListener('click', () => {
+            printSingleChart(AppState.activeTab);
         });
     }
 
@@ -2287,6 +2316,11 @@ function switchTab(tabName) {
     const btnFullscreen = document.getElementById('btnToggleFullscreen');
     if (btnFullscreen) btnFullscreen.style.display = isChartTab ? 'inline-flex' : 'none';
 
+    // 全画面表示中の場合は上部タイトルの表示内容も更新
+    if (AppState.canvasSizeMode === 'fullscreen') {
+        updateFullscreenTitles();
+    }
+
     // 切り替え時にDOMサイズ確定を待って正確なコンテナ寸法で描画
     requestAnimationFrame(() => {
         updateVisualizations();
@@ -3385,6 +3419,163 @@ function saveCurrentImage() {
 }
 
 /**
+ * 全画面表示時の上部バーに現在の図のタイトルとバッジを反映
+ */
+function updateFullscreenTitles() {
+    const kw = AppState.targetKeyword || '全体';
+    const titles = {
+        cloud: { badge: 'ワードクラウド', text: `頻出語彙分析 [キーワード: 🎯「${kw}」]` },
+        network: {
+            badge: '共起ネットワーク',
+            text: (AppState.networkTargetMode === 'attr')
+                ? `属性別 結びつきネットワーク（${AppState.networkAttrMetric === 'distinct' ? '特徴語重視' : '頻度重視'}） [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]`
+                : `語彙の結びつき・話題構造 [キーワード: 🎯「${kw}」]`
+        },
+        umap: { badge: 'UMAP散布図', text: `文脈クラスタリング・意見分布構造 [キーワード: 🎯「${kw}」]` },
+        attr: { badge: '属性クロス集計', text: `属性別言及傾向 [整理属性: 👥「${AppState.attrCol || '属性'}」 / キーワード: 🎯「${kw}」]` }
+    };
+    const info = titles[AppState.activeTab] || { badge: '分析図', text: `[キーワード: 🎯「${kw}」]` };
+    document.querySelectorAll('.fullscreen-chart-badge').forEach(el => el.textContent = info.badge);
+    document.querySelectorAll('.fullscreen-chart-title').forEach(el => el.textContent = info.text);
+}
+
+/**
+ * 個別の分析図を単体印刷・PDF保存（用紙フィット・高解像度出力）
+ * 全画面表示中・通常表示中の両方から呼び出し可能
+ * @param {'cloud' | 'network' | 'umap' | 'attr'} [chartType]
+ */
+async function printSingleChart(chartType) {
+    const type = chartType || AppState.activeTab;
+    if (!['cloud', 'network', 'umap', 'attr'].includes(type)) {
+        showToast('⚠️ 印刷対象の図を選択してください');
+        return;
+    }
+
+    showToast('⏳ 印刷用高解像度データを生成中...');
+
+    // 1. 高解像度画像データの取得 (1600x1200)
+    const targetW = 1600;
+    const targetH = 1200;
+    let dataUrl = null;
+
+    try {
+        if (type === 'attr') {
+            const container = document.getElementById('attrChartContainer');
+            if (!container || !container.data || container.data.length === 0) {
+                showToast('⚠️ 印刷可能な属性グラフがありません');
+                return;
+            }
+            dataUrl = await Plotly.toImage('attrChartContainer', {
+                format: 'png',
+                width: targetW,
+                height: targetH
+            });
+        } else if (type === 'network' && typeof NetworkVisualizer.getExportCanvas === 'function') {
+            const canvas = NetworkVisualizer.getExportCanvas(targetW, targetH);
+            if (canvas) dataUrl = canvas.toDataURL('image/png');
+        } else if (type === 'umap' && typeof UmapVisualizer.getExportCanvas === 'function') {
+            const canvas = UmapVisualizer.getExportCanvas(targetW, targetH);
+            if (canvas) dataUrl = canvas.toDataURL('image/png');
+        } else if (type === 'cloud' && typeof WordCloudVisualizer.getExportCanvas === 'function') {
+            const canvas = await WordCloudVisualizer.getExportCanvas(targetW, targetH);
+            if (canvas) dataUrl = canvas.toDataURL('image/png');
+        }
+
+        // フォールバック
+        if (!dataUrl) {
+            let srcCanvas = null;
+            if (type === 'cloud') srcCanvas = document.getElementById('cloudCanvas');
+            else if (type === 'network') srcCanvas = document.getElementById('networkCanvas');
+            else if (type === 'umap') srcCanvas = document.getElementById('umapCanvas');
+
+            if (srcCanvas && srcCanvas.width > 0 && srcCanvas.height > 0) {
+                const offCanvas = document.createElement('canvas');
+                offCanvas.width = targetW;
+                offCanvas.height = targetH;
+                const ctx = offCanvas.getContext('2d');
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, targetW, targetH);
+                const scale = Math.min((targetW - 40) / srcCanvas.width, (targetH - 40) / srcCanvas.height);
+                const drawW = srcCanvas.width * scale;
+                const drawH = srcCanvas.height * scale;
+                ctx.drawImage(srcCanvas, (targetW - drawW) / 2, (targetH - drawH) / 2, drawW, drawH);
+                dataUrl = offCanvas.toDataURL('image/png');
+            }
+        }
+
+        if (!dataUrl) {
+            showToast('⚠️ 印刷用画像の生成に失敗しました');
+            return;
+        }
+
+        // 2. タイトル＆メタ情報の設定
+        const kw = AppState.targetKeyword || '全体';
+        const typeNames = {
+            cloud: 'ワードクラウド（頻出語彙・重要度分析）',
+            network: (AppState.networkTargetMode === 'attr')
+                ? `属性別共起ネットワーク（${AppState.networkAttrMetric === 'distinct' ? '特徴語重視' : '頻度重視'}） [整理属性: 👥「${AppState.attrCol || '属性'}」]`
+                : '共起ネットワーク（語彙の結びつき・話題構造分析）',
+            umap: 'UMAP散布図（文脈クラスタリング・意見分布構造）',
+            attr: `属性別クロス集計 [整理属性: 👥「${AppState.attrCol || '属性'}」]`
+        };
+        const titleText = typeNames[type] || '分析図';
+
+        const printTitleEl = document.getElementById('singlePrintTitle');
+        const printMetaEl = document.getElementById('singlePrintMeta');
+        const printImgEl = document.getElementById('singlePrintImg');
+        const printDateEl = document.getElementById('singlePrintFooterDate');
+        const printInfoEl = document.getElementById('singlePrintFooterInfo');
+
+        if (printTitleEl) printTitleEl.textContent = titleText;
+        if (printMetaEl) {
+            const countInfo = AppState.filterResult
+                ? `該当意見数: ${AppState.filterResult.matchedCount.toLocaleString()}件 / 母集団${AppState.filterResult.totalDocs.toLocaleString()}件 (カバー率: ${AppState.filterResult.matchRate}%)`
+                : '';
+            printMetaEl.textContent = `対象キーワード: 🎯「${kw}」 | ${countInfo}`;
+        }
+        if (printImgEl) printImgEl.src = dataUrl;
+        if (printDateEl) {
+            const now = new Date();
+            printDateEl.textContent = `出力日時: ${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+        }
+        if (printInfoEl) {
+            printInfoEl.textContent = `Survey Focus Explorer - 単一グラフ出力 (4:3 高解像度・用紙フィット)`;
+        }
+
+        // 3. body に印刷用クラスを付与して印刷ダイアログを起動
+        document.body.classList.add('printing-single-chart');
+
+        const cleanupPrint = () => {
+            document.body.classList.remove('printing-single-chart');
+            window.removeEventListener('afterprint', cleanupPrint);
+        };
+        window.addEventListener('afterprint', cleanupPrint);
+
+        const startPrint = () => {
+            requestAnimationFrame(() => {
+                window.print();
+            });
+        };
+
+        if (printImgEl.complete) {
+            startPrint();
+        } else {
+            printImgEl.onload = startPrint;
+        }
+
+        // 万一 afterprint が発火しない場合のフォールバックタイマー
+        setTimeout(() => {
+            document.body.classList.remove('printing-single-chart');
+        }, 5000);
+
+    } catch (err) {
+        console.error('printSingleChart error:', err);
+        showToast('⚠️ 印刷処理中にエラーが発生しました');
+        document.body.classList.remove('printing-single-chart');
+    }
+}
+
+/**
  * トースト通知を表示
  * @param {string} message
  * @param {number} [duration=3000]
@@ -3453,9 +3644,10 @@ function setCanvasSizeMode(sizeMode) {
         btnFullscreen.classList.toggle('btn-primary', sizeMode === 'fullscreen');
     }
 
-    // 全画面時のスクロール制御
+    // 全画面時のスクロール制御 ＆ タイトル更新
     if (sizeMode === 'fullscreen') {
         document.body.style.overflow = 'hidden';
+        updateFullscreenTitles();
     } else {
         document.body.style.overflow = '';
     }
