@@ -186,6 +186,29 @@ const AttributeSorter = {
                 ['男性', '男', 'male'],
                 ['女性', '女', 'female']
             ]
+        },
+        // 17. 曜日
+        {
+            name: 'day_of_week',
+            levels: [
+                ['月曜日', '月曜', '月'],
+                ['火曜日', '火曜', '火'],
+                ['水曜日', '水曜', '水'],
+                ['木曜日', '木曜', '木'],
+                ['金曜日', '金曜', '金'],
+                ['土曜日', '土曜', '土'],
+                ['日曜日', '日曜', '日']
+            ]
+        },
+        // 18. 四半期・期
+        {
+            name: 'quarter',
+            levels: [
+                ['第1四半期', '1q', '第1期', '1期'],
+                ['第2四半期', '2q', '第2期', '2期'],
+                ['第3四半期', '3q', '第3期', '3期'],
+                ['第4四半期', '4q', '第4期', '4期']
+            ]
         }
     ],
 
@@ -242,9 +265,188 @@ const AttributeSorter = {
         return bestLevel;
     },
 
+    /**
+     * 和暦（元号＋年、年月、期など）を解析し、時系列比較用の絶対西暦数値ランクを算出
+     * @param {string} norm - 正規化済みカテゴリ文字列
+     * @returns {number|null} 西暦換算ランク（例: 令和元年=2019, 令和2年4月=2020.04）、判定不能時はnull
+     */
+    extractWarekiRank(norm) {
+        if (!norm) return null;
+
+        // 全角英数・記号の半角化
+        let s = String(norm).trim()
+            .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+            .replace(/[Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+            .replace(/[\uFF0F]/g, '/')
+            .replace(/[\uFF0E]/g, '.')
+            .replace(/[\uFF0D\u2212\u2014\u2015ー]/g, '-')
+            .trim();
+
+        const eras = [
+            { name: '令和', aliases: ['令和', '令', 'r'], offset: 2018, start: 2019 },
+            { name: '平成', aliases: ['平成', '平', 'h'], offset: 1988, start: 1989 },
+            { name: '昭和', aliases: ['昭和', '昭', 's'], offset: 1925, start: 1926 },
+            { name: '大正', aliases: ['大正', 't'], offset: 1911, start: 1912 },
+            { name: '明治', aliases: ['明治', 'm'], offset: 1867, start: 1868 }
+        ];
+
+        // 1. 元号単体（例: 「昭和」「平成」「令和」）
+        for (const era of eras) {
+            if (s === era.name) {
+                return era.start;
+            }
+        }
+
+        // 漢数字を数字に変換（「元年」の「元」は個別処理するためそのまま残す）
+        const kanjiDigits = { '〇': 0, '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9 };
+        s = s.replace(/([一二三四五六七八九〇十]+)/g, (match) => {
+            if (match === '十') return '10';
+            if (match.startsWith('十')) return String(10 + (kanjiDigits[match[1]] || 0));
+            if (match.includes('十')) {
+                const parts = match.split('十');
+                const ten = kanjiDigits[parts[0]] != null ? kanjiDigits[parts[0]] : 1;
+                const unit = parts[1] ? (kanjiDigits[parts[1]] || 0) : 0;
+                return String(ten * 10 + unit);
+            }
+            return match.split('').map(c => kanjiDigits[c] != null ? kanjiDigits[c] : c).join('');
+        });
+
+        // 2. 元号 + 年（例: 令和5年, 令和元年, 令和5年度, R5, R05, H30, 令5, 平30, 昭和30年代）
+        const eraRegex = /^(令和|平成|昭和|大正|明治|令|平|昭|[RrHhSsTtMm])\s*[.\-_/]?\s*(元|\d{1,2})\s*(年代|年度|年)?/i;
+        const match = s.match(eraRegex);
+        if (!match) return null;
+
+        const eraPrefix = match[1].toLowerCase();
+        const yearPart = match[2];
+        const unitPart = match[3] || '';
+        const matchedEra = eras.find(e => e.aliases.some(a => a.toLowerCase() === eraPrefix));
+        if (!matchedEra) return null;
+
+        const warekiYear = yearPart === '元' ? 1 : parseInt(yearPart, 10);
+        if (isNaN(warekiYear)) return null;
+
+        let calYear = matchedEra.offset + warekiYear;
+        if (unitPart === '年代') {
+            return calYear;
+        }
+
+        // 年以降の文字列から月・四半期・期・日を抽出
+        const rest = s.slice(match[0].length).trim();
+        let month = 0;
+        let day = 0;
+
+        if (rest) {
+            const qMatch = rest.match(/^(?:第?([1-4])\s*(?:四半期|期|Q)|([1-4])Q)/i);
+            if (qMatch) {
+                const q = parseInt(qMatch[1] || qMatch[2], 10);
+                month = q * 3;
+            } else {
+                const monthMatch = rest.match(/^(?:[.\-/_]\s*(\d{1,2})|(\d{1,2})\s*月)/);
+                if (monthMatch) {
+                    month = parseInt(monthMatch[1] || monthMatch[2], 10);
+                    const afterMonth = rest.slice(monthMatch[0].length).trim();
+                    const dayMatch = afterMonth.match(/^(?:[.\-/_]\s*(\d{1,2})|(\d{1,2})\s*日)/);
+                    if (dayMatch) {
+                        day = parseInt(dayMatch[1] || dayMatch[2], 10);
+                    }
+                }
+            }
+        }
+
+        let rank = calYear;
+        if (month >= 1 && month <= 12) {
+            rank += month / 100;
+            if (day >= 1 && day <= 31) {
+                rank += day / 10000;
+            }
+        }
+
+        if (s.includes('未満') || s.includes('以下') || s.includes('以前') || s.includes('前')) {
+            rank -= 0.00005;
+        } else if (s.includes('以上') || s.includes('以降') || s.includes('超') || s.includes('後')) {
+            rank += 0.00005;
+        }
+
+        return rank;
+    },
+
+    /**
+     * 西暦（年、年月、期など）を解析し、時系列比較用の絶対数値ランクを算出
+     * @param {string} norm - 正規化済みカテゴリ文字列
+     * @returns {number|null} 西暦換算ランク（例: 2024年4月=2024.04）、判定不能時はnull
+     */
+    extractWesternDateRank(norm) {
+        if (!norm) return null;
+        let s = String(norm).trim()
+            .replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+            .replace(/[Ａ-Ｚａ-ｚ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+            .replace(/[\uFF0F]/g, '/')
+            .replace(/[\uFF0E]/g, '.')
+            .replace(/[\uFF0D\u2212\u2014\u2015ー]/g, '-')
+            .trim();
+
+        // 4桁の西暦（1800〜2199）
+        const yearMatch = s.match(/^(18\d{2}|19\d{2}|20\d{2}|21\d{2})\s*(年代|年度|年)?/);
+        if (!yearMatch) return null;
+
+        const calYear = parseInt(yearMatch[1], 10);
+        const unitPart = yearMatch[2] || '';
+        if (unitPart === '年代') {
+            return calYear;
+        }
+
+        const rest = s.slice(yearMatch[0].length).trim();
+        let month = 0;
+        let day = 0;
+
+        if (rest) {
+            const qMatch = rest.match(/^(?:第?([1-4])\s*(?:四半期|期|Q)|([1-4])Q)/i);
+            if (qMatch) {
+                const q = parseInt(qMatch[1] || qMatch[2], 10);
+                month = q * 3;
+            } else {
+                const monthMatch = rest.match(/^(?:[.\-/_]\s*(\d{1,2})|(\d{1,2})\s*月)/);
+                if (monthMatch) {
+                    month = parseInt(monthMatch[1] || monthMatch[2], 10);
+                    const afterMonth = rest.slice(monthMatch[0].length).trim();
+                    const dayMatch = afterMonth.match(/^(?:[.\-/_]\s*(\d{1,2})|(\d{1,2})\s*日)/);
+                    if (dayMatch) {
+                        day = parseInt(dayMatch[1] || dayMatch[2], 10);
+                    }
+                }
+            }
+        }
+
+        let rank = calYear;
+        if (month >= 1 && month <= 12) {
+            rank += month / 100;
+            if (day >= 1 && day <= 31) {
+                rank += day / 10000;
+            }
+        }
+
+        if (s.includes('未満') || s.includes('以下') || s.includes('以前') || s.includes('前')) {
+            rank -= 0.00005;
+        } else if (s.includes('以上') || s.includes('以降') || s.includes('超') || s.includes('後')) {
+            rank += 0.00005;
+        }
+
+        return rank;
+    },
+
     extractNumericRank(category) {
         if (!category) return null;
         const norm = this.normalizeCategory(category);
+
+        // 1. 和暦判定（令和・平成・昭和・大正・明治）
+        const warekiRank = this.extractWarekiRank(norm);
+        if (warekiRank !== null) return warekiRank;
+
+        // 2. 西暦判定（1800〜2199年、年月・四半期・期・日含む）
+        const westernRank = this.extractWesternDateRank(norm);
+        if (westernRank !== null) return westernRank;
+
+        // 3. 年代・年齢（20代、30歳など）
         const ageMatch = norm.match(/(\d+)\s*(代|歳)/);
         if (ageMatch) {
             let val = parseFloat(ageMatch[1]);
@@ -252,20 +454,27 @@ const AttributeSorter = {
             else if (norm.includes('以上')) val += 0.5;
             return val;
         }
+
+        // 4. 数値範囲（〜、-）
         const rangeMatch = norm.match(/(\d+)\s*[〜~\-ー]/);
         if (rangeMatch) {
             return parseFloat(rangeMatch[1]);
         }
-        const pureNum = norm.match(/^(\d+)/);
+
+        // 5. 先頭の純粋な数値
+        const pureNum = norm.match(/^(\d+(?:\.\d+)?)/);
         if (pureNum) {
             let v = parseFloat(pureNum[1]);
             if (norm.includes('未満') || norm.includes('以下')) v -= 0.5;
             if (norm.includes('以上') || norm.includes('超')) v += 0.5;
             return v;
         }
+
+        // 6. 丸数字（①〜⑳）
         const circled = '①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳';
         const cIdx = circled.indexOf(norm.charAt(0));
         if (cIdx >= 0) return cIdx + 1;
+
         return null;
     },
 
