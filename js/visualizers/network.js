@@ -30,6 +30,68 @@ const NetworkVisualizer = {
         this.edges = [];
     },
 
+    /**
+     * 文字サイズ設定に応じたフォントサイズ・寸法定義を取得
+     * @param {'normal'|'large'|'xlarge'} [sizeKey]
+     * @param {boolean} [isExport=false]
+     * @returns {object}
+     */
+    getFontSizeConfig(sizeKey = this.fontSize, isExport = false) {
+        // 画面表示用ベースサイズ
+        const baseConfigs = {
+            normal: {
+                // 単語共起ネットワーク (word mode)
+                target: 15,
+                related: 13,
+                other: 11.5,
+                // 属性結びつきネットワーク (attr mode)
+                attrNode: 11,
+                attrShared: 13,
+                attrWord: 11.5,
+                attrBoxHeight: 32
+            },
+            large: {
+                // 単語共起ネットワーク (word mode) - やや大（デフォルト）
+                target: 19,
+                related: 16,
+                other: 14,
+                // 属性結びつきネットワーク (attr mode)
+                attrNode: 13,
+                attrShared: 16,
+                attrWord: 14,
+                attrBoxHeight: 36
+            },
+            xlarge: {
+                // 単語共起ネットワーク (word mode) - 特大
+                target: 24,
+                related: 20,
+                other: 17.5,
+                // 属性結びつきネットワーク (attr mode)
+                attrNode: 15.5,
+                attrShared: 20,
+                attrWord: 17.5,
+                attrBoxHeight: 42
+            }
+        };
+
+        const cfg = baseConfigs[sizeKey] || baseConfigs.large;
+
+        if (!isExport) {
+            return cfg;
+        }
+
+        // レポート・画像保存（エクスポート: 1200x900・解像度約1.55倍）
+        return {
+            target: Math.round(cfg.target * 1.55),
+            related: Math.round(cfg.related * 1.55),
+            other: Math.round(cfg.other * 1.55),
+            attrNode: Math.round(cfg.attrNode * 1.55),
+            attrShared: Math.round(cfg.attrShared * 1.55),
+            attrWord: Math.round(cfg.attrWord * 1.55),
+            attrBoxHeight: Math.round(cfg.attrBoxHeight * 1.45)
+        };
+    },
+
     // 属性ノード用カラーパレット
     ATTR_PALETTE: [
         { fill: '#2563eb', stroke: '#1d4ed8', border: '#bfdbfe', text: '#ffffff', light: '#eff6ff' }, // ブルー
@@ -349,11 +411,13 @@ const NetworkVisualizer = {
         const centerX = width / 2;
         const centerY = height / 2;
 
+        const existingNodeMap = new Map((this.nodes || []).map(n => [n.id, n]));
         this.nodes = Array.from(connectedNodes).map(id => {
             const cnt = countsMap[id] || 1;
             const rScale = maxCount > minCount ? (cnt - minCount) / (maxCount - minCount) : 0.5;
             const radius = 9 + rScale * 16;
             const isTarget = this.isTargetNode(id);
+            const existing = existingNodeMap.get(id);
             return {
                 id: id,
                 count: cnt,
@@ -361,9 +425,9 @@ const NetworkVisualizer = {
                 isTarget: isTarget,
                 community: id,
                 communityIndex: 0,
-                // ターゲットノード（中東情勢など）は中央に初期配置、他は周囲に分散
-                x: isTarget ? centerX : centerX + (Math.random() - 0.5) * (width * 0.7),
-                y: isTarget ? centerY : centerY + (Math.random() - 0.5) * (height * 0.7),
+                // 既存ノード位置があればそれを引き継ぎ、なければ中央または周囲に初期配置
+                x: existing ? existing.x : (isTarget ? centerX : centerX + (Math.random() - 0.5) * (width * 0.7)),
+                y: existing ? existing.y : (isTarget ? centerY : centerY + (Math.random() - 0.5) * (height * 0.7)),
                 vx: 0,
                 vy: 0,
                 fx: null,
@@ -612,17 +676,18 @@ const NetworkVisualizer = {
         const centerY = height / 2;
 
         // 属性ノードのバッジサイズを事前計測（ピル幅・高さ）
+        const fCfg = this.getFontSizeConfig(this.fontSize, isExport);
         const attrMetrics = topAttrs.map(cat => {
             const fullText = `👥 ${cat} (${docsByAttr[cat].length})`;
             let calcWidth = 100;
             if (this.ctx && this.ctx.measureText) {
-                this.ctx.font = 'bold 12px sans-serif';
-                calcWidth = Math.round(this.ctx.measureText(fullText).width + 32);
+                this.ctx.font = `bold ${fCfg.attrNode}px sans-serif`;
+                calcWidth = Math.round(this.ctx.measureText(fullText).width + (isExport ? 40 : 32));
             } else {
-                calcWidth = Math.round(fullText.length * 10 + 36);
+                calcWidth = Math.round(fullText.length * (fCfg.attrNode * 0.8) + 36);
             }
-            const boxWidth = Math.max(96, Math.min(240, calcWidth));
-            const boxHeight = 36;
+            const boxWidth = Math.max(isExport ? 130 : 96, Math.min(isExport ? 320 : 250, calcWidth));
+            const boxHeight = fCfg.attrBoxHeight;
             return { cat, boxWidth, boxHeight };
         });
 
@@ -1433,20 +1498,13 @@ const NetworkVisualizer = {
         // また、近接ノードの文字の白フチが他のノードの円を侵食するのを防ぐため、
         // 「全テキストラベル描画」→「全ノード円・強調リング描画」の順で2層描画します。
 
-        const fontSizes = {
-            normal: { target: 15, related: 13, other: 12 },
-            large:   { target: 17, related: 15, other: 14 },
-            xlarge:  { target: 20, related: 18, other: 16 }
-        };
-        const fCfg = fontSizes[this.fontSize] || fontSizes.large;
+        const fCfg = this.getFontSizeConfig(this.fontSize, isExport);
 
         // (1) 第1層: 全ノードのテキストラベルを描画
         this.nodes.forEach(node => {
             const isTarget = this.isTargetNode(node.id);
             const isRelated = relatedSet.has(node.id.toLowerCase());
-            const baseFSize = isTarget ? fCfg.target : (isRelated ? fCfg.related : fCfg.other);
-            // エクスポート（印刷・レポート）時は縮小表示でもクッキリ読めるよう文字サイズを拡大
-            const fSize = isExport ? Math.round(baseFSize * 1.6) : baseFSize;
+            const fSize = isTarget ? fCfg.target : (isRelated ? fCfg.related : fCfg.other);
 
             ctx.font = `bold ${fSize}px sans-serif`;
             ctx.textAlign = 'center';
@@ -1664,12 +1722,13 @@ const NetworkVisualizer = {
             ctx.lineWidth = isHover ? 2.8 : (isExport ? 3.0 : 2.0);
             ctx.stroke();
 
+            const fCfg = this.getFontSizeConfig(this.fontSize, isExport);
             // テキストラベル「👥 {label} ({count})」の見切れ防止スケーリング
             const fullText = `👥 ${node.label} (${node.docCount})`;
-            let fSize = isExport ? 20 : 12;
+            let fSize = fCfg.attrNode;
             ctx.font = `bold ${fSize}px sans-serif`;
             const maxTextW = wBox - (isExport ? 28 : 22);
-            const minFSize = isExport ? 14.0 : 9.0;
+            const minFSize = isExport ? 13.0 : 8.5;
             while (ctx.measureText(fullText).width > maxTextW && fSize > minFSize) {
                 fSize -= 0.5;
                 ctx.font = `bold ${fSize}px sans-serif`;
@@ -1719,8 +1778,8 @@ const NetworkVisualizer = {
                     (e.target.id === this.hoverNode.id && e.source.id === node.id)
                 ));
 
-            // エクスポート（印刷・レポート）時は縮小表示でもクッキリ読めるよう文字サイズを大幅拡大
-            const fSize = isExport ? (node.isShared ? 25 : 22) : (node.isShared ? 14 : 12.5);
+            const fCfg = this.getFontSizeConfig(this.fontSize, isExport);
+            const fSize = node.isShared ? fCfg.attrShared : fCfg.attrWord;
             ctx.font = `bold ${fSize}px sans-serif`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'top';
@@ -1730,7 +1789,7 @@ const NetworkVisualizer = {
             ctx.save();
             ctx.lineJoin = 'round';
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.96)';
-            ctx.lineWidth = isExport ? 7.5 : 5.0;
+            ctx.lineWidth = Math.max(4.5, Math.round(fSize * (isExport ? 0.35 : 0.30)));
             ctx.strokeText(node.label, node.x, textY);
             ctx.fillStyle = node.isShared ? '#312E81' : (isConnectedToHover ? '#1D4ED8' : '#0F172A');
             ctx.fillText(node.label, node.x, textY);
@@ -1920,11 +1979,14 @@ const NetworkVisualizer = {
                 padTop = padBottom = halfH + 8;
             } else {
                 // 単語ノード（円＋下部テキスト）
+                const fCfg = this.getFontSizeConfig(this.fontSize, true);
+                const isAttr = this.networkMode === 'attr';
+                const nodeFSize = isAttr ? (n.isShared ? fCfg.attrShared : fCfg.attrWord) : (this.isTargetNode(n.id) ? fCfg.target : (n.isRelated ? fCfg.related : fCfg.other));
                 const r = (n.radius || 14) * 1.3;
-                const textHalfW = Math.max(16, ((n.label || n.id || '').length * 13) / 2 + 4);
+                const textHalfW = Math.max(16, ((n.label || n.id || '').length * (nodeFSize * 0.55)) / 2 + 4);
                 padLeft = padRight = Math.max(r, textHalfW);
                 padTop = r + 4;
-                padBottom = r + 24; // テキストラベルはノード円の下側に配置される
+                padBottom = r + nodeFSize + 8; // テキストラベルはノード円の下側に配置される
             }
 
             if (n.x - padLeft < minX) minX = n.x - padLeft;
@@ -1996,10 +2058,12 @@ const NetworkVisualizer = {
         const prevTargetKw = this.targetKeyword;
         const prevResolved = this.resolvedTargetWord;
         const prevColName = this.attrColName;
+        const prevFontSize = this.fontSize;
 
         try {
             this.renderAttrNetwork(matchedDocs, attrCol, targetRows, targetKeyword, {
                 ...options,
+                fontSize: options.fontSize || this.fontSize || 'large',
                 isExport: true,
                 wordsPerAttr: options.wordsPerAttr || 4, // レポート専用スリム化
                 attrMetric: metric
@@ -2016,6 +2080,7 @@ const NetworkVisualizer = {
             this.targetKeyword = prevTargetKw;
             this.resolvedTargetWord = prevResolved;
             this.attrColName = prevColName;
+            this.fontSize = prevFontSize;
             if (this.ctx && this.canvas) this.renderFrame();
         }
     },
@@ -2036,10 +2101,12 @@ const NetworkVisualizer = {
         const prevPanY = this.panY;
         const prevTargetKw = this.targetKeyword;
         const prevResolved = this.resolvedTargetWord;
+        const prevFontSize = this.fontSize;
 
         try {
             this.render(wordList, coocCounts, targetKeyword, activeRelatedWords, {
                 ...options,
+                fontSize: options.fontSize || this.fontSize || 'large',
                 isExport: true
             });
             return this.getExportCanvas(targetW, targetH);
@@ -2053,6 +2120,7 @@ const NetworkVisualizer = {
             this.panY = prevPanY;
             this.targetKeyword = prevTargetKw;
             this.resolvedTargetWord = prevResolved;
+            this.fontSize = prevFontSize;
             if (this.ctx && this.canvas) this.renderFrame();
         }
     },
