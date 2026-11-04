@@ -264,7 +264,7 @@ const NetworkVisualizer = {
         const baseScale = this.spacingMode === 'widest' ? 0.75 : (this.spacingMode === 'wide' ? 0.85 : 0.95);
         this.scale = baseScale * heightScaleFactor;
         this.panX = (width * (1 - this.scale)) / 2;
-        this.panY = (height * (1 - this.scale)) / 2;
+        this.panY = (height * (1 - this.scale)) / 2 + 8;
 
         const maxWords = options.maxWords || 40;
 
@@ -434,7 +434,7 @@ const NetworkVisualizer = {
         const baseScale = this.spacingMode === 'widest' ? 0.88 : (this.spacingMode === 'wide' ? 0.95 : 1.0);
         this.scale = baseScale;
         this.panX = (width * (1 - this.scale)) / 2;
-        this.panY = (height * (1 - this.scale)) / 2;
+        this.panY = (height * (1 - this.scale)) / 2 + 10;
 
         const cacheKey = JSON.stringify({
             networkMode: 'attr',
@@ -885,11 +885,11 @@ const NetworkVisualizer = {
         const attrNodes = this.nodes.filter(n => n.isAttrNode);
         const wordNodes = this.nodes.filter(n => !n.isAttrNode);
 
-        // タイトルバッジおよび凡例領域の不可侵境界
-        const titleSafeW = width * (isExp ? 0.44 : 0.38);
-        const titleSafeH = height * (isExp ? 0.16 : 0.13);
-        const legSafeW = width * (isExp ? 0.28 : 0.24);
-        const legSafeH = height * (isExp ? 0.14 : 0.11);
+        // タイトルバッジおよび凡例領域の不可侵境界（低背スリム化に合わせて最適化）
+        const titleSafeW = width * (isExp ? 0.48 : 0.40);
+        const titleSafeH = height * (isExp ? 0.08 : 0.06);
+        const legSafeW = width * (isExp ? 0.30 : 0.25);
+        const legSafeH = height * (isExp ? 0.08 : 0.06);
 
         for (let iter = 0; iter < iterations; iter++) {
             const alpha = 1.0 - (iter / iterations);
@@ -1188,12 +1188,12 @@ const NetworkVisualizer = {
         };
         const p = spacingParams[this.spacingMode] || spacingParams.wide;
 
-        // タイトルバッジおよび凡例領域の不可侵安全境界（シミュレーション座標系）
+        // タイトルバッジおよび凡例領域の不可侵安全境界（低背スリム化に合わせて最適化）
         const hasTitle = !!this.targetKeyword;
-        const titleSafeW = hasTitle ? (width * (isExp ? 0.40 : 0.35)) : 0;
-        const titleSafeH = hasTitle ? (height * (isExp ? 0.13 : 0.10)) : 0;
+        const titleSafeW = hasTitle ? (width * (isExp ? 0.45 : 0.38)) : 0;
+        const titleSafeH = hasTitle ? (height * (isExp ? 0.08 : 0.06)) : 0;
         const legendSafeW = width * (isExp ? 0.60 : 0.55);
-        const legendSafeH = height * (isExp ? 0.12 : 0.09);
+        const legendSafeH = height * (isExp ? 0.08 : 0.06);
         const legendSafeY = height - legendSafeH;
 
         for (let s = 0; s < steps; s++) {
@@ -1800,108 +1800,98 @@ const NetworkVisualizer = {
 
     /**
      * 属性ネットワーク用の凡例・ガイド描画
-     * レポート／画像エクスポート時は縮小表示でもハッキリ読めるサイズにスケールアップ
+     * 超スリムな横長ヘッダー形式に統合し、ノードへの被りを完全に防止
      */
     drawAttrLegend(ctx, w, h, isExport = false) {
         ctx.save();
 
-        const titleScale = isExport ? 1.7 : 1.0;
+        const padX = isExport ? 16 : 12;
+        const padY = isExport ? 8 : 6;
+        const barH = isExport ? 30 : 22;
 
-        // (1) 左上タイトルバッジ（スリム化しノードへの被りを最小化）
+        // (1) 左上タイトルバッジ（横長スリムインライン表示）
         ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
         ctx.strokeStyle = '#CBD5E1';
-        ctx.lineWidth = isExport ? 1.8 : 1;
-        const badgeW = isExport ? 460 : 330;
-        const badgeH = isExport ? 70 : 52;
-        const padX = isExport ? 18 : 14;
-        const padY = isExport ? 16 : 14;
+        ctx.lineWidth = isExport ? 1.5 : 1;
+
+        const kwPart = this.targetKeyword ? ` [対象: 🎯${this.targetKeyword}]` : '';
+        const metricBadge = this.attrMetric === 'distinct' ? '🎯 特徴度重視' : '📊 頻度重視';
+        const titleText = `👥 属性別 結びつき (${this.attrColName || '属性'})${kwPart}  |  ${metricBadge}`;
+
+        ctx.font = isExport ? 'bold 14px sans-serif' : 'bold 10.5px sans-serif';
+        const textW = ctx.measureText(titleText).width;
+        const maxTitleW = w * 0.64;
+        const badgeW = Math.min(maxTitleW, textW + (isExport ? 22 : 16));
+
         ctx.beginPath();
         if (ctx.roundRect) {
-            ctx.roundRect(padX, padY, badgeW, badgeH, isExport ? 8 : 6);
+            ctx.roundRect(padX, padY, badgeW, barH, isExport ? 6 : 4);
         } else {
-            ctx.rect(padX, padY, badgeW, badgeH);
+            ctx.rect(padX, padY, badgeW, barH);
         }
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = '#1E293B';
-        ctx.font = isExport ? 'bold 18px sans-serif' : 'bold 12.5px sans-serif';
         ctx.textAlign = 'left';
-        ctx.textBaseline = 'top';
-        const kwPart = this.targetKeyword ? ` [対象: 🎯${this.targetKeyword}]` : '';
-        ctx.fillText(`👥 属性別 結びつき (${this.attrColName || '属性'})${kwPart}`, padX + (isExport ? 12 : 8), padY + (isExport ? 7 : 5));
+        ctx.textBaseline = 'middle';
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(padX + 2, padY, badgeW - 4, barH);
+        ctx.clip();
+        ctx.fillText(titleText, padX + (isExport ? 10 : 8), padY + barH / 2);
+        ctx.restore();
 
-        const metricBadge = this.attrMetric === 'distinct' ? '🎯 特徴度重視（特有語）' : '📊 頻度重視（高頻度語）';
-        ctx.fillStyle = this.attrMetric === 'distinct' ? '#2563EB' : '#475569';
-        ctx.font = isExport ? 'bold 14.5px sans-serif' : 'bold 11px sans-serif';
-        ctx.fillText(`選出基準: ${metricBadge}`, padX + (isExport ? 12 : 8), padY + (isExport ? 28 : 20));
-
-        ctx.fillStyle = '#64748B';
-        ctx.font = isExport ? '12px sans-serif' : '9.5px sans-serif';
-        const subGuide = this.attrMetric === 'distinct'
-            ? '※ 外側は他属性と比べて突出して使われた特有語、中央は複数属性共通の特有語'
-            : '※ 中央は複数属性の共通話題、外側は属性ごとの高頻度語';
-        ctx.fillText(subGuide, padX + (isExport ? 12 : 8), padY + (isExport ? 48 : 34));
-
-        // (2) 右上凡例
+        // (2) 右上凡例（超コンパクト・1行インライン凡例）
         ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
         ctx.strokeStyle = '#CBD5E1';
-        ctx.lineWidth = isExport ? 1.8 : 1;
-        const legW = isExport ? 310 : 210;
-        const legH = isExport ? 62 : 46;
+        ctx.lineWidth = isExport ? 1.5 : 1;
+        const legW = isExport ? 290 : 200;
         const legX = w - legW - padX;
+
         ctx.beginPath();
         if (ctx.roundRect) {
-            ctx.roundRect(legX, padY, legW, legH, isExport ? 8 : 6);
+            ctx.roundRect(legX, padY, legW, barH, isExport ? 6 : 4);
         } else {
-            ctx.rect(legX, padY, legW, legH);
+            ctx.rect(legX, padY, legW, barH);
         }
         ctx.fill();
         ctx.stroke();
 
-        // 凡例アイコン1: 属性ノード
+        const midY = padY + barH / 2;
+
+        // 凡例アイコン1: 属性ノード（ピル）
         ctx.fillStyle = '#2563EB';
-        const icon1W = isExport ? 26 : 18;
-        const icon1H = isExport ? 18 : 12;
-        const icon1Y = padY + (isExport ? 12 : 6);
+        const icon1W = isExport ? 18 : 13;
+        const icon1H = isExport ? 12 : 9;
         if (ctx.roundRect) {
             ctx.beginPath();
-            ctx.roundRect(legX + (isExport ? 14 : 10), icon1Y, icon1W, icon1H, 4);
+            ctx.roundRect(legX + (isExport ? 10 : 7), midY - icon1H / 2, icon1W, icon1H, 3);
             ctx.fill();
         } else {
-            ctx.fillRect(legX + (isExport ? 14 : 10), icon1Y, icon1W, icon1H);
+            ctx.fillRect(legX + (isExport ? 10 : 7), midY - icon1H / 2, icon1W, icon1H);
         }
         ctx.fillStyle = '#334155';
-        ctx.font = isExport ? 'bold 16px sans-serif' : '11px sans-serif';
+        ctx.font = isExport ? 'bold 13px sans-serif' : 'bold 9.5px sans-serif';
         ctx.textAlign = 'left';
         ctx.textBaseline = 'middle';
-        ctx.fillText('属性グループ', legX + (isExport ? 46 : 34), icon1Y + icon1H / 2);
+        ctx.fillText('属性グループ', legX + (isExport ? 32 : 23), midY);
 
         // 凡例アイコン2: 共通語（ゴールド二重丸）
-        const icon2X = legX + (isExport ? 175 : 120);
-        const icon2Y = icon1Y + icon1H / 2;
+        const icon2X = legX + (isExport ? 152 : 108);
+        const icon2Y = midY;
         ctx.beginPath();
-        ctx.arc(icon2X, icon2Y, isExport ? 8.5 : 6, 0, Math.PI * 2);
+        ctx.arc(icon2X, icon2Y, isExport ? 6 : 4.5, 0, Math.PI * 2);
         ctx.fillStyle = '#4F46E5';
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(icon2X, icon2Y, isExport ? 12.0 : 8.5, 0, Math.PI * 2);
+        ctx.arc(icon2X, icon2Y, isExport ? 8.5 : 6.5, 0, Math.PI * 2);
         ctx.strokeStyle = '#F59E0B';
-        ctx.lineWidth = isExport ? 2.2 : 1.5;
+        ctx.lineWidth = isExport ? 1.8 : 1.2;
         ctx.stroke();
         ctx.fillStyle = '#334155';
         const sharedLabel = this.attrMetric === 'distinct' ? '共通特徴語' : '共通語';
-        ctx.fillText(sharedLabel, icon2X + (isExport ? 20 : 15), icon2Y);
-
-        if (!isExport) {
-            ctx.fillStyle = '#64748B';
-            ctx.font = '10px sans-serif';
-            ctx.fillText('💡 ノードクリックで詳細を表示', legX + 10, padY + 30);
-        } else {
-            ctx.fillStyle = '#64748B';
-            ctx.font = '13px sans-serif';
-            ctx.fillText('線幅: 単語の出現回数・共起強度', legX + 14, padY + 44);
-        }
+        ctx.fillText(sharedLabel, icon2X + (isExport ? 14 : 10), midY);
 
         ctx.restore();
     },
@@ -1946,10 +1936,13 @@ const NetworkVisualizer = {
         const bboxW = Math.max(100, maxX - minX);
         const bboxH = Math.max(100, maxY - minY);
 
-        // 周囲マージン（余白を最小化してグラフをキャンバスいっぱいに大きくフィット）
-        const marginX = 22;
-        const marginTop = 20;
-        const marginBottom = 22;
+        // 周囲マージン
+        // 上部: タイトルバッジ（上端8px〜高さ26/30px）と絶対に干渉しない安全領域（単語共起:38px / 属性:44px）
+        // 左右・下部: 限界まで余白をスリム化（左右16px、下部14px）し、グラフ描画エリアをキャンバスの94%以上に最大化フィット
+        const isAttr = this.networkMode === 'attr';
+        const marginX = 16;
+        const marginTop = isAttr ? 44 : 38;
+        const marginBottom = 14;
 
         const availW = targetW - marginX * 2;
         const availH = targetH - (marginTop + marginBottom);
@@ -1964,41 +1957,8 @@ const NetworkVisualizer = {
         const targetCenterX = targetW / 2;
         const targetCenterY = marginTop + availH / 2;
 
-        let autoPanX = targetCenterX - bboxCenterX * autoScale;
-        let autoPanY = targetCenterY - bboxCenterY * autoScale;
-
-        // 【重要】タイトルバッジとの重なり防止ガード
-        // ノードがスクリーン座標系において左上タイトルバッジ領域に侵入している場合、安全に押し出し
-        const isAttr = this.networkMode === 'attr';
-        const titleBadgeW = isAttr ? 480 : (this.targetKeyword ? 380 : 0);
-        const titleBadgeH = isAttr ? 88 : (this.targetKeyword ? 52 : 0);
-
-        if (titleBadgeW > 0 && titleBadgeH > 0) {
-            let maxOverlapX = 0;
-            let maxOverlapY = 0;
-            this.nodes.forEach(n => {
-                const sx = n.x * autoScale + autoPanX;
-                const sy = n.y * autoScale + autoPanY;
-                const nodeR = (n.isAttrNode ? (n.boxWidth * 1.45 / 2) : 22) + 10;
-                if (sx - nodeR < titleBadgeW && sy - nodeR < titleBadgeH) {
-                    const ox = (titleBadgeW + nodeR) - sx;
-                    const oy = (titleBadgeH + nodeR) - sy;
-                    if (ox > 0 && oy > 0) {
-                        if (ox < oy) {
-                            if (ox > maxOverlapX) maxOverlapX = ox;
-                        } else {
-                            if (oy > maxOverlapY) maxOverlapY = oy;
-                        }
-                    }
-                }
-            });
-
-            if (maxOverlapY > 0 && maxOverlapY < 120) {
-                autoPanY += maxOverlapY;
-            } else if (maxOverlapX > 0 && maxOverlapX < 140) {
-                autoPanX += maxOverlapX;
-            }
-        }
+        const autoPanX = targetCenterX - bboxCenterX * autoScale;
+        const autoPanY = targetCenterY - bboxCenterY * autoScale;
 
         // オフスクリーンキャンバスに白背景で描画
         const exportCanvas = document.createElement('canvas');
@@ -2105,20 +2065,24 @@ const NetworkVisualizer = {
     drawLegend(ctx, w, h, isExport = false) {
         ctx.save();
 
-        // (1) 左上タイトルバッジ（対象キーワード明記・スリム化でノードへの被りを防止）
+        // (1) 左上タイトルバッジ（超スリム・コンパクト化でノードへの被りを完全に防止）
         if (this.targetKeyword) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
             ctx.strokeStyle = '#CBD5E1';
-            ctx.lineWidth = isExport ? 1.8 : 1;
+            ctx.lineWidth = isExport ? 1.5 : 1;
             const kwLabel = `🌐 単語共起ネットワーク [対象: 🎯${this.targetKeyword}]`;
-            ctx.font = isExport ? 'bold 17px sans-serif' : 'bold 12px sans-serif';
-            const badgeW = Math.max(isExport ? 320 : 220, ctx.measureText(kwLabel).width + (isExport ? 28 : 22));
-            const badgeH = isExport ? 36 : 26;
+            ctx.font = isExport ? 'bold 15px sans-serif' : 'bold 11px sans-serif';
+            const textMetrics = ctx.measureText(kwLabel);
+            const badgeW = Math.min(w * 0.65, textMetrics.width + (isExport ? 22 : 16));
+            const badgeH = isExport ? 26 : 20;
+            const badgeX = isExport ? 16 : 12;
+            const badgeY = isExport ? 8 : 6;
+
             ctx.beginPath();
             if (ctx.roundRect) {
-                ctx.roundRect(14, 14, badgeW, badgeH, isExport ? 8 : 6);
+                ctx.roundRect(badgeX, badgeY, badgeW, badgeH, isExport ? 6 : 4);
             } else {
-                ctx.rect(14, 14, badgeW, badgeH);
+                ctx.rect(badgeX, badgeY, badgeW, badgeH);
             }
             ctx.fill();
             ctx.stroke();
@@ -2126,7 +2090,13 @@ const NetworkVisualizer = {
             ctx.fillStyle = '#1E293B';
             ctx.textAlign = 'left';
             ctx.textBaseline = 'middle';
-            ctx.fillText(kwLabel, isExport ? 24 : 22, 14 + badgeH / 2);
+            // 文字がバッジからはみ出さないようクリップ
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(badgeX + 2, badgeY, badgeW - 4, badgeH);
+            ctx.clip();
+            ctx.fillText(kwLabel, badgeX + (isExport ? 10 : 8), badgeY + badgeH / 2);
+            ctx.restore();
         }
 
         ctx.font = isExport ? 'bold 15px sans-serif' : '10.5px sans-serif';
