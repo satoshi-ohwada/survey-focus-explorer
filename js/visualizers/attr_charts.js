@@ -690,7 +690,7 @@ const AttrChartVisualizer = {
             : `属性別「${targetKeyword || '全体'}」関連意見の言及割合 (%)`;
 
         const titleSub = isFiltered
-            ? ` <span style="font-size: 12px; font-weight: normal; color: #64748b;">(分析対象 ${targetRows.length.toLocaleString()}件 基準)</span>`
+            ? ` <span style="font-size: 0.8em; font-weight: normal; color: #64748b;">(分析対象 ${targetRows.length.toLocaleString()}件 基準)</span>`
             : '';
 
         const axisTitle = calcMode === 'share' ? '意見全体の構成比 (%)' : '属性内の言及割合 (%)';
@@ -702,12 +702,17 @@ const AttrChartVisualizer = {
             },
             margin: { l: 120, r: 40, t: 50, b: 50 },
             xaxis: {
-                title: axisTitle,
+                title: {
+                    text: axisTitle,
+                    font: { size: 13, color: '#475569' }
+                },
+                tickfont: { size: 12, color: '#475569' },
                 ticksuffix: '%',
                 rangemode: 'tozero',
                 gridcolor: '#f1f5f9'
             },
             yaxis: {
+                tickfont: { size: 13, color: '#1e293b' },
                 automargin: true
             },
             autosize: true,
@@ -774,48 +779,87 @@ const AttrChartVisualizer = {
     },
 
     /**
-     * エクスポート用高解像度画像の取得（DOM表示状態に依存しない）
+     * エクスポート・保存・印刷用高解像度画像の取得（画面表示と同一の文字サイズ感を忠実に再現）
+     * @param {Array<object>} targetRows
+     * @param {Array<object>} matchedDocs
+     * @param {string} attrCol
+     * @param {string} targetKeyword
+     * @param {object} options
+     * @param {number} targetW 出力キャンバス幅 (保存: 1200, 印刷: 1600)
+     * @param {number} targetH 出力キャンバス高さ (保存: 900, 印刷: 1200)
+     * @returns {Promise<string>} Base64 PNG Data URL
      */
-    async getExportImage(targetRows, matchedDocs, attrCol, targetKeyword, options = {}, targetW = 1000, targetH = 480) {
+    async getExportImage(targetRows, matchedDocs, attrCol, targetKeyword, options = {}, targetW = 1200, targetH = 900) {
         if (typeof Plotly === 'undefined') return '';
         const plotData = this.buildPlotData(targetRows, matchedDocs, attrCol, targetKeyword, options);
         if (!plotData) return '';
 
-        // レポート・印刷用に文字を大きく鮮明にしたエクスポート用トレース＆レイアウト
+        // 基準画面寸法 (680x510) からのスケール倍率を算出
+        // 出力解像度（1200x900 や 1600x1200）に比例して文字サイズと余白を拡大し、画面表示と完全に同じサイズ感を維持
+        const scale = Math.min(targetW / 680, targetH / 510);
+
+        const titleFontSize = Math.max(18, Math.round(16 * scale));
+        const yTickFontSize = Math.max(14, Math.round(13.5 * scale));
+        const barFontSize = Math.max(13, Math.round(12.5 * scale));
+        const xTitleFontSize = Math.max(14, Math.round(14 * scale));
+        const xTickFontSize = Math.max(12, Math.round(12 * scale));
+
+        const marginL = Math.max(Math.round(140 * scale), 120);
+        const marginR = Math.max(Math.round(50 * scale), 40);
+        const marginT = Math.max(Math.round(55 * scale), 50);
+        const marginB = Math.max(Math.round(60 * scale), 50);
+
+        const fontFam = 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "BIZ UDPGothic", "Hiragino Kaku Gothic ProN", sans-serif';
+
+        // バー内・外テキストともに画面同様のサイズでくっきり描画
         const exportTrace = {
             ...plotData.trace,
-            textfont: {
-                size: 20,
-                color: '#ffffff',
-                family: '"Noto Sans JP", sans-serif'
+            textposition: 'auto',
+            insidetextfont: {
+                family: fontFam,
+                size: barFontSize,
+                color: '#ffffff'
+            },
+            outsidetextfont: {
+                family: fontFam,
+                size: barFontSize,
+                color: '#1e293b'
             }
         };
+
+        const titleText = (plotData.layout.title && plotData.layout.title.text) ? plotData.layout.title.text : '';
+        const axisTitleText = (plotData.layout.xaxis && (typeof plotData.layout.xaxis.title === 'string' ? plotData.layout.xaxis.title : (plotData.layout.xaxis.title && plotData.layout.xaxis.title.text))) || '';
 
         const exportLayout = {
             ...plotData.layout,
             width: targetW,
             height: targetH,
             font: {
-                family: '"Noto Sans JP", sans-serif',
-                size: 19,
+                family: fontFam,
+                size: yTickFontSize,
                 color: '#1e293b'
             },
             title: {
-                text: (plotData.layout.title && plotData.layout.title.text) ? plotData.layout.title.text : '',
-                font: { size: 21, color: '#0f172a' }
+                text: titleText,
+                font: {
+                    family: fontFam,
+                    size: titleFontSize,
+                    color: '#0f172a'
+                }
             },
-            margin: { l: 140, r: 40, t: 45, b: 55 },
+            margin: { l: marginL, r: marginR, t: marginT, b: marginB },
             xaxis: {
                 ...plotData.layout.xaxis,
                 title: {
-                    text: (plotData.layout.xaxis && plotData.layout.xaxis.title) ? plotData.layout.xaxis.title : '',
-                    font: { size: 19, color: '#475569' }
+                    text: axisTitleText,
+                    font: { family: fontFam, size: xTitleFontSize, color: '#475569' }
                 },
-                tickfont: { size: 18, color: '#334155' }
+                tickfont: { family: fontFam, size: xTickFontSize, color: '#475569' }
             },
             yaxis: {
                 ...plotData.layout.yaxis,
-                tickfont: { size: 21, color: '#0f172a' }
+                tickfont: { family: fontFam, size: yTickFontSize, color: '#0f172a' },
+                automargin: true
             }
         };
 

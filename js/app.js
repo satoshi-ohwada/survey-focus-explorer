@@ -3366,22 +3366,48 @@ async function exportChart(type, action = 'download') {
         const targetW = 1200;
         const targetH = 900;
 
-        if (action === 'download') {
-            Plotly.downloadImage('attrChartContainer', {
-                format: 'png',
-                width: targetW,
-                height: targetH,
-                filename: baseTitle
-            });
-            showToast(`💾「${baseTitle}.png」(4:3・1200x900) を保存しました`);
-        } else {
-            // クリップボードへコピー
-            try {
-                const dataUrl = await Plotly.toImage('attrChartContainer', {
+        let dataUrl = null;
+        try {
+            // 画面表示と同一の文字サイズ感を忠実に再現する高解像度エクスポート
+            if (typeof AttrChartVisualizer !== 'undefined' && typeof AttrChartVisualizer.getExportImage === 'function') {
+                const targetRows = (typeof getFilteredRows === 'function') ? getFilteredRows() : (AppState.rawRows || []);
+                const matchedDocs = (AppState.filterResult && AppState.filterResult.matchedDocs) ? AppState.filterResult.matchedDocs : [];
+                const isFiltered = targetRows.length < (AppState.rawRows || []).length;
+                dataUrl = await AttrChartVisualizer.getExportImage(
+                    targetRows,
+                    matchedDocs,
+                    AppState.attrCol,
+                    AppState.targetKeyword,
+                    { isFiltered, calcMode: AppState.attrCalcMode || 'rate' },
+                    targetW,
+                    targetH
+                );
+            }
+
+            // フォールバック
+            if (!dataUrl) {
+                dataUrl = await Plotly.toImage('attrChartContainer', {
                     format: 'png',
                     width: targetW,
                     height: targetH
                 });
+            }
+
+            if (!dataUrl) {
+                showToast('⚠️ 属性グラフの画像生成に失敗しました');
+                return;
+            }
+
+            if (action === 'download') {
+                const link = document.createElement('a');
+                link.download = `${baseTitle}.png`;
+                link.href = dataUrl;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                showToast(`💾「${baseTitle}.png」(4:3・1200x900) を保存しました`);
+            } else {
+                // クリップボードへコピー
                 const res = await fetch(dataUrl);
                 const blob = await res.blob();
                 if (navigator.clipboard && window.ClipboardItem) {
@@ -3390,10 +3416,10 @@ async function exportChart(type, action = 'download') {
                 } else {
                     showToast('⚠️ お使いのブラウザは画像の直接コピーに非対応です。画像保存をご利用ください。');
                 }
-            } catch (err) {
-                console.error('Plotly copy error:', err);
-                showToast('⚠️ クリップボードへの画像コピーに失敗しました');
             }
+        } catch (err) {
+            console.error('Plotly export error:', err);
+            showToast('⚠️ 属性グラフの画像出力に失敗しました');
         }
         return;
     }
@@ -3594,11 +3620,27 @@ async function printSingleChart(chartType) {
                 showToast('⚠️ 印刷可能な属性グラフがありません');
                 return;
             }
-            dataUrl = await Plotly.toImage('attrChartContainer', {
-                format: 'png',
-                width: targetW,
-                height: targetH
-            });
+            if (typeof AttrChartVisualizer !== 'undefined' && typeof AttrChartVisualizer.getExportImage === 'function') {
+                const targetRows = (typeof getFilteredRows === 'function') ? getFilteredRows() : (AppState.rawRows || []);
+                const matchedDocs = (AppState.filterResult && AppState.filterResult.matchedDocs) ? AppState.filterResult.matchedDocs : [];
+                const isFiltered = targetRows.length < (AppState.rawRows || []).length;
+                dataUrl = await AttrChartVisualizer.getExportImage(
+                    targetRows,
+                    matchedDocs,
+                    AppState.attrCol,
+                    AppState.targetKeyword,
+                    { isFiltered, calcMode: AppState.attrCalcMode || 'rate' },
+                    targetW,
+                    targetH
+                );
+            }
+            if (!dataUrl) {
+                dataUrl = await Plotly.toImage('attrChartContainer', {
+                    format: 'png',
+                    width: targetW,
+                    height: targetH
+                });
+            }
         } else if (type === 'network' && typeof NetworkVisualizer.getExportCanvas === 'function') {
             const canvas = NetworkVisualizer.getExportCanvas(targetW, targetH);
             if (canvas) dataUrl = canvas.toDataURL('image/png');
