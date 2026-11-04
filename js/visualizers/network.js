@@ -22,6 +22,13 @@ const NetworkVisualizer = {
     onWordClick: null,
     onAttrClick: null,
     networkMode: 'word', // 'word' (単語共起) | 'attr' (属性×単語)
+    lastParamsKey: null,
+
+    clearCache() {
+        this.lastParamsKey = null;
+        this.nodes = [];
+        this.edges = [];
+    },
 
     // 属性ノード用カラーパレット
     ATTR_PALETTE: [
@@ -250,6 +257,28 @@ const NetworkVisualizer = {
         this.panY = (height * (1 - this.scale)) / 2;
 
         const maxWords = options.maxWords || 40;
+
+        // キャッシュキー判定（パラメータに変更がなければ力学シミュレーション等をスキップ）
+        const cacheKey = JSON.stringify({
+            networkMode: 'word',
+            targetKeyword: this.targetKeyword,
+            resolvedTargetWord: this.resolvedTargetWord,
+            maxWords: maxWords,
+            spacingMode: this.spacingMode,
+            fontSize: this.fontSize,
+            colorMode: this.colorMode,
+            wordCount: wordList ? wordList.length : 0,
+            wordTop: wordList && wordList.length > 0 ? wordList.slice(0, 3).map(w => `${w.text}:${w.count}`).join(',') : '',
+            activeRelated: (this.activeRelatedWords || []).slice().sort().join(','),
+            width: width,
+            height: height
+        });
+
+        if (!this.isExport && this.lastParamsKey === cacheKey && this.nodes && this.nodes.length > 0) {
+            this.renderFrame();
+            return;
+        }
+
         const topWords = wordList.slice(0, maxWords);
         const wordSet = new Set(topWords.map(w => w.text));
 
@@ -344,6 +373,10 @@ const NetworkVisualizer = {
 
         // 4. 初回描画
         this.renderFrame();
+
+        if (!this.isExport) {
+            this.lastParamsKey = cacheKey;
+        }
     },
 
     /**
@@ -387,6 +420,27 @@ const NetworkVisualizer = {
         this.scale = baseScale;
         this.panX = (width * (1 - this.scale)) / 2;
         this.panY = (height * (1 - this.scale)) / 2;
+
+        const cacheKey = JSON.stringify({
+            networkMode: 'attr',
+            attrCol: this.attrColName,
+            targetKeyword: this.targetKeyword,
+            resolvedTargetWord: this.resolvedTargetWord,
+            maxWords: options.maxWords || 40,
+            spacingMode: this.spacingMode,
+            fontSize: this.fontSize,
+            attrMetric: this.attrMetric,
+            wordsPerAttr: options.wordsPerAttr || 0,
+            docCount: matchedDocs ? matchedDocs.length : 0,
+            rowCount: targetRows ? targetRows.length : 0,
+            width: width,
+            height: height
+        });
+
+        if (!this.isExport && this.lastParamsKey === cacheKey && this.nodes && this.nodes.length > 0) {
+            this.renderFrame();
+            return;
+        }
 
         if (!attrCol || !matchedDocs || matchedDocs.length === 0) {
             this.nodes = [];
@@ -792,6 +846,10 @@ const NetworkVisualizer = {
 
         // 6. 初回描画
         this.renderFrame();
+
+        if (!this.isExport) {
+            this.lastParamsKey = cacheKey;
+        }
     },
 
     /**

@@ -7,6 +7,14 @@ const WordCloudVisualizer = {
     currentWords: [],
     targetKeyword: '',
     activeRelatedWords: [],
+    lastParamsKey: null,
+    hasRendered: false,
+
+    clearCache() {
+        this.lastParamsKey = null;
+        this.hasRendered = false;
+        this.currentWords = [];
+    },
 
     init(canvasId) {
         this.canvas = document.getElementById(canvasId);
@@ -42,6 +50,25 @@ const WordCloudVisualizer = {
             width = Math.round(height * 4 / 3);
         } else {
             height = Math.round(width * 3 / 4);
+        }
+
+        const isExport = options.isExport || false;
+        const cacheKey = JSON.stringify({
+            rankingMethod,
+            maxWords,
+            shape,
+            targetKeyword: this.targetKeyword,
+            resolvedTargetWord: options.resolvedTargetWord || targetKeyword,
+            activeRelated: (this.activeRelatedWords || []).slice().sort().join(','),
+            wordCount: wordList ? wordList.length : 0,
+            wordTop: wordList && wordList.length > 0 ? wordList.slice(0, 3).map(w => `${w.text}:${w.count}`).join(',') : '',
+            width,
+            height
+        });
+
+        // パラメータ・寸法に変更がなければ再計算・再描画（チラつき）をスキップ
+        if (!isExport && this.hasRendered && this.lastParamsKey === cacheKey) {
+            return;
         }
 
         this.canvas.width = width;
@@ -109,6 +136,11 @@ const WordCloudVisualizer = {
                     }
                 }
             });
+        }
+
+        if (!isExport) {
+            this.lastParamsKey = cacheKey;
+            this.hasRendered = true;
         }
     },
 

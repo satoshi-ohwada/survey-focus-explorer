@@ -1997,9 +1997,19 @@ function renderRelatedChips() {
 }
 
 /**
+ * 各可視化エンジンのキャッシュをクリアする
+ */
+function clearVisualizerCaches() {
+    if (typeof WordCloudVisualizer !== 'undefined' && WordCloudVisualizer.clearCache) WordCloudVisualizer.clearCache();
+    if (typeof NetworkVisualizer !== 'undefined' && NetworkVisualizer.clearCache) NetworkVisualizer.clearCache();
+    if (typeof UmapVisualizer !== 'undefined' && UmapVisualizer.clearCache) UmapVisualizer.clearCache();
+}
+
+/**
  * 対象意見の抽出 ＆ 描画
  */
 function executeFilteringAndRender(showNotice = false) {
+    clearVisualizerCaches();
     if (showNotice && typeof showToast === 'function') {
         showToast('⏳ 抽出条件を反映し、意見集約を更新中...');
     }
@@ -3012,8 +3022,13 @@ function formatHighlightedText(rawText) {
 /**
  * 生の声（回答文）一覧の描画（ソート・タイプフィルタ・適合度バッジ対応）
  */
+/**
+ * 生の声（回答文）一覧の描画（ソート・タイプフィルタ・適合度バッジ対応）
+ * メモリ節約＆高速描画のため、初期表示50件＋スクロール遅延追記（無限スクロール）を採用
+ */
 function renderOpinionsList(filterKeyword = '') {
     const container = document.getElementById('opinionsListContainer');
+    if (!container) return;
     container.innerHTML = '';
 
     if (!AppState.filterResult || !AppState.filterResult.matchedDocs.length) {
@@ -3084,49 +3099,117 @@ function renderOpinionsList(filterKeyword = '') {
     const targetLower = (AppState.targetKeyword || '').toLowerCase();
     const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
 
-    docs.forEach(d => {
-        const card = document.createElement('div');
-        card.className = 'opinion-card';
+    // 4. 遅延描画（DOMノード肥大化防止＆初期表示の高速化）
+    const CHUNK_SIZE = 50;
+    let renderedCount = 0;
 
-        // マッチしたタグ（キーワード、代表語、関連語の色分け）
-        const tagsHtml = d.matchedWords.map(w => {
-            const wLower = w.toLowerCase();
-            const isTarget = wLower === targetLower || wLower === resolvedLower || (targetLower && wLower.includes(targetLower));
-            return `<span class="${isTarget ? 'tag-target' : 'tag-related'}">${escapeHtml(w)}</span>`;
-        }).join('');
+    // カード一覧格納用ラッパー
+    const cardsWrapper = document.createElement('div');
+    cardsWrapper.className = 'opinions-cards-wrapper';
+    container.appendChild(cardsWrapper);
 
-        // 意見タイプバッジ
-        const typeObj = d.opinionType || { type: 'neutral', label: 'その他', icon: '⚪' };
-        const typeBadge = `<span class="opinion-type-badge type-${typeObj.type}">${typeObj.icon} ${typeObj.label}</span>`;
+    // 追加読み込みコントロール
+    const loadMoreArea = document.createElement('div');
+    loadMoreArea.className = 'opinions-load-more-area';
+    loadMoreArea.style.cssText = 'text-align: center; padding: 16px 0 24px; display: none;';
+    container.appendChild(loadMoreArea);
 
-        // 適合度スコアバッジ
-        const scoreBadge = (d.relevanceScore !== undefined)
-            ? `<span class="opinion-score-badge">適合度: ${d.relevanceScore}%</span>`
-            : '';
+    function renderNextChunk() {
+        const nextBatch = docs.slice(renderedCount, renderedCount + CHUNK_SIZE);
+        if (nextBatch.length === 0) {
+            loadMoreArea.style.display = 'none';
+            return;
+        }
 
-        // 属性バッジ
-        const attrBadge = d.attribute ? `<span class="opinion-badge-attr">${escapeHtml(d.attribute)}</span>` : '';
+        const fragment = document.createDocumentFragment();
+        nextBatch.forEach(d => {
+            const card = document.createElement('div');
+            card.className = 'opinion-card';
 
-        // 文単位抽出の場合、フォーカス案内
-        const unitNotice = (AppState.extractUnit === 'sentence' && d.focusedSentences && d.focusedSentences.length > 0)
-            ? `<small style="color: #0284c7; font-size: 11px; margin-left: 6px;">[抽出文表示]</small>`
-            : '';
+            const tagsHtml = d.matchedWords.map(w => {
+                const wLower = w.toLowerCase();
+                const isTarget = wLower === targetLower || wLower === resolvedLower || (targetLower && wLower.includes(targetLower));
+                return `<span class="${isTarget ? 'tag-target' : 'tag-related'}">${escapeHtml(w)}</span>`;
+            }).join('');
 
-        card.innerHTML = `
-            <div class="opinion-meta">
-                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                    <div class="opinion-matched-tags">${tagsHtml}</div>
-                    ${typeBadge}
-                    ${attrBadge}
-                    ${unitNotice}
+            const typeObj = d.opinionType || { type: 'neutral', label: 'その他', icon: '⚪' };
+            const typeBadge = `<span class="opinion-type-badge type-${typeObj.type}">${typeObj.icon} ${typeObj.label}</span>`;
+
+            const scoreBadge = (d.relevanceScore !== undefined)
+                ? `<span class="opinion-score-badge">適合度: ${d.relevanceScore}%</span>`
+                : '';
+
+            const attrBadge = d.attribute ? `<span class="opinion-badge-attr">${escapeHtml(d.attribute)}</span>` : '';
+
+            const unitNotice = (AppState.extractUnit === 'sentence' && d.focusedSentences && d.focusedSentences.length > 0)
+                ? `<small style="color: #0284c7; font-size: 11px; margin-left: 6px;">[抽出文表示]</small>`
+                : '';
+
+            card.innerHTML = `
+                <div class="opinion-meta">
+                    <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                        <div class="opinion-matched-tags">${tagsHtml}</div>
+                        ${typeBadge}
+                        ${attrBadge}
+                        ${unitNotice}
+                    </div>
+                    ${scoreBadge}
                 </div>
-                ${scoreBadge}
-            </div>
-            <div class="opinion-text">${formatHighlightedText(d.text)}</div>
-        `;
+                <div class="opinion-text">${formatHighlightedText(d.text)}</div>
+            `;
+            fragment.appendChild(card);
+        });
 
-        container.appendChild(card);
-    });
+        cardsWrapper.appendChild(fragment);
+        renderedCount += nextBatch.length;
+
+        // 残りがある場合はボタン・センチネルを更新
+        if (renderedCount < docs.length) {
+            const remaining = docs.length - renderedCount;
+            loadMoreArea.style.display = 'block';
+            loadMoreArea.innerHTML = `
+                <div style="font-size: 12px; color: #64748b; margin-bottom: 8px;">
+                    表示中: <b>${renderedCount}</b> / 全 <b>${docs.length}</b> 件
+                </div>
+                <button type="button" id="btnLoadMoreOpinions" class="btn btn-sm btn-secondary" style="padding: 6px 20px; font-weight: 600;">
+                    さらに読み込む (残り ${remaining} 件)
+                </button>
+            `;
+            const btn = document.getElementById('btnLoadMoreOpinions');
+            if (btn) {
+                btn.addEventListener('click', () => {
+                    renderNextChunk();
+                });
+            }
+        } else {
+            loadMoreArea.style.display = 'block';
+            loadMoreArea.innerHTML = `
+                <div style="font-size: 12px; color: #94a3b8; padding: 8px 0;">
+                    全 <b>${docs.length}</b> 件の意見をすべて表示しました
+                </div>
+            `;
+        }
+    }
+
+    // 初回チャンクを描画
+    renderNextChunk();
+
+    // IntersectionObserverによる自動追記（スクロールが末尾に近づいたときに自動ロード）
+    if (typeof IntersectionObserver !== 'undefined') {
+        if (container._opinionsObserver) {
+            container._opinionsObserver.disconnect();
+        }
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && renderedCount < docs.length) {
+                    renderNextChunk();
+                }
+            });
+        }, { root: container, rootMargin: '120px' });
+
+        observer.observe(loadMoreArea);
+        container._opinionsObserver = observer;
+    }
 }
 
 /**
