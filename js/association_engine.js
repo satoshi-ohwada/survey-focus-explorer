@@ -6,29 +6,32 @@
 const AssociationEngine = {
     /**
      * ユーザー入力文字列（または配列）からキーワードの配列を安全に抽出・正規化する
-     * カンマ（,）、読点（、）、改行、パイプで分割し、カンマ等がない場合は空白でも分割する
+     * カンマ（半角・全角）、読点（、）、改行、パイプ、および半角/全角スペース（\u3000）で安全に分割する
+     * 複数区切り文字の混在（例: "物価高, 円安　インフレ"）や連続空白にも完全対応
      * @param {string|Array<string>} targetKeyword 
      * @returns {Array<string>} 重複を除去したキーワード配列
      */
     parseKeywords(targetKeyword) {
         if (!targetKeyword) return [];
         if (Array.isArray(targetKeyword)) {
-            return Array.from(new Set(targetKeyword.map(s => String(s || '').trim()).filter(Boolean)));
+            return Array.from(new Set(targetKeyword.flatMap(s => this.parseKeywords(s))));
         }
         const raw = String(targetKeyword).trim();
         if (!raw) return [];
 
-        // カンマ、読点、改行、パイプで分割
-        let parts = raw.split(/[,、|\n]/).map(s => s.trim()).filter(Boolean);
+        // カンマ（半角・全角）、読点、改行、パイプ（半角・全角）でまず分割
+        const primaryParts = raw.split(/[,，、|\n\r｜]/).map(s => s.trim()).filter(Boolean);
+        const result = [];
 
-        // カンマや読点が含まれず1語扱いになっており、かつ半角/全角スペースが含まれている場合
-        if (parts.length === 1 && /[\s　]/.test(parts[0])) {
-            const spaceParts = parts[0].split(/[\s　]+/).map(s => s.trim()).filter(Boolean);
-            if (spaceParts.length > 1) {
-                parts = spaceParts;
+        for (const part of primaryParts) {
+            // 各トークンについて、半角空白および全角空白（\u3000）でさらに分割
+            const spaceParts = part.split(/[\s\u3000　]+/).map(s => s.trim()).filter(Boolean);
+            if (spaceParts.length > 0) {
+                result.push(...spaceParts);
             }
         }
-        return Array.from(new Set(parts));
+
+        return Array.from(new Set(result));
     },
 
     /**
