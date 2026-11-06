@@ -1012,29 +1012,31 @@ const ReportGenerator = {
 
         if (hasAttrNetwork) {
             attrNetworkSectionHtml = `
-                <div class="report-dual-grid">
-                    <!-- 左: 特徴語重視 -->
-                    <div class="report-card">
-                        <div class="report-card-title">
+                <div class="report-vertical-stack" style="display: flex; flex-direction: column; gap: 4px;">
+                    <!-- 上段: 特徴語重視（全幅・大画面） -->
+                    <div class="report-card" style="padding: 3px 6px;">
+                        <div class="report-card-title" style="margin-bottom: 2px;">
                             <span>🎯 7-A. 属性別 結びつき（特徴度重視・特有語）</span>
+                            <span class="report-card-sub-tag">他属性比で突出した独自関心</span>
                         </div>
-                        <div class="report-chart-box" style="height: 76mm;">
+                        <div class="report-chart-box" style="height: 82mm; background: #ffffff;">
                             ${images.networkImgDistinct ? `<img src="${images.networkImgDistinct}" class="report-chart-img" alt="属性ネットワーク(特徴度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
-                        <div class="report-hint-box" style="margin-top: 2px; padding: 2px 6px; font-size: 8px; line-height: 1.25;">
+                        <div class="report-hint-box" style="margin-top: 2px; padding: 1.5px 5px; font-size: 7.5px; line-height: 1.25;">
                             💡 <b>特有語の発見:</b> 他の属性と比べて突出して使われた単語を結びつけ、セグメント特有の悩みや独自関心をあぶり出します。
                         </div>
                     </div>
 
-                    <!-- 右: 頻度重視 -->
-                    <div class="report-card">
-                        <div class="report-card-title">
+                    <!-- 下段: 頻度重視（全幅・大画面） -->
+                    <div class="report-card" style="padding: 3px 6px;">
+                        <div class="report-card-title" style="margin-bottom: 2px;">
                             <span>📊 7-B. 属性別 結びつき（頻度重視・高頻度語）</span>
+                            <span class="report-card-sub-tag">各属性のボリューム・共通基本ニーズ</span>
                         </div>
-                        <div class="report-chart-box" style="height: 76mm;">
+                        <div class="report-chart-box" style="height: 82mm; background: #ffffff;">
                             ${images.networkImgFreq ? `<img src="${images.networkImgFreq}" class="report-chart-img" alt="属性ネットワーク(頻度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
-                        <div class="report-hint-box" style="margin-top: 2px; padding: 2.5px 6px; font-size: 8px; line-height: 1.25;">
+                        <div class="report-hint-box" style="margin-top: 2px; padding: 1.5px 5px; font-size: 7.5px; line-height: 1.25;">
                             💡 <b>共通語・ボリュームの把握:</b> 各属性で出現回数の多い単語を結びつけ、全体に共通する基本ニーズや関心規模を把握します。
                         </div>
                     </div>
@@ -1050,29 +1052,29 @@ const ReportGenerator = {
             `;
         }
 
-        // --- 8-2. 属性別 特有語 vs 共通・高頻度語 対照表HTML (7-C) ---
+        // --- 8-2. 属性別 特有語 vs 共通・高頻度語 補完対照表HTML (7-C: 図を補完するスリム仕様) ---
         let attrWordCompTableHtml = '';
         if (data.attrWordComparison && data.attrWordComparison.length > 0) {
             const compRows = data.attrWordComparison.map(row => {
                 const distinctBadges = (row.distinctWords && row.distinctWords.length > 0)
-                    ? row.distinctWords.map(w => `<span class="report-word-tag distinct" title="特徴度(倍率): ${w.lift}倍 / 出現: ${w.count}件"><b>${this.escape(w.word)}</b> <span class="report-word-tag-sub">${w.count}件 (${w.lift}倍)</span></span>`).join('')
-                    : '<span style="color:#94a3b8; font-size:7.5px;">（特異語なし）</span>';
+                    ? row.distinctWords.slice(0, 3).map(w => `<span class="report-word-tag distinct" title="特徴度(倍率): ${w.lift}倍 / 出現: ${w.count}件"><b>${this.escape(w.word)}</b> <span class="report-word-tag-sub">${w.lift}倍</span></span>`).join('')
+                    : '<span style="color:#94a3b8; font-size:7px;">-</span>';
 
                 const freqBadges = (row.freqWords && row.freqWords.length > 0)
-                    ? row.freqWords.map(w => `<span class="report-word-tag freq" title="出現: ${w.count}件 / 属性内出現率: ${w.rate}%"><b>${this.escape(w.word)}</b> <span class="report-word-tag-sub">${w.count}件 (${w.rate}%)</span></span>`).join('')
-                    : '<span style="color:#94a3b8; font-size:7.5px;">（頻出語なし）</span>';
+                    ? row.freqWords.slice(0, 3).map(w => `<span class="report-word-tag freq" title="出現: ${w.count}件 / 属性内出現率: ${w.rate}%"><b>${this.escape(w.word)}</b> <span class="report-word-tag-sub">${w.rate}%</span></span>`).join('')
+                    : '<span style="color:#94a3b8; font-size:7px;">-</span>';
 
                 return `
                     <tr>
-                        <td style="font-weight: 700; color: #1e293b; white-space: nowrap;">👥 ${this.escape(row.category)}</td>
-                        <td style="text-align: right; color: #334155; font-weight: 600;">${row.matchedCount.toLocaleString()}</td>
-                        <td style="text-align: right; color: #2563eb; font-weight: 700; background: #f0f7ff;">${row.rate}%</td>
-                        <td>
+                        <td style="font-weight: 700; color: #1e293b; white-space: nowrap; padding: 1px 3px;">👥 ${this.escape(row.category)}</td>
+                        <td style="text-align: right; color: #334155; font-weight: 600; padding: 1px 3px;">${row.matchedCount.toLocaleString()}</td>
+                        <td style="text-align: right; color: #2563eb; font-weight: 700; background: #f0f7ff; padding: 1px 3px;">${row.rate}%</td>
+                        <td style="padding: 1px 3px;">
                             <div class="report-word-tag-group">
                                 ${distinctBadges}
                             </div>
                         </td>
-                        <td>
+                        <td style="padding: 1px 3px;">
                             <div class="report-word-tag-group">
                                 ${freqBadges}
                             </div>
@@ -1082,27 +1084,25 @@ const ReportGenerator = {
             }).join('');
 
             attrWordCompTableHtml = `
-                <div class="report-section" style="margin-top: 5px; flex: 1; display: flex; flex-direction: column;">
-                    <div class="report-sec-title" style="margin-bottom: 2px;">
-                        <span>📋 7-C. 属性別の特有語（独自関心） vs 共通・高頻度語（基本関心）対照表</span>
+                <div class="report-card" style="margin-top: 3px; padding: 3px 6px;">
+                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+                        <span style="font-size: 8.5px; font-weight: 700; color: #1e293b;">📋 7-C. 属性別 特有語（独自関心） vs 共通・高頻度語（基本ニーズ）補完サマリー</span>
+                        <span style="font-size: 7px; color: #64748b;">※図の解釈を補完する主要キーワード（特有語＝他属性比突出 / 高頻度語＝属性内多用）</span>
                     </div>
-                    <table class="report-table" style="font-size: 8px;">
+                    <table class="report-table" style="font-size: 7.5px;">
                         <thead>
                             <tr>
-                                <th style="width: 80px;">属性区分（${this.escape(data.attrCol)}）</th>
-                                <th style="width: 44px; text-align: right;">言及数</th>
-                                <th style="width: 50px; text-align: right;">言及率%</th>
-                                <th style="width: 45%;">🎯 特徴的に関連する語（他属性比で突出した特有語）</th>
-                                <th style="width: 45%;">📊 共通・高頻度に関連する語（当該属性の基本語）</th>
+                                <th style="width: 76px; padding: 1.5px 3px;">属性区分</th>
+                                <th style="width: 38px; text-align: right; padding: 1.5px 3px;">言及数</th>
+                                <th style="width: 44px; text-align: right; padding: 1.5px 3px;">言及率%</th>
+                                <th style="width: 45%; padding: 1.5px 3px;">🎯 特徴的に関連する語 (7-A補完: 特有語)</th>
+                                <th style="width: 45%; padding: 1.5px 3px;">📊 共通・高頻度に関連する語 (7-B補完: 基本語)</th>
                             </tr>
                         </thead>
                         <tbody>
                             ${compRows}
                         </tbody>
                     </table>
-                    <div class="report-hint-box" style="margin-top: 3px; font-size: 7.5px; line-height: 1.3; padding: 2px 6px;">
-                        💡 <b>解釈のポイント:</b>「特徴語」は他属性と比較して突出した当該セグメント独自の悩みや関心（7-Aに対応）を示し、「高頻度語」は当該属性内で最も多く語られた基本ニーズ・共通関心（7-Bに対応）を示します。
-                    </div>
                 </div>
             `;
         }
@@ -1504,15 +1504,13 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (7) 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） -->
-                <div class="report-section" style="margin-top: 4px; margin-bottom: 3px;">
-                    <div class="report-sec-title">
+                <div class="report-section" style="margin-top: 3px; flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div class="report-sec-title" style="margin-bottom: 2px;">
                         <span>👥 7. 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
                     ${attrNetworkSectionHtml}
+                    ${attrWordCompTableHtml}
                 </div>
-
-                <!-- (7-C) 属性別の特有語 vs 共通・高頻度語 対照表 -->
-                ${attrWordCompTableHtml}
 
                 <!-- ページ3 フッター -->
                 <div class="report-footer">
