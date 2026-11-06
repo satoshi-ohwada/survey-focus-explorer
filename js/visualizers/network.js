@@ -80,15 +80,15 @@ const NetworkVisualizer = {
             return cfg;
         }
 
-        // レポート・画像保存（エクスポート: 1200x900・解像度約1.55倍）
+        // レポート・画像保存（エクスポート: 視認性を保ちつつノード重なり・密集を防止するスマートスケーリング 約1.25倍）
         return {
-            target: Math.round(cfg.target * 1.55),
-            related: Math.round(cfg.related * 1.55),
-            other: Math.round(cfg.other * 1.55),
-            attrNode: Math.round(cfg.attrNode * 1.55),
-            attrShared: Math.round(cfg.attrShared * 1.55),
-            attrWord: Math.round(cfg.attrWord * 1.55),
-            attrBoxHeight: Math.round(cfg.attrBoxHeight * 1.45)
+            target: Math.round(cfg.target * 1.28),
+            related: Math.round(cfg.related * 1.25),
+            other: Math.round(cfg.other * 1.22),
+            attrNode: Math.round(cfg.attrNode * 1.25),
+            attrShared: Math.round(cfg.attrShared * 1.28),
+            attrWord: Math.round(cfg.attrWord * 1.22),
+            attrBoxHeight: Math.round(cfg.attrBoxHeight * 1.22)
         };
     },
 
@@ -486,7 +486,11 @@ const NetworkVisualizer = {
         let width = rectW > 50 ? rectW : 680;
         let height = rectH > 50 ? rectH : 510;
 
-        if (width / height > 4 / 3) {
+        // レポート・エクスポート時は指定されたワイド大画面サイズを優先、画面表示時は4:3比率を維持
+        if (this.isExport && options.targetW && options.targetH) {
+            width = options.targetW;
+            height = options.targetH;
+        } else if (width / height > 4 / 3) {
             width = Math.round(height * 4 / 3);
         } else {
             height = Math.round(width * 3 / 4);
@@ -799,8 +803,8 @@ const NetworkVisualizer = {
             const tanY = dirX;
 
             const halfW = (an.boxWidth || 100) / 2;
-            // 属性ピルバッジの縁から内側に適度かつ十分なクリアランス（エクスポート時は短縮して凝縮）
-            const baseInward = halfW * 0.30 + (isExport ? 38 : 68) * spacingFactor;
+            // 属性ピルバッジの縁から内側への十分なクリアランス（エクスポート時は大空間に合わせて広々と配置）
+            const baseInward = halfW * 0.32 + (isExport ? 88 : 68) * spacingFactor;
 
             uWords.forEach((word, idx) => {
                 const row = idx % 2; // 2列千鳥配置で縦横の広がりをバランスよく分散
@@ -808,8 +812,8 @@ const NetworkVisualizer = {
                 const colCount = Math.ceil(count / 2);
                 const offsetCol = (col - (colCount - 1) / 2);
 
-                const spreadTan = offsetCol * ((isExport ? 36 : 48) * spacingFactor);
-                const spreadRad = baseInward + row * ((isExport ? 34 : 46) * spacingFactor);
+                const spreadTan = offsetCol * ((isExport ? 78 : 48) * spacingFactor);
+                const spreadRad = baseInward + row * ((isExport ? 58 : 46) * spacingFactor);
 
                 const posX = an.x + dirX * spreadRad + tanX * spreadTan;
                 const posY = an.y + dirY * spreadRad + tanY * spreadTan;
@@ -859,8 +863,9 @@ const NetworkVisualizer = {
 
             const isSuperShared = connectedCats.length >= 3;
             const centerWeight = isSuperShared ? 0.75 : 0.45;
-            const posX = meanX * (1 - centerWeight) + centerX * centerWeight + (idx % 2 === 0 ? 16 : -16);
-            const posY = meanY * (1 - centerWeight) + centerY * centerWeight + (idx % 3 === 0 ? 16 : -16);
+            const posOffset = isExport ? 32 : 18;
+            const posX = meanX * (1 - centerWeight) + centerX * centerWeight + (idx % 2 === 0 ? posOffset : -posOffset);
+            const posY = meanY * (1 - centerWeight) + centerY * centerWeight + (idx % 3 === 0 ? posOffset : -posOffset);
 
             const bestScore = wordBestScoreMap.get(word) || {};
             const primaryCat = connectedCats[0];
@@ -976,9 +981,9 @@ const NetworkVisualizer = {
                 }
             }
 
-            // 2. 単語ノード同士のテキスト重なり防止（安全クランプ付き反発で四隅への爆発的吹き飛びを防止）
-            const minDistX = (isExp ? 58 : 80) * spacingFactor;
-            const minDistY = (isExp ? 38 : 52) * spacingFactor;
+            // 2. 単語ノード同士のテキスト重なり防止（エクスポート時は大空間に合わせて広々と反発距離を確保）
+            const minDistX = (isExp ? 115 : 80) * spacingFactor;
+            const minDistY = (isExp ? 70 : 52) * spacingFactor;
 
             for (let i = 0; i < wordNodes.length; i++) {
                 const w1 = wordNodes[i];
@@ -1009,8 +1014,8 @@ const NetworkVisualizer = {
                     const dx = wn.x - an.x;
                     const dy = wn.y - an.y;
 
-                    const safeW = (an.boxWidth / 2) + (wn.radius || 14) + (isExp ? 34 : 48);
-                    const safeH = (an.boxHeight / 2) + (wn.radius || 14) + (isExp ? 34 : 48);
+                    const safeW = (an.boxWidth / 2) + (wn.radius || 14) + (isExp ? 68 : 48);
+                    const safeH = (an.boxHeight / 2) + (wn.radius || 14) + (isExp ? 68 : 48);
 
                     const absX = Math.abs(dx);
                     const absY = Math.abs(dy);
@@ -1230,25 +1235,25 @@ const NetworkVisualizer = {
 
         const isExp = this.isExport || false;
 
-        // 間隔設定に基づく物理定数（レポート出力時は小さな領域でも引き締まるよう短縮設定）
+        // 間隔設定に基づく物理定数（エクスポート時もノード重なりや交差を防ぐ十分な間隔を確保）
         const spacingParams = {
             normal: {
-                baseLen: isExp ? 72 : 120,
-                kRepel: isExp ? 5200 : 8000,
-                minPadding: isExp ? 24 : 35,
-                gravity: isExp ? 0.008 : 0.005
+                baseLen: isExp ? 130 : 120,
+                kRepel: isExp ? 10000 : 8000,
+                minPadding: isExp ? 42 : 35,
+                gravity: isExp ? 0.005 : 0.005
             },
             wide: {
-                baseLen: isExp ? 88 : 175,
-                kRepel: isExp ? 8200 : 16000,
-                minPadding: isExp ? 32 : 50,
-                gravity: isExp ? 0.006 : 0.003
+                baseLen: isExp ? 180 : 175,
+                kRepel: isExp ? 18000 : 16000,
+                minPadding: isExp ? 58 : 50,
+                gravity: isExp ? 0.003 : 0.003
             },
             widest: {
-                baseLen: isExp ? 115 : 240,
-                kRepel: isExp ? 12500 : 26000,
-                minPadding: isExp ? 42 : 70,
-                gravity: isExp ? 0.004 : 0.002
+                baseLen: isExp ? 250 : 240,
+                kRepel: isExp ? 28000 : 26000,
+                minPadding: isExp ? 80 : 70,
+                gravity: isExp ? 0.002 : 0.002
             }
         };
         const p = spacingParams[this.spacingMode] || spacingParams.wide;
@@ -2041,11 +2046,11 @@ const NetworkVisualizer = {
      * @param {Array<object>} targetRows
      * @param {string} targetKeyword
      * @param {object} [options={}]
-     * @param {number} [targetW=1200]
-     * @param {number} [targetH=900]
+     * @param {number} [targetW=1600]
+     * @param {number} [targetH=750]
      * @returns {HTMLCanvasElement|null}
      */
-    getExportCanvasForAttrMetric(metric, matchedDocs, attrCol, targetRows, targetKeyword, options = {}, targetW = 1200, targetH = 900) {
+    getExportCanvasForAttrMetric(metric, matchedDocs, attrCol, targetRows, targetKeyword, options = {}, targetW = 1600, targetH = 750) {
         if (!attrCol || !matchedDocs || matchedDocs.length === 0) return null;
 
         const prevMode = this.networkMode;
@@ -2063,8 +2068,11 @@ const NetworkVisualizer = {
         try {
             this.renderAttrNetwork(matchedDocs, attrCol, targetRows, targetKeyword, {
                 ...options,
+                targetW: targetW,
+                targetH: targetH,
                 fontSize: options.fontSize || this.fontSize || 'large',
                 isExport: true,
+                spacingMode: options.spacingMode || 'widest', // ノード重なり・エッジ交差を最小化する最大間隔
                 wordsPerAttr: options.wordsPerAttr || 4, // レポート専用スリム化
                 attrMetric: metric
             });

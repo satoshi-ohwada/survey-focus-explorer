@@ -157,16 +157,19 @@ const ReportGenerator = {
                     maxWords: AppState.networkMaxWords || 40,
                     wordsPerAttr: 4, // レポート専用スリム化: A4枠に合わせて1属性あたり4語に厳選
                     isExport: true,
-                    spacingMode: AppState.networkSpacing || 'wide',
+                    spacingMode: 'widest', // ノード重なり・エッジ交差を最小化する広大間隔を適用
                     fontSize: AppState.networkFontSize || 'large',
                     customStopWords: AppState.customStopWords
                 };
+                // 全幅ワイド比率（1600x750・約2.1:1）で用紙の横幅いっぱいにノード間隔を広大展開
+                const attrImgW = 1600;
+                const attrImgH = 750;
                 // 特徴度重視（特有語）
-                const dCanvas = NetworkVisualizer.getExportCanvasForAttrMetric('distinct', matchedDocs, AppState.attrCol, targetRows, AppState.targetKeyword, opt, imgW, imgH);
+                const dCanvas = NetworkVisualizer.getExportCanvasForAttrMetric('distinct', matchedDocs, AppState.attrCol, targetRows, AppState.targetKeyword, opt, attrImgW, attrImgH);
                 if (dCanvas) networkImgDistinct = dCanvas.toDataURL('image/png');
 
                 // 頻度重視（高頻度語）
-                const fCanvas = NetworkVisualizer.getExportCanvasForAttrMetric('freq', matchedDocs, AppState.attrCol, targetRows, AppState.targetKeyword, opt, imgW, imgH);
+                const fCanvas = NetworkVisualizer.getExportCanvasForAttrMetric('freq', matchedDocs, AppState.attrCol, targetRows, AppState.targetKeyword, opt, attrImgW, attrImgH);
                 if (fCanvas) networkImgFreq = fCanvas.toDataURL('image/png');
             }
 
