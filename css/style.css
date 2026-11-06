@@ -3268,6 +3268,43 @@ body {
     font-weight: 600;
 }
 
+/* 属性別 特有語 vs 共通・高頻度語 対照表スタイル */
+.report-word-tag-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    align-items: center;
+}
+
+.report-word-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 2.5px;
+    font-size: 7.5px;
+    padding: 1px 4.5px;
+    border-radius: 2.5px;
+    white-space: nowrap;
+    line-height: 1.25;
+}
+
+.report-word-tag.distinct {
+    background: #FFF1F2;
+    border: 1px solid #FECDD3;
+    color: #9F1239;
+}
+
+.report-word-tag.freq {
+    background: #EFF6FF;
+    border: 1px solid #BFDBFE;
+    color: #1E40AF;
+}
+
+.report-word-tag-sub {
+    font-size: 6.8px;
+    opacity: 0.85;
+    font-weight: normal;
+}
+
 /* 主要な論点グループ（トピックサマリー）スタイル */
 .report-topics-grid {
     display: grid;
@@ -3605,7 +3642,7 @@ body {
     }
 
     /* 最終ページは改ページを防止（勝手な次ページ発生を防ぐ） */
-    #reportPage3,
+    #reportPage4,
     .report-page:last-child {
         page-break-after: avoid !important;
         break-after: avoid !important;

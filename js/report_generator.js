@@ -1,14 +1,14 @@
 /**
- * レポート出力（A4・全3枚サマリーレポート）生成モジュール
+ * レポート出力（A4・全4枚サマリーレポート）生成モジュール
  * （１）投入したデータ全体の概要
  * （２）指定したキーワードとその関連語と判断した語の概要
  * （３）分析対象の概要
  * （４）要約サマリー（集約概要と代表意見）
  * （５）ワードクラウド
- * （６）共起ネットワーク（特徴語重視、頻度重視）
- * （７）意見分布
- * （８）クロス集計
- * の順にA4縦3ページに最適化してレイアウトし、プレビュー表示および高品位PDF/印刷出力を提供する
+ * （６）全体共起ネットワーク＆意見分布（UMAP）
+ * （７）属性別共起ネットワーク（特徴語重視＆頻度重視）＋特有語vs共通語対照表
+ * （８）属性別クロス集計＆属性ごとの代表意見（生の声）
+ * の順にA4縦4ページに最適化してレイアウトし、プレビュー表示および高品位PDF/印刷出力を提供する
  */
 const ReportGenerator = {
     modalId: 'reportPreviewModal',
@@ -76,7 +76,7 @@ const ReportGenerator = {
             // 2. 母集団＆集計データの構築
             const reportData = this.buildReportData();
 
-            // 3. HTMLテンプレートの組み立て（全3枚構成）
+            // 3. HTMLテンプレートの組み立て（全4枚構成）
             const html = this.generateHtml(reportData, images);
 
             // 4. モーダルに注入して表示
@@ -639,6 +639,116 @@ const ReportGenerator = {
         const matchedTokens = cov ? cov.matched.totalTokens : totalWordTokens;
         const tokenCoverageRate = (cov && cov.coverage) ? cov.coverage.tokenRate.toFixed(1) : (totalTokensAll > 0 ? ((matchedTokens / totalTokensAll) * 100).toFixed(1) : '0.0');
 
+        // 17. 属性別の特徴語（特有語） vs 共通・高頻度語（基本関心）の対照データ構築
+        const attrWordComparison = [];
+        if (AppState.attrCol && matchedDocs.length > 0) {
+            const docsByAttr = {};
+            matchedDocs.forEach(d => {
+                const cat = d.attribute && d.attribute.trim() !== '' ? d.attribute.trim() : '（未回答・不明）';
+                if (!docsByAttr[cat]) docsByAttr[cat] = [];
+                docsByAttr[cat].push(d);
+            });
+
+            // 上位属性カテゴリ（最大6カテゴリ）
+            const sortedAttrs = (attrCrossTable.length > 0 ? attrCrossTable : attrDistFiltered).slice(0, 6);
+            const targetLower = (AppState.targetKeyword || '').toLowerCase();
+            const resolvedLower = (AppState.resolvedTargetWord || '').toLowerCase();
+            const customStops = AppState.customStopWords || new Set();
+
+            // 単語出現数を集計
+            const wordCountsByAttr = new Map();
+            const totalWordDocCounts = new Map();
+            let totalDocsInAttrs = 0;
+
+            sortedAttrs.forEach(stat => {
+                const cat = stat.category;
+                const docs = docsByAttr[cat] || [];
+                totalDocsInAttrs += docs.length;
+                const wMap = new Map();
+                wordCountsByAttr.set(cat, wMap);
+
+                docs.forEach(d => {
+                    const seen = new Set();
+                    (d.tokens || []).forEach(tok => {
+                        const clean = (tok || '').trim();
+                        const cleanLower = clean.toLowerCase();
+                        if (clean.length < 2) return;
+                        if (cleanLower === targetLower || cleanLower === resolvedLower) return;
+                        if (customStops.has(clean)) return;
+                        if (!seen.has(clean)) {
+                            seen.add(clean);
+                            wMap.set(clean, (wMap.get(clean) || 0) + 1);
+                            totalWordDocCounts.set(clean, (totalWordDocCounts.get(clean) || 0) + 1);
+                        }
+                    });
+                });
+            });
+
+            sortedAttrs.forEach(stat => {
+                const cat = stat.category;
+                const docs = docsByAttr[cat] || [];
+                const nCat = docs.length;
+                const wMap = wordCountsByAttr.get(cat) || new Map();
+
+                if (nCat === 0 || wMap.size === 0) return;
+
+                const wordList = Array.from(wMap.entries()).map(([w, count]) => {
+                    const totalCount = totalWordDocCounts.get(w) || count;
+                    const expected = (totalDocsInAttrs > 0) ? (nCat * (totalCount / totalDocsInAttrs)) : 0;
+                    const lift = expected > 0 ? (count / expected) : 1.0;
+
+                    let zScore = 0;
+                    if (totalDocsInAttrs > 1 && expected > 0) {
+                        const factorCat = Math.max(0.001, 1 - (nCat / totalDocsInAttrs));
+                        const factorWord = Math.max(0.001, 1 - (totalCount / totalDocsInAttrs));
+                        const se = Math.sqrt(Math.max(0.0001, expected * factorCat * factorWord));
+                        zScore = (count - expected) / se;
+                    }
+
+                    return {
+                        word: w,
+                        count: count,
+                        totalCount: totalCount,
+                        lift: lift,
+                        zScore: zScore
+                    };
+                });
+
+                // 1. 特徴語（特有語）: zScore > 0, count >= 2 (または緩和)
+                let distinctCandidates = wordList.filter(item => item.count >= 2 && item.zScore > 0);
+                if (distinctCandidates.length < 3) {
+                    distinctCandidates = wordList.filter(item => item.count >= 1 && (item.zScore > 0 || item.lift > 1.0));
+                }
+                if (distinctCandidates.length === 0) distinctCandidates = wordList;
+                const distinctTop = distinctCandidates.sort((a, b) => {
+                    if (Math.abs(b.zScore - a.zScore) > 0.001) return b.zScore - a.zScore;
+                    return b.count - a.count;
+                }).slice(0, 4);
+
+                // 2. 高頻度語（共通・基本語）: count 降順
+                const freqTop = [...wordList].sort((a, b) => b.count - a.count).slice(0, 4);
+
+                attrWordComparison.push({
+                    category: cat,
+                    matchedCount: stat.matchedCount || nCat,
+                    popCount: stat.popCount || nCat,
+                    rate: stat.rate || '0.0',
+                    share: stat.share || '0.0',
+                    distinctWords: distinctTop.map(item => ({
+                        word: item.word,
+                        count: item.count,
+                        zScore: item.zScore.toFixed(1),
+                        lift: item.lift.toFixed(1)
+                    })),
+                    freqWords: freqTop.map(item => ({
+                        word: item.word,
+                        count: item.count,
+                        rate: nCat > 0 ? ((item.count / nCat) * 100).toFixed(0) : '0'
+                    }))
+                });
+            });
+        }
+
         const now = new Date();
         const dateStr = `${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -684,15 +794,17 @@ const ReportGenerator = {
             opinionTypeSummary,
             includedWords,
             repOpinionsByType,
-            attrRepresentativeOpinions
+            attrRepresentativeOpinions,
+            attrWordComparison
         };
     },
 
     /**
-     * A4・全3ページのHTMLを生成する
+     * A4・全4ページのHTMLを生成する
      * （１）アンケートの概要 ＆ 全体要約サマリー（Page 1: 項目1〜4）
      * （２）キーワードと関連語の使用状況・全体可視化集約（Page 2: 項目5〜6）
-     * （３）属性情報とキーワード関連語の関係・属性別深掘り集約（Page 3: 項目7〜8）
+     * （３）属性情報とキーワード関連語の結びつき構造（Page 3: 項目7 特徴語＆頻度ネットワーク＋特有語vs共通語対照表）
+     * （４）属性情報とキーワード関連語のクロス分析＆生の声（Page 4: 項目8 言及グラフ＆クロス集計表＆代表意見）
      */
     generateHtml(data, images) {
         // --- 1. 全体属性内訳ピル (投入データ全体) ---
@@ -906,7 +1018,7 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>🎯 7-A. 属性別 結びつき（特徴度重視・特有語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 58mm;">
+                        <div class="report-chart-box" style="height: 76mm;">
                             ${images.networkImgDistinct ? `<img src="${images.networkImgDistinct}" class="report-chart-img" alt="属性ネットワーク(特徴度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
                         <div class="report-hint-box" style="margin-top: 2px; padding: 2px 6px; font-size: 8px; line-height: 1.25;">
@@ -919,7 +1031,7 @@ const ReportGenerator = {
                         <div class="report-card-title">
                             <span>📊 7-B. 属性別 結びつき（頻度重視・高頻度語）</span>
                         </div>
-                        <div class="report-chart-box" style="height: 58mm;">
+                        <div class="report-chart-box" style="height: 76mm;">
                             ${images.networkImgFreq ? `<img src="${images.networkImgFreq}" class="report-chart-img" alt="属性ネットワーク(頻度重視)" />` : `<div class="report-no-chart">画像準備中</div>`}
                         </div>
                         <div class="report-hint-box" style="margin-top: 2px; padding: 2.5px 6px; font-size: 8px; line-height: 1.25;">
@@ -934,6 +1046,63 @@ const ReportGenerator = {
                 <div class="report-hint-box" style="padding: 16px; text-align: center; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px;">
                     <div style="font-weight: 700; color: #475569; font-size: 11px; margin-bottom: 4px;">👥 属性列が未選択です</div>
                     <div style="color: #64748b; font-size: 9.5px;">上部の設定パネルで「年代」や「性別」などの属性列を選択すると、属性ごとの特徴度重視ネットワーク（特有語）と頻度重視ネットワーク（高頻度語）がここに自動生成されます。</div>
+                </div>
+            `;
+        }
+
+        // --- 8-2. 属性別 特有語 vs 共通・高頻度語 対照表HTML (7-C) ---
+        let attrWordCompTableHtml = '';
+        if (data.attrWordComparison && data.attrWordComparison.length > 0) {
+            const compRows = data.attrWordComparison.map(row => {
+                const distinctBadges = (row.distinctWords && row.distinctWords.length > 0)
+                    ? row.distinctWords.map(w => `<span class="report-word-tag distinct" title="特徴度(倍率): ${w.lift}倍 / 出現: ${w.count}件"><b>${this.escape(w.word)}</b> <span class="report-word-tag-sub">${w.count}件 (${w.lift}倍)</span></span>`).join('')
+                    : '<span style="color:#94a3b8; font-size:7.5px;">（特異語なし）</span>';
+
+                const freqBadges = (row.freqWords && row.freqWords.length > 0)
+                    ? row.freqWords.map(w => `<span class="report-word-tag freq" title="出現: ${w.count}件 / 属性内出現率: ${w.rate}%"><b>${this.escape(w.word)}</b> <span class="report-word-tag-sub">${w.count}件 (${w.rate}%)</span></span>`).join('')
+                    : '<span style="color:#94a3b8; font-size:7.5px;">（頻出語なし）</span>';
+
+                return `
+                    <tr>
+                        <td style="font-weight: 700; color: #1e293b; white-space: nowrap;">👥 ${this.escape(row.category)}</td>
+                        <td style="text-align: right; color: #334155; font-weight: 600;">${row.matchedCount.toLocaleString()}</td>
+                        <td style="text-align: right; color: #2563eb; font-weight: 700; background: #f0f7ff;">${row.rate}%</td>
+                        <td>
+                            <div class="report-word-tag-group">
+                                ${distinctBadges}
+                            </div>
+                        </td>
+                        <td>
+                            <div class="report-word-tag-group">
+                                ${freqBadges}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            attrWordCompTableHtml = `
+                <div class="report-section" style="margin-top: 5px; flex: 1; display: flex; flex-direction: column;">
+                    <div class="report-sec-title" style="margin-bottom: 2px;">
+                        <span>📋 7-C. 属性別の特有語（独自関心） vs 共通・高頻度語（基本関心）対照表</span>
+                    </div>
+                    <table class="report-table" style="font-size: 8px;">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px;">属性区分（${this.escape(data.attrCol)}）</th>
+                                <th style="width: 44px; text-align: right;">言及数</th>
+                                <th style="width: 50px; text-align: right;">言及率%</th>
+                                <th style="width: 45%;">🎯 特徴的に関連する語（他属性比で突出した特有語）</th>
+                                <th style="width: 45%;">📊 共通・高頻度に関連する語（当該属性の基本語）</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${compRows}
+                        </tbody>
+                    </table>
+                    <div class="report-hint-box" style="margin-top: 3px; font-size: 7.5px; line-height: 1.3; padding: 2px 6px;">
+                        💡 <b>解釈のポイント:</b>「特徴語」は他属性と比較して突出した当該セグメント独自の悩みや関心（7-Aに対応）を示し、「高頻度語」は当該属性内で最も多く語られた基本ニーズ・共通関心（7-Bに対応）を示します。
+                    </div>
                 </div>
             `;
         }
@@ -1044,14 +1213,14 @@ const ReportGenerator = {
 
 
         // =========================================================================
-        // 📄 ページ1: 分析前提 ＆ キーワード要約サマリー (1/3)
+        // 📄 ページ1: 分析前提 ＆ キーワード要約サマリー (1/4)
         // =========================================================================
         const page1 = `
             <div class="report-page" id="reportPage1">
                 <!-- ページ1 ヘッダー -->
                 <div class="report-header">
                     <div class="report-header-main">
-                        <div class="report-title-badge">FOCUS EXPLORER REPORT (1/3)</div>
+                        <div class="report-title-badge">FOCUS EXPLORER REPORT (1/4)</div>
                         <h2 class="report-title">分析前提 ＆ キーワード要約サマリーレポート</h2>
                     </div>
                     <div class="report-header-meta">
@@ -1185,14 +1354,14 @@ const ReportGenerator = {
                 <!-- ページ1 フッター -->
                 <div class="report-footer">
                     <span>キーワード連想＆意見深掘りツール (Focus Explorer)</span>
-                    <span>1 / 3</span>
+                    <span>1 / 4</span>
                 </div>
             </div>
         `;
 
 
         // =========================================================================
-        // 📄 ページ2: キーワードと関連語の使用状況（属性分解前の全体状況・可視化集約） (2/3)
+        // 📄 ページ2: キーワードと関連語の使用状況（属性分解前の全体状況・可視化集約） (2/4)
         // =========================================================================
         const globalNetImg = images.networkImgWord || images.networkImg;
         const page2 = `
@@ -1200,7 +1369,7 @@ const ReportGenerator = {
                 <!-- ページ2 ヘッダー -->
                 <div class="report-header">
                     <div class="report-header-main">
-                        <div class="report-title-badge">FOCUS EXPLORER REPORT (2/3)</div>
+                        <div class="report-title-badge">FOCUS EXPLORER REPORT (2/4)</div>
                         <h2 class="report-title">キーワードと関連語の使用状況（全体話題構造 ＆ 意見分布）</h2>
                     </div>
                     <div class="report-header-meta">
@@ -1311,22 +1480,22 @@ const ReportGenerator = {
                 <!-- ページ2 フッター -->
                 <div class="report-footer">
                     <span>キーワード連想＆意見深掘りツール (Focus Explorer)</span>
-                    <span>2 / 3</span>
+                    <span>2 / 4</span>
                 </div>
             </div>
         `;
 
 
         // =========================================================================
-        // 📄 ページ3: 属性情報とキーワード関連語の関係（セグメント深掘り・属性別集約） (3/3)
+        // 📄 ページ3: 属性情報とキーワード関連語の結びつき構造 (3/4)
         // =========================================================================
         const page3 = `
             <div class="report-page" id="reportPage3">
                 <!-- ページ3 ヘッダー -->
                 <div class="report-header">
                     <div class="report-header-main">
-                        <div class="report-title-badge">FOCUS EXPLORER REPORT (3/3)</div>
-                        <h2 class="report-title">属性情報とキーワード関連語の関係（属性別ネットワーク ＆ クロス分析）</h2>
+                        <div class="report-title-badge">FOCUS EXPLORER REPORT (3/4)</div>
+                        <h2 class="report-title">属性情報とキーワード関連語の結びつき構造（属性別ネットワーク ＆ 特有語vs共通語対照）</h2>
                     </div>
                     <div class="report-header-meta">
                         <div><b>対象キーワード:</b> 🎯「${this.escape(data.targetKeyword)}」</div>
@@ -1335,27 +1504,56 @@ const ReportGenerator = {
                 </div>
 
                 <!-- (7) 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） -->
-                <div class="report-section" style="margin-top: 4px; margin-bottom: 4px;">
+                <div class="report-section" style="margin-top: 4px; margin-bottom: 3px;">
                     <div class="report-sec-title">
                         <span>👥 7. 【属性ごとの状況】属性別 結びつきネットワーク（特徴語重視 ＆ 頻度重視） [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
                     ${attrNetworkSectionHtml}
                 </div>
 
+                <!-- (7-C) 属性別の特有語 vs 共通・高頻度語 対照表 -->
+                ${attrWordCompTableHtml}
+
+                <!-- ページ3 フッター -->
+                <div class="report-footer">
+                    <span>キーワード連想＆意見深掘りツール (Focus Explorer)</span>
+                    <span>3 / 4</span>
+                </div>
+            </div>
+        `;
+
+
+        // =========================================================================
+        // 📄 ページ4: 属性情報とキーワード関連語のクロス分析 ＆ 生の声 (4/4)
+        // =========================================================================
+        const page4 = `
+            <div class="report-page" id="reportPage4">
+                <!-- ページ4 ヘッダー -->
+                <div class="report-header">
+                    <div class="report-header-main">
+                        <div class="report-title-badge">FOCUS EXPLORER REPORT (4/4)</div>
+                        <h2 class="report-title">属性情報とキーワード関連語のクロス分析（言及グラフ ＆ 詳細クロス集計 ＆ 生の声）</h2>
+                    </div>
+                    <div class="report-header-meta">
+                        <div><b>対象キーワード:</b> 🎯「${this.escape(data.targetKeyword)}」</div>
+                        <div><b>整理属性:</b> 👥「${this.escape(data.attrCol)}」</div>
+                    </div>
+                </div>
+
                 <!-- (8) 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表的な意見 -->
-                <div class="report-section" style="margin-top: 11px; flex: 1; display: flex; flex-direction: column;">
+                <div class="report-section" style="margin-top: 4px; flex: 1; display: flex; flex-direction: column;">
                     <div class="report-sec-title">
                         <span>📈 8. 【属性ごとの状況】属性別クロス集計 ＆ 属性項目ごとの代表意見 [整理属性: 👥「${this.escape(data.attrCol)}」 / 対象: 🎯「${this.escape(data.targetKeyword)}」]</span>
                     </div>
                     
-                    <!-- 中段: グラフ ＆ クロス集計詳細表 -->
-                    <div class="report-dual-grid" style="margin-bottom: 4px;">
+                    <!-- 上段: グラフ ＆ クロス集計詳細表 -->
+                    <div class="report-dual-grid" style="margin-bottom: 5px;">
                         <!-- 左: グラフ -->
                         <div class="report-card">
                             <div class="report-card-title">
                                 <span>📈 8-A. 属性「${this.escape(data.attrCol)}」別の言及傾向グラフ</span>
                             </div>
-                            <div class="report-chart-box" style="height: 38mm;">
+                            <div class="report-chart-box" style="height: 48mm;">
                                 ${images.attrImg ? `<img src="${images.attrImg}" class="report-chart-img" alt="属性グラフ" />` : `<div class="report-no-chart">${data.attrCol !== '（属性列未設定）' ? 'グラフ準備中' : '属性列が未選択です'}</div>`}
                             </div>
                         </div>
@@ -1365,14 +1563,14 @@ const ReportGenerator = {
                             <div class="report-card-title">
                                 <span>📋 8-B. 属性クロス集計詳細表</span>
                             </div>
-                            <table class="report-table">
+                            <table class="report-table" style="font-size: 8.5px;">
                                 <thead>
                                     <tr>
                                         <th>属性区分（${this.escape(data.attrCol)}）</th>
-                                        <th style="width: 44px; text-align: right;">母数</th>
-                                        <th style="width: 44px; text-align: right;">言及数</th>
-                                        <th style="width: 52px; text-align: right;">言及率%</th>
-                                        <th style="width: 48px; text-align: right;">構成比%</th>
+                                        <th style="width: 48px; text-align: right;">母数</th>
+                                        <th style="width: 48px; text-align: right;">言及数</th>
+                                        <th style="width: 54px; text-align: right;">言及率%</th>
+                                        <th style="width: 50px; text-align: right;">構成比%</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -1386,24 +1584,24 @@ const ReportGenerator = {
                     </div>
 
                     <!-- 下段: 属性項目ごとの代表的な意見（生の声） -->
-                    <div class="report-attr-rep-wrap" style="flex: 1; display: flex; flex-direction: column; margin-top: 2px;">
+                    <div class="report-attr-rep-wrap" style="flex: 1; display: flex; flex-direction: column; margin-top: 3px;">
                         <div class="report-sub-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
                             <span>💬 8-C. 属性項目ごとの代表的な意見（生の声）:</span>
-                            <span style="font-size: 8px; color: #64748b; font-weight: normal;">各属性カテゴリで最も適合度の高い代表的な発言を抜粋</span>
+                            <span style="font-size: 8.5px; color: #64748b; font-weight: normal;">各属性カテゴリで最も適合度の高い代表的な発言を抜粋</span>
                         </div>
                         ${attrRepOpinionsHtml}
                     </div>
                 </div>
 
-                <!-- ページ3 フッター -->
+                <!-- ページ4 フッター -->
                 <div class="report-footer">
                     <span>キーワード連想＆意見深掘りツール (Focus Explorer)</span>
-                    <span>3 / 3</span>
+                    <span>4 / 4</span>
                 </div>
             </div>
         `;
 
-        return page1 + page2 + page3;
+        return page1 + page2 + page3 + page4;
     },
 
     escape(str) {
